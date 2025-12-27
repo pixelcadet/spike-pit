@@ -203,6 +203,26 @@ const Physics = {
                percentages.edgeC < edgeC_Threshold;
     },
     
+    // Check if ball is on the court (accounting for ball radius)
+    // Ball is "on court" if any part of it overlaps the court boundaries
+    isBallOnCourt() {
+        const b = this.ball;
+        
+        // Court boundaries: x from 0 to COURT_WIDTH, y from 0 to COURT_LENGTH
+        // Account for ball radius - ball is on court if its center is within
+        // (radius) distance of the court boundaries
+        
+        // Check horizontal bounds (x-axis)
+        // Ball is on court if center is between -radius and COURT_WIDTH + radius
+        const onCourtX = (b.x + b.radius >= 0) && (b.x - b.radius <= this.COURT_WIDTH);
+        
+        // Check depth bounds (y-axis)
+        // Ball is on court if center is between -radius and COURT_LENGTH + radius
+        const onCourtY = (b.y + b.radius >= 0) && (b.y - b.radius <= this.COURT_LENGTH);
+        
+        return onCourtX && onCourtY;
+    },
+    
     updatePlayer(input) {
         const p = this.player;
         
@@ -923,25 +943,29 @@ const Physics = {
         // Check net collision (after position update)
         this.checkBallNetCollision();
         
-        // Ground collision with bounce
+        // Ground collision with bounce (only if ball is on court)
         if (b.z <= b.groundLevel) {
-            b.z = b.groundLevel;
-            
-            // Bounce off ground (reverse vertical velocity with damping)
-            if (b.vz < 0) {
-                b.vz = -b.vz * b.bounceDamping;
-            } else {
-                b.vz = 0;
+            // Only bounce if ball is on court - if off court, let it fall through
+            if (this.isBallOnCourt()) {
+                b.z = b.groundLevel;
+                
+                // Bounce off ground (reverse vertical velocity with damping)
+                if (b.vz < 0) {
+                    b.vz = -b.vz * b.bounceDamping;
+                } else {
+                    b.vz = 0;
+                }
+                
+                // Apply friction to horizontal movement
+                b.vx *= b.friction;
+                b.vy *= b.friction;
+                
+                // Stop very small velocities to prevent jitter
+                if (Math.abs(b.vx) < 0.001) b.vx = 0;
+                if (Math.abs(b.vy) < 0.001) b.vy = 0;
+                if (Math.abs(b.vz) < 0.001) b.vz = 0;
             }
-            
-            // Apply friction to horizontal movement
-            b.vx *= b.friction;
-            b.vy *= b.friction;
-            
-            // Stop very small velocities to prevent jitter
-            if (Math.abs(b.vx) < 0.001) b.vx = 0;
-            if (Math.abs(b.vy) < 0.001) b.vy = 0;
-            if (Math.abs(b.vz) < 0.001) b.vz = 0;
+            // If ball is off court, don't clamp z or reset velocities - let it fall through
         }
         
         // Ball can move freely (no clamping)

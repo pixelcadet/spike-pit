@@ -308,6 +308,12 @@ const Render = {
     drawBallShadow() {
         const ctx = this.ctx;
         const ball = Physics.ball;
+        
+        // Hide shadow when ball is falling (z < 0)
+        if (ball.z < 0) {
+            return;
+        }
+        
         const shadowProj = this.project(ball.x, ball.y, 0);
         
         // Shadow gets smaller when ball is higher (inverse relationship)
@@ -538,8 +544,8 @@ const Render = {
         // Draw court (green tiles and net, on top of entities behind it)
         this.drawCourt();
         
-        // Draw edge labels for debugging
-        this.drawEdgeLabels();
+        // Draw edge labels for debugging (hidden)
+        // this.drawEdgeLabels();
         
         // Draw receiving zone ground rings (only visible when character is above ground and on court)
         entitiesOnCourt.forEach(entity => {
@@ -585,9 +591,9 @@ const Render = {
         // this.drawCharacterHitbox(Physics.player, '#4a9eff');
         // this.drawCharacterHitbox(Physics.ai, '#ff4a4a');
         
-        // Draw character footprint boxes (boundary detection) - visible
-        this.drawCharacterFootprint(Physics.player, '#00ff00');
-        this.drawCharacterFootprint(Physics.ai, '#00ff00');
+        // Draw character footprint boxes (boundary detection) - hidden
+        // this.drawCharacterFootprint(Physics.player, '#00ff00');
+        // this.drawCharacterFootprint(Physics.ai, '#00ff00');
         
         // Draw ball hitbox (hidden)
         // this.drawBallHitbox();

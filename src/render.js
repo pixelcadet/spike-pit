@@ -84,12 +84,15 @@ const Render = {
     },
     
     // Draw court (8 cells wide, 4 cells long - rotated 90 degrees)
-    drawCourt() {
+    // Draw purple background (always at the back)
+    drawBackground() {
         const ctx = this.ctx;
-        
-        // Court background
         ctx.fillStyle = '#1a0a1a'; // Really dark purple (almost black)
         ctx.fillRect(0, 0, this.width, this.height);
+    },
+    
+    drawCourt() {
+        const ctx = this.ctx;
         
         // Draw tiles with forced perspective
         // 8 cells wide (tx: 0-7, net at tx=4)
@@ -276,7 +279,15 @@ const Render = {
         const rectWidth = finalSize * 1.2;
         const rectHeight = finalSize * 1.5;
         
+        // Blinking effect: alternate visibility every 0.1 seconds
+        let alpha = 1.0;
+        if (character.isBlinking) {
+            const blinkPhase = Math.floor(character.blinkTimer * 10) % 2; // 0 or 1, changes every 0.1s
+            alpha = blinkPhase === 0 ? 1.0 : 0.3; // Fully visible or semi-transparent
+        }
+        
         // Draw character rectangle (centered on position)
+        ctx.globalAlpha = alpha;
         ctx.fillStyle = color;
         ctx.fillRect(proj.x - rectWidth / 2, proj.y - rectHeight / 2, rectWidth, rectHeight);
         
@@ -288,6 +299,9 @@ const Render = {
         // Draw a small indicator on top (rectangle highlight)
         ctx.fillStyle = '#fff';
         ctx.fillRect(proj.x - rectWidth * 0.2, proj.y - rectHeight * 0.4, rectWidth * 0.4, rectHeight * 0.2);
+        
+        // Reset alpha
+        ctx.globalAlpha = 1.0;
     },
     
     // Draw ball shadow (separated for proper rendering order)
@@ -440,39 +454,118 @@ const Render = {
         // Clear canvas
         ctx.clearRect(0, 0, this.width, this.height);
         
-        // Draw court
-        this.drawCourt();
+        // Draw purple background first (always at the back)
+        this.drawBackground();
         
-        // Draw receiving zone ground rings (always visible, on court ground)
-        this.drawReceivingZoneGroundRing(Physics.player, '#4a9eff');
-        this.drawReceivingZoneGroundRing(Physics.ai, '#ff4a4a');
-        
-        // Draw spike zone rings (only visible when character is jumping)
-        if (!Physics.player.onGround) {
-            this.drawSpikeZoneGroundRing(Physics.player, '#4a9eff');
-        }
-        if (!Physics.ai.onGround) {
-            this.drawSpikeZoneGroundRing(Physics.ai, '#ff4a4a');
-        }
-        
-        // Draw all shadows first (so they appear behind entities)
-        this.drawCharacterShadow(Physics.player);
-        this.drawCharacterShadow(Physics.ai);
-        this.drawBallShadow();
-        
-        // Draw entities (depth sorted by y position - higher y = farther = drawn first)
-        // Sort by y position for proper depth
+        // Separate entities into those behind the court (off EDGE A or EDGE B) and those on/in front of the court
         const entities = [
             { type: 'character', data: Physics.player, color: '#4a9eff', y: Physics.player.y },
             { type: 'character', data: Physics.ai, color: '#ff4a4a', y: Physics.ai.y },
-            { type: 'ball', y: Physics.ball.y }
+            { type: 'ball', y: Physics.ball.y, x: Physics.ball.x }
         ];
         
-        // Sort by y (farther = higher y = draw first)
-        entities.sort((a, b) => b.y - a.y);
+        // Split entities: behind court (off EDGE A: y > COURT_LENGTH, or off EDGE B: x < 0 for player, x > COURT_WIDTH for AI, or falling from EDGE A/B: z < 0 AND (off EDGE A OR off EDGE B)) vs on/in front of court
+        const entitiesBehindCourt = entities.filter(e => {
+            if (e.type === 'character') {
+                const char = e.data;
+                // EDGE A: back of court (y > COURT_LENGTH)
+                const offEdgeA = char.y > Physics.COURT_LENGTH;
+                // EDGE B: left side (opposite from net)
+                // Player side: x < 0, AI side: x > COURT_WIDTH
+                const isPlayer = char === Physics.player;
+                const offEdgeB = isPlayer ? char.x < 0 : char.x > Physics.COURT_WIDTH;
+                // Falling from EDGE A or B: z < 0 AND (off EDGE A OR off EDGE B)
+                // This ensures falling from EDGE C doesn't render behind court
+                const isFallingFromEdgeAB = char.z < 0 && (offEdgeA || offEdgeB);
+                return offEdgeA || offEdgeB || isFallingFromEdgeAB;
+            } else {
+                // Ball: check both edges and falling from EDGE A or B
+                const offEdgeA = e.y > Physics.COURT_LENGTH;
+                const offEdgeB = e.x < 0 || e.x > Physics.COURT_WIDTH;
+                const isFallingFromEdgeAB = Physics.ball.z < 0 && (offEdgeA || offEdgeB);
+                return offEdgeA || offEdgeB || isFallingFromEdgeAB;
+            }
+        });
         
-        // Draw sorted entities (without shadows, since we drew them separately)
-        entities.forEach(entity => {
+        const entitiesOnCourt = entities.filter(e => {
+            if (e.type === 'character') {
+                const char = e.data;
+                // On court if not off EDGE A, not off EDGE B, and not falling from EDGE A/B
+                const offEdgeA = char.y > Physics.COURT_LENGTH;
+                const isPlayer = char === Physics.player;
+                const offEdgeB = isPlayer ? char.x < 0 : char.x > Physics.COURT_WIDTH;
+                const isFallingFromEdgeAB = char.z < 0 && (offEdgeA || offEdgeB);
+                return !offEdgeA && !offEdgeB && !isFallingFromEdgeAB;
+            } else {
+                // Ball: on court if not off EDGE A, not off EDGE B, and not falling from EDGE A/B
+                const offEdgeA = e.y > Physics.COURT_LENGTH;
+                const offEdgeB = e.x < 0 || e.x > Physics.COURT_WIDTH;
+                const isFallingFromEdgeAB = Physics.ball.z < 0 && (offEdgeA || offEdgeB);
+                return !offEdgeA && !offEdgeB && !isFallingFromEdgeAB;
+            }
+        });
+        
+        // Sort both groups by y (farther = higher y = draw first)
+        entitiesBehindCourt.sort((a, b) => {
+            const yA = a.type === 'character' ? a.data.y : a.y;
+            const yB = b.type === 'character' ? b.data.y : b.y;
+            return yB - yA;
+        });
+        
+        entitiesOnCourt.sort((a, b) => {
+            const yA = a.type === 'character' ? a.data.y : a.y;
+            const yB = b.type === 'character' ? b.data.y : b.y;
+            return yB - yA;
+        });
+        
+        // Draw entities behind the court first (so they appear behind the court layer)
+        entitiesBehindCourt.forEach(entity => {
+            // Draw shadow if above ground
+            if (entity.type === 'character' && entity.data.z >= 0) {
+                this.drawCharacterShadow(entity.data);
+            } else if (entity.type === 'ball') {
+                this.drawBallShadow();
+            }
+            
+            // Draw body
+            if (entity.type === 'character') {
+                this.drawCharacterBody(entity.data, entity.color);
+            } else if (entity.type === 'ball') {
+                this.drawBallBody();
+            }
+        });
+        
+        // Draw court (green tiles and net, on top of entities behind it)
+        this.drawCourt();
+        
+        // Draw edge labels for debugging
+        this.drawEdgeLabels();
+        
+        // Draw receiving zone ground rings (only visible when character is above ground and on court)
+        entitiesOnCourt.forEach(entity => {
+            if (entity.type === 'character' && entity.data.z >= 0) {
+                this.drawReceivingZoneGroundRing(entity.data, entity.color);
+            }
+        });
+        
+        // Draw spike zone rings (only visible when character is jumping and above ground and on court)
+        entitiesOnCourt.forEach(entity => {
+            if (entity.type === 'character' && !entity.data.onGround && entity.data.z >= 0) {
+                this.drawSpikeZoneGroundRing(entity.data, entity.color);
+            }
+        });
+        
+        // Draw shadows for entities on/in front of court (so they appear behind entities, only when above ground)
+        entitiesOnCourt.forEach(entity => {
+            if (entity.type === 'character' && entity.data.z >= 0) {
+                this.drawCharacterShadow(entity.data);
+            } else if (entity.type === 'ball') {
+                this.drawBallShadow();
+            }
+        });
+        
+        // Draw entities on/in front of the court (on top of court layer)
+        entitiesOnCourt.forEach(entity => {
             if (entity.type === 'character') {
                 this.drawCharacterBody(entity.data, entity.color);
             } else if (entity.type === 'ball') {
@@ -552,6 +645,58 @@ const Render = {
             footprintScreenHeight // Height to cover lower half
         );
         ctx.setLineDash([]); // Reset to solid
+    },
+    
+    // Draw edge labels for debugging (EDGE A, B, C)
+    drawEdgeLabels() {
+        const ctx = this.ctx;
+        
+        // EDGE A: Top side of screen (back of court, y = COURT_LENGTH)
+        const edgeA_BackLeft = this.project(0, Physics.COURT_LENGTH, 0);
+        const edgeA_BackRight = this.project(Physics.NET_X, Physics.COURT_LENGTH, 0);
+        const edgeA_CenterX = (edgeA_BackLeft.x + edgeA_BackRight.x) / 2;
+        const edgeA_Y = edgeA_BackLeft.y - 20; // Position above the edge
+        
+        ctx.fillStyle = '#ff0000';
+        ctx.font = 'bold 16px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('EDGE A (70%)', edgeA_CenterX, edgeA_Y);
+        
+        // EDGE B: Left side of screen (opposite from net)
+        // For player side: x = 0
+        const edgeB_PlayerFront = this.project(0, 0, 0);
+        const edgeB_PlayerBack = this.project(0, Physics.COURT_LENGTH, 0);
+        const edgeB_PlayerCenterY = (edgeB_PlayerFront.y + edgeB_PlayerBack.y) / 2;
+        const edgeB_PlayerX = edgeB_PlayerFront.x - 30; // Position to the left of the edge
+        
+        ctx.save();
+        ctx.translate(edgeB_PlayerX, edgeB_PlayerCenterY);
+        ctx.rotate(-Math.PI / 2); // Rotate 90 degrees counter-clockwise
+        ctx.fillText('EDGE B (70%)', 0, 0);
+        ctx.restore();
+        
+        // EDGE C: Bottom side of screen (front of court, y = 0)
+        const edgeC_FrontLeft = this.project(0, 0, 0);
+        const edgeC_FrontRight = this.project(Physics.NET_X, 0, 0);
+        const edgeC_CenterX = (edgeC_FrontLeft.x + edgeC_FrontRight.x) / 2;
+        const edgeC_Y = edgeC_FrontLeft.y + 20; // Position below the edge
+        
+        ctx.fillStyle = '#ff0000';
+        ctx.font = 'bold 16px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('EDGE C (10%)', edgeC_CenterX, edgeC_Y);
+        
+        // Also draw EDGE B for AI side (right side, x = COURT_WIDTH)
+        const edgeB_AIFront = this.project(Physics.COURT_WIDTH, 0, 0);
+        const edgeB_AIBack = this.project(Physics.COURT_WIDTH, Physics.COURT_LENGTH, 0);
+        const edgeB_AICenterY = (edgeB_AIFront.y + edgeB_AIBack.y) / 2;
+        const edgeB_AIX = edgeB_AIFront.x + 30; // Position to the right of the edge
+        
+        ctx.save();
+        ctx.translate(edgeB_AIX, edgeB_AICenterY);
+        ctx.rotate(-Math.PI / 2); // Rotate 90 degrees counter-clockwise
+        ctx.fillText('EDGE B (70%)', 0, 0);
+        ctx.restore();
     },
     
     // Draw character hitbox (3D sphere projected to 2D)
@@ -823,6 +968,58 @@ const Render = {
         ctx.arc(spikeZoneProj.x, spikeZoneProj.y, finalRingSize, 0, Math.PI * 2);
         ctx.stroke();
         ctx.setLineDash([]); // Reset to solid
+    },
+    
+    // Draw edge labels for debugging (EDGE A, B, C)
+    drawEdgeLabels() {
+        const ctx = this.ctx;
+        
+        // EDGE A: Top side of screen (back of court, y = COURT_LENGTH)
+        const edgeA_BackLeft = this.project(0, Physics.COURT_LENGTH, 0);
+        const edgeA_BackRight = this.project(Physics.NET_X, Physics.COURT_LENGTH, 0);
+        const edgeA_CenterX = (edgeA_BackLeft.x + edgeA_BackRight.x) / 2;
+        const edgeA_Y = edgeA_BackLeft.y - 20; // Position above the edge
+        
+        ctx.fillStyle = '#ff0000';
+        ctx.font = 'bold 16px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('EDGE A (70%)', edgeA_CenterX, edgeA_Y);
+        
+        // EDGE B: Left side of screen (opposite from net)
+        // For player side: x = 0
+        const edgeB_PlayerFront = this.project(0, 0, 0);
+        const edgeB_PlayerBack = this.project(0, Physics.COURT_LENGTH, 0);
+        const edgeB_PlayerCenterY = (edgeB_PlayerFront.y + edgeB_PlayerBack.y) / 2;
+        const edgeB_PlayerX = edgeB_PlayerFront.x - 30; // Position to the left of the edge
+        
+        ctx.save();
+        ctx.translate(edgeB_PlayerX, edgeB_PlayerCenterY);
+        ctx.rotate(-Math.PI / 2); // Rotate 90 degrees counter-clockwise
+        ctx.fillText('EDGE B (70%)', 0, 0);
+        ctx.restore();
+        
+        // EDGE C: Bottom side of screen (front of court, y = 0)
+        const edgeC_FrontLeft = this.project(0, 0, 0);
+        const edgeC_FrontRight = this.project(Physics.NET_X, 0, 0);
+        const edgeC_CenterX = (edgeC_FrontLeft.x + edgeC_FrontRight.x) / 2;
+        const edgeC_Y = edgeC_FrontLeft.y + 20; // Position below the edge
+        
+        ctx.fillStyle = '#ff0000';
+        ctx.font = 'bold 16px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('EDGE C (10%)', edgeC_CenterX, edgeC_Y);
+        
+        // Also draw EDGE B for AI side (right side, x = COURT_WIDTH)
+        const edgeB_AIFront = this.project(Physics.COURT_WIDTH, 0, 0);
+        const edgeB_AIBack = this.project(Physics.COURT_WIDTH, Physics.COURT_LENGTH, 0);
+        const edgeB_AICenterY = (edgeB_AIFront.y + edgeB_AIBack.y) / 2;
+        const edgeB_AIX = edgeB_AIFront.x + 30; // Position to the right of the edge
+        
+        ctx.save();
+        ctx.translate(edgeB_AIX, edgeB_AICenterY);
+        ctx.rotate(-Math.PI / 2); // Rotate 90 degrees counter-clockwise
+        ctx.fillText('EDGE B (70%)', 0, 0);
+        ctx.restore();
     }
 };
 

@@ -42,7 +42,12 @@ const Physics = {
         onGround: true,
         hasSpiked: false, // Spike cooldown flag (reset when landing)
         hasReceived: false, // Receive cooldown flag (reset when landing)
-        justAttemptedAction: false // Flag to prevent collision bounce when action was just attempted
+        justAttemptedAction: false, // Flag to prevent collision bounce when action was just attempted
+        isFalling: false, // Falling state
+        fallTimer: 0, // Timer for falling duration (1 second)
+        fallEdge: null, // Which edge they fell from ('A', 'B', or 'C')
+        isBlinking: false, // Blinking state after respawn
+        blinkTimer: 0 // Timer for blinking duration (1 second)
     },
     
     // AI character
@@ -59,7 +64,12 @@ const Physics = {
         onGround: true,
         hasSpiked: false, // Spike cooldown flag (reset when landing)
         hasReceived: false, // Receive cooldown flag (reset when landing)
-        justAttemptedAction: false // Flag to prevent collision bounce when action was just attempted
+        justAttemptedAction: false, // Flag to prevent collision bounce when action was just attempted
+        isFalling: false, // Falling state
+        fallTimer: 0, // Timer for falling duration (1 second)
+        fallEdge: null, // Which edge they fell from ('A', 'B', or 'C')
+        isBlinking: false, // Blinking state after respawn
+        blinkTimer: 0 // Timer for blinking duration (1 second)
     },
     
     // Ball
@@ -118,8 +128,135 @@ const Physics = {
         this.resetBall();
     },
     
+    // Calculate what percentage of the footprint is outside each court edge
+    // Returns an object with percentages for each edge
+    // Edge labels (from camera view):
+    // - EDGE A: Top side of screen (back of court, y = COURT_LENGTH) - threshold 80%
+    // - EDGE B: Left side of screen (opposite from net, x = 0 for player, x = COURT_WIDTH for AI) - threshold 80%
+    // - EDGE C: Bottom side of screen (front of court, y = 0) - threshold 20%
+    getFootprintOutsidePercentages(character) {
+        const footprintWidth = character.radius * 1.2;
+        const footprintDepth = character.radius * 0.5;
+        
+        // Calculate footprint box edges
+        const footprintLeft = character.x - footprintWidth * 0.5;
+        const footprintRight = character.x + footprintWidth * 0.5;
+        const footprintFront = character.y - footprintDepth * 0.5;
+        const footprintBack = character.y + footprintDepth * 0.5;
+        
+        let edgeA_Outside = 0; // Top side of screen (back of court, y = COURT_LENGTH)
+        let edgeB_Outside = 0; // Left side of screen (opposite from net)
+        let edgeC_Outside = 0; // Bottom side of screen (front of court, y = 0)
+        
+        if (character === this.player) {
+            // Player side: x from 0 to NET_X, y from 0 to COURT_LENGTH
+            // EDGE A: Top side of screen (back of court, y = COURT_LENGTH) - threshold 70%
+            const backOutside = Math.max(0, footprintBack - this.COURT_LENGTH);
+            edgeA_Outside = Math.min(1.0, backOutside / footprintDepth);
+            
+            // EDGE B: Left side of screen (opposite from net, x = 0) - threshold 70%
+            const leftOutside = Math.max(0, 0 - footprintLeft);
+            edgeB_Outside = Math.min(1.0, leftOutside / footprintWidth);
+            
+            // EDGE C: Bottom side of screen (front of court, y = 0) - threshold 10%
+            const frontOutside = Math.max(0, 0 - footprintFront);
+            edgeC_Outside = Math.min(1.0, frontOutside / footprintDepth);
+        } else {
+            // AI side: x from NET_X to COURT_WIDTH, y from 0 to COURT_LENGTH
+            // EDGE A: Top side of screen (back of court, y = COURT_LENGTH) - threshold 70%
+            const backOutside = Math.max(0, footprintBack - this.COURT_LENGTH);
+            edgeA_Outside = Math.min(1.0, backOutside / footprintDepth);
+            
+            // EDGE B: Left side of screen (opposite from net, x = COURT_WIDTH) - threshold 70%
+            const rightOutside = Math.max(0, footprintRight - this.COURT_WIDTH);
+            edgeB_Outside = Math.min(1.0, rightOutside / footprintWidth);
+            
+            // EDGE C: Bottom side of screen (front of court, y = 0) - threshold 10%
+            const frontOutside = Math.max(0, 0 - footprintFront);
+            edgeC_Outside = Math.min(1.0, frontOutside / footprintDepth);
+        }
+        
+        return {
+            edgeA: edgeA_Outside,  // Top side of screen (back of court)
+            edgeB: edgeB_Outside,  // Left side of screen (opposite from net)
+            edgeC: edgeC_Outside   // Bottom side of screen (front of court)
+        };
+    },
+    
+    // Check if character's footprint is at least partially on the court
+    // Uses different thresholds for different edges
+    // Edge labels (from camera view):
+    // - EDGE A: Top side of screen (back of court) - threshold 70%
+    // - EDGE B: Left side of screen (opposite from net) - threshold 70%
+    // - EDGE C: Bottom side of screen (front of court) - threshold 10%
+    isFootprintOnCourt(character) {
+        const percentages = this.getFootprintOutsidePercentages(character);
+        
+        // Character falls if any edge exceeds its threshold:
+        const edgeA_Threshold = 0.7; // Top side (back of court) - can lean more
+        const edgeB_Threshold = 0.7; // Left side (opposite from net) - can lean more
+        const edgeC_Threshold = 0.1; // Bottom side (front of court) - falls quickly
+        
+        // Character can stand if all edges are below their thresholds
+        return percentages.edgeA < edgeA_Threshold && 
+               percentages.edgeB < edgeB_Threshold && 
+               percentages.edgeC < edgeC_Threshold;
+    },
+    
     updatePlayer(input) {
         const p = this.player;
+        
+        // SIMPLE FALLING/RESPAWN SYSTEM
+        // Only trigger falling when character is actually falling (on ground and off court, or z < -2)
+        // Don't trigger during jumps - allow characters to jump over edges
+        const isOffCourt = !this.isFootprintOnCourt(p);
+        const hasFallenTooFar = p.z < -2.0;
+        const isOnGroundAndOffCourt = p.onGround && isOffCourt;
+        
+        // Only start falling if: (on ground and off court) OR (fallen too far below)
+        // This allows jumping over edges without triggering falling state
+        if ((isOnGroundAndOffCourt || hasFallenTooFar) && !p.isFalling) {
+            p.isFalling = true;
+            p.fallTimer = 0;
+            // Determine which edge they fell from
+            const percentages = this.getFootprintOutsidePercentages(p);
+            if (percentages.edgeA >= 0.7) {
+                p.fallEdge = 'A';
+            } else if (percentages.edgeB >= 0.7) {
+                p.fallEdge = 'B';
+            } else if (percentages.edgeC >= 0.1) {
+                p.fallEdge = 'C';
+            } else {
+                p.fallEdge = 'A'; // Default
+            }
+        }
+        
+        // Handle falling state - MUST be first, before any movement processing
+        if (p.isFalling) {
+            // After 1 second, respawn
+            if (p.fallTimer >= 1.0) {
+                this.respawnCharacter(p);
+                p.isFalling = false;
+                p.fallTimer = 0;
+                p.fallEdge = null;
+                // After respawn, allow normal movement again - don't return early
+                // Continue with normal update logic below
+            } else {
+                // Still falling - disable all controls while falling - still apply gravity though
+                if (!p.onGround) {
+                    const absVz = Math.abs(p.vz);
+                    if (absVz < this.peakVelocityThreshold) {
+                        p.vz -= this.GRAVITY * this.peakHangMultiplier;
+                    } else {
+                        p.vz -= this.GRAVITY;
+                    }
+                }
+                // Update position (only gravity affects it)
+                p.z += p.vz;
+                // Don't allow getting back on court while falling - keep falling until timer expires
+                return;
+            }
+        }
         
         // Check if we're in receiving mode (ball in zone but not at center)
         // If so, automatic movement takes priority
@@ -148,14 +285,18 @@ const Physics = {
             }
         }
         
+        // Apply blinking penalty: half speed and jump power while blinking
+        const speedMultiplier = p.isBlinking ? 0.5 : 1.0;
+        const jumpMultiplier = p.isBlinking ? 0.5 : 1.0;
+        
         // Horizontal movement (x-axis)
         const hDir = input.getHorizontal();
         // If receiving, don't override automatic movement (it's already set by attemptReceive)
         if (!isReceiving) {
-            p.vx = hDir * p.speed;
+            p.vx = hDir * p.speed * speedMultiplier;
         } else {
             // Combine automatic movement with manual input (manual adds to automatic)
-            const manualVx = hDir * p.speed;
+            const manualVx = hDir * p.speed * speedMultiplier;
             p.vx += manualVx * 0.3; // Manual input adds 30% influence
         }
         
@@ -163,16 +304,16 @@ const Physics = {
         const dDir = input.getDepth();
         // If receiving, don't override automatic movement
         if (!isReceiving) {
-            p.vy = dDir * p.speed;
+            p.vy = dDir * p.speed * speedMultiplier;
         } else {
             // Combine automatic movement with manual input
-            const manualVy = dDir * p.speed;
+            const manualVy = dDir * p.speed * speedMultiplier;
             p.vy += manualVy * 0.3; // Manual input adds 30% influence
         }
         
         // Jump
         if (input.isJumpPressed() && p.onGround) {
-            p.vz = p.jumpPower;
+            p.vz = p.jumpPower * jumpMultiplier;
             p.onGround = false;
         }
         
@@ -194,13 +335,46 @@ const Physics = {
         p.y += p.vy;
         p.z += p.vz;
         
-        // Ground collision
+        // Ground collision - only if footprint is on court
         if (p.z <= 0) {
-            p.z = 0;
-            p.vz = 0;
-            p.onGround = true;
-            p.hasSpiked = false; // Reset spike cooldown when landing
-            p.hasReceived = false; // Reset receive cooldown when landing
+            // Only allow standing if footprint is on court (less than 70% outside)
+            if (this.isFootprintOnCourt(p) && !p.isFalling) {
+                p.z = 0; // Clamp to ground level only if on court
+                p.vz = 0;
+                p.onGround = true;
+                p.hasSpiked = false; // Reset spike cooldown when landing
+                p.hasReceived = false; // Reset receive cooldown when landing
+            } else {
+                // Footprint exceeds threshold on at least one edge - character falls through
+                p.onGround = false;
+                // Don't reset vz to 0, let gravity continue pulling down
+                // Don't clamp z to 0, let them fall below ground level
+            }
+        }
+        
+        // Check if character stepped off court while on ground
+        if (p.onGround && !this.isFootprintOnCourt(p)) {
+            p.onGround = false; // Start falling immediately
+            
+            // Add a gentle push away from court center for natural sliding-off animation
+            const percentages = this.getFootprintOutsidePercentages(p);
+            // Check if any edge exceeds its threshold (EDGE A: 70%, EDGE B: 70%, EDGE C: 10%)
+            if (percentages.edgeA >= 0.7 || percentages.edgeB >= 0.7 || percentages.edgeC >= 0.1) {
+                // Calculate direction from court center to character
+                const courtCenterX = this.NET_X * 0.5; // Center of player's side
+                const courtCenterY = this.COURT_LENGTH * 0.5;
+                
+                const dirX = p.x - courtCenterX;
+                const dirY = p.y - courtCenterY;
+                const dist = Math.sqrt(dirX * dirX + dirY * dirY);
+                
+                if (dist > 0.01) { // Avoid division by zero
+                    // Normalize direction and apply gentle push (15% of movement speed)
+                    const pushStrength = p.speed * 0.15;
+                    p.vx += (dirX / dist) * pushStrength;
+                    p.vy += (dirY / dist) * pushStrength;
+                }
+            }
         }
         
         // Only prevent player from crossing the net (x < NET_X)
@@ -212,13 +386,69 @@ const Physics = {
     updateAI(aiInput) {
         const ai = this.ai;
         
+        // SIMPLE FALLING/RESPAWN SYSTEM
+        // Only trigger falling when character is actually falling (on ground and off court, or z < -2)
+        // Don't trigger during jumps - allow characters to jump over edges
+        const isOffCourt = !this.isFootprintOnCourt(ai);
+        const hasFallenTooFar = ai.z < -2.0;
+        const isOnGroundAndOffCourt = ai.onGround && isOffCourt;
+        
+        // Only start falling if: (on ground and off court) OR (fallen too far below)
+        // This allows jumping over edges without triggering falling state
+        if ((isOnGroundAndOffCourt || hasFallenTooFar) && !ai.isFalling) {
+            ai.isFalling = true;
+            ai.fallTimer = 0;
+            // Determine which edge they fell from
+            const percentages = this.getFootprintOutsidePercentages(ai);
+            if (percentages.edgeA >= 0.7) {
+                ai.fallEdge = 'A';
+            } else if (percentages.edgeB >= 0.7) {
+                ai.fallEdge = 'B';
+            } else if (percentages.edgeC >= 0.1) {
+                ai.fallEdge = 'C';
+            } else {
+                ai.fallEdge = 'A'; // Default
+            }
+        }
+        
+        // Handle falling state - MUST be first, before any movement processing
+        if (ai.isFalling) {
+            // After 1 second, respawn
+            if (ai.fallTimer >= 1.0) {
+                this.respawnCharacter(ai);
+                ai.isFalling = false;
+                ai.fallTimer = 0;
+                ai.fallEdge = null;
+                // After respawn, allow normal movement again - don't return early
+                // Continue with normal update logic below
+            } else {
+                // Still falling - disable all controls while falling - still apply gravity though
+                if (!ai.onGround) {
+                    const absVz = Math.abs(ai.vz);
+                    if (absVz < this.peakVelocityThreshold) {
+                        ai.vz -= this.GRAVITY * this.peakHangMultiplier;
+                    } else {
+                        ai.vz -= this.GRAVITY;
+                    }
+                }
+                // Update position (only gravity affects it)
+                ai.z += ai.vz;
+                // Don't allow getting back on court while falling - keep falling until timer expires
+                return;
+            }
+        }
+        
+        // Apply blinking penalty: half speed and jump power while blinking
+        const speedMultiplier = ai.isBlinking ? 0.5 : 1.0;
+        const jumpMultiplier = ai.isBlinking ? 0.5 : 1.0;
+        
         // AI movement (set by AI system)
-        ai.vx = aiInput.vx || 0;
-        ai.vy = aiInput.vy || 0;
+        ai.vx = (aiInput.vx || 0) * speedMultiplier;
+        ai.vy = (aiInput.vy || 0) * speedMultiplier;
         
         // AI jump
         if (aiInput.jump && ai.onGround) {
-            ai.vz = ai.jumpPower;
+            ai.vz = ai.jumpPower * jumpMultiplier;
             ai.onGround = false;
         }
         
@@ -240,13 +470,47 @@ const Physics = {
         ai.y += ai.vy;
         ai.z += ai.vz;
         
-        // Ground collision
+        // Ground collision - only if footprint is on court
         if (ai.z <= 0) {
-            ai.z = 0;
-            ai.vz = 0;
-            ai.onGround = true;
-            ai.hasSpiked = false; // Reset spike cooldown when landing
-            ai.hasReceived = false; // Reset receive cooldown when landing
+            // Only allow standing if footprint is on court (edge-specific thresholds) and not falling
+            if (this.isFootprintOnCourt(ai) && !ai.isFalling) {
+                ai.z = 0; // Clamp to ground level only if on court
+                ai.vz = 0;
+                ai.onGround = true;
+                ai.hasSpiked = false; // Reset spike cooldown when landing
+                ai.hasReceived = false; // Reset receive cooldown when landing
+            } else {
+                // Footprint exceeds threshold on at least one edge - character falls through
+                ai.onGround = false;
+                // Don't reset vz to 0, let gravity continue pulling down
+                // Don't clamp z to 0, let them fall below ground level
+            }
+        }
+        
+        // Check if character stepped off court while on ground (70% threshold)
+        if (ai.onGround && !this.isFootprintOnCourt(ai)) {
+            ai.onGround = false; // Start falling immediately
+            
+            // Add a gentle push away from court center for natural sliding-off animation
+            const percentages = this.getFootprintOutsidePercentages(ai);
+            // Check if any edge exceeds its threshold (EDGE A: 70%, EDGE B: 70%, EDGE C: 10%)
+            if (percentages.edgeA >= 0.7 || percentages.edgeB >= 0.7 || percentages.edgeC >= 0.1) {
+                // Calculate direction from court center to character
+                // AI is on the right side, so court center is on AI's side
+                const courtCenterX = this.NET_X + (this.COURT_WIDTH - this.NET_X) * 0.5; // Center of AI's side
+                const courtCenterY = this.COURT_LENGTH * 0.5;
+                
+                const dirX = ai.x - courtCenterX;
+                const dirY = ai.y - courtCenterY;
+                const dist = Math.sqrt(dirX * dirX + dirY * dirY);
+                
+                if (dist > 0.01) { // Avoid division by zero
+                    // Normalize direction and apply gentle push (15% of movement speed)
+                    const pushStrength = ai.speed * 0.15;
+                    ai.vx += (dirX / dist) * pushStrength;
+                    ai.vy += (dirY / dist) * pushStrength;
+                }
+            }
         }
         
         // Only prevent AI from crossing the net (x > NET_X)
@@ -633,10 +897,89 @@ const Physics = {
         // Ball can move freely (no clamping)
     },
     
-    update(input, aiInput) {
+    // Respawn character at the edge they fell from (fixed spots slightly inward from each edge)
+    respawnCharacter(character) {
+        // Respawn at fixed position based on which edge they fell from
+        if (character.fallEdge === 'A') {
+            // EDGE A: back of court - respawn at back edge, slightly inward
+            character.y = this.COURT_LENGTH - 0.3; // Slightly inward from back edge
+            // Center horizontally on their side
+            if (character === this.player) {
+                character.x = this.NET_X * 0.5; // Center of player's side
+            } else {
+                character.x = this.NET_X + (this.COURT_WIDTH - this.NET_X) * 0.5; // Center of AI's side
+            }
+        } else if (character.fallEdge === 'B') {
+            // EDGE B: left/right side - respawn at side edge, slightly inward
+            if (character === this.player) {
+                character.x = 0.3; // Slightly inward from left edge
+            } else {
+                character.x = this.COURT_WIDTH - 0.3; // Slightly inward from right edge
+            }
+            // Center depth-wise
+            character.y = this.COURT_LENGTH * 0.5; // Center depth
+        } else if (character.fallEdge === 'C') {
+            // EDGE C: front of court - respawn at front edge, slightly inward
+            character.y = 0.3; // Slightly inward from front edge
+            // Center horizontally on their side
+            if (character === this.player) {
+                character.x = this.NET_X * 0.5; // Center of player's side
+            } else {
+                character.x = this.NET_X + (this.COURT_WIDTH - this.NET_X) * 0.5; // Center of AI's side
+            }
+        } else {
+            // Fallback: if fallEdge is unknown, respawn at center
+            if (character === this.player) {
+                character.x = this.NET_X * 0.5;
+                character.y = this.COURT_LENGTH * 0.5;
+            } else {
+                character.x = this.NET_X + (this.COURT_WIDTH - this.NET_X) * 0.5;
+                character.y = this.COURT_LENGTH * 0.5;
+            }
+        }
+        
+        // Reset position and velocity
+        character.z = 0;
+        character.vx = 0;
+        character.vy = 0;
+        character.vz = 0;
+        character.onGround = true;
+        character.hasSpiked = false;
+        character.hasReceived = false;
+        
+        // Start blinking state (1 second)
+        character.isBlinking = true;
+        character.blinkTimer = 0;
+    },
+    
+    update(input, aiInput, deltaTime = 1/60) {
         // Reset action flags at start of frame (before actions are attempted)
         this.player.justAttemptedAction = false;
         this.ai.justAttemptedAction = false;
+        
+        // Update fall timers with actual deltaTime
+        if (this.player.isFalling) {
+            this.player.fallTimer += deltaTime;
+        }
+        if (this.ai.isFalling) {
+            this.ai.fallTimer += deltaTime;
+        }
+        
+        // Update blink timers with actual deltaTime
+        if (this.player.isBlinking) {
+            this.player.blinkTimer += deltaTime;
+            if (this.player.blinkTimer >= 1.0) {
+                this.player.isBlinking = false;
+                this.player.blinkTimer = 0;
+            }
+        }
+        if (this.ai.isBlinking) {
+            this.ai.blinkTimer += deltaTime;
+            if (this.ai.blinkTimer >= 1.0) {
+                this.ai.isBlinking = false;
+                this.ai.blinkTimer = 0;
+            }
+        }
         
         this.updatePlayer(input);
         this.updateAI(aiInput);

@@ -18,8 +18,9 @@ const Input = {
         return this.keys[key.toLowerCase()] === true;
     },
     
-    // Movement inputs
+    // Movement inputs (disabled when character is falling)
     getHorizontal() {
+        if (Physics.player.isFalling) return 0;
         let dir = 0;
         if (this.isPressed('a')) dir -= 1;
         if (this.isPressed('d')) dir += 1;
@@ -27,6 +28,7 @@ const Input = {
     },
     
     getDepth() {
+        if (Physics.player.isFalling) return 0;
         let dir = 0;
         if (this.isPressed('w')) dir += 1;  // W moves forward (increase y)
         if (this.isPressed('s')) dir -= 1;  // S moves backward (decrease y)
@@ -34,10 +36,12 @@ const Input = {
     },
     
     isJumpPressed() {
+        if (Physics.player.isFalling) return false;
         return this.isPressed('j');
     },
     
     isHitPressed() {
+        if (Physics.player.isFalling) return false;
         return this.isPressed('i');
     },
     

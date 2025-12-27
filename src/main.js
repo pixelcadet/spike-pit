@@ -53,7 +53,7 @@ function gameLoop(currentTime) {
         Physics.attemptReceive(Physics.ai);
     }
     
-    Physics.update(Input, aiInput);
+    Physics.update(Input, aiInput, deltaTime / 1000); // Convert to seconds
     Game.update(Input);
     
     // Update visual highlights

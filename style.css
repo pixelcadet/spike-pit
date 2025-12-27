@@ -75,6 +75,37 @@ body {
     text-align: center;
     border-bottom: 1px solid #444;
     padding-bottom: 8px;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.2s;
+}
+
+#controls-menu h3:hover {
+    color: #4a9eff;
+}
+
+#toggle-icon {
+    font-size: 12px;
+    margin-left: 8px;
+    transition: transform 0.3s;
+    display: inline-block;
+}
+
+#controls-menu.collapsed #toggle-icon {
+    transform: rotate(-90deg);
+}
+
+#controls-content {
+    transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+    overflow: hidden;
+    max-height: 500px;
+    opacity: 1;
+}
+
+#controls-menu.collapsed #controls-content {
+    max-height: 0;
+    opacity: 0;
+    margin-bottom: 0;
 }
 
 .control-group {

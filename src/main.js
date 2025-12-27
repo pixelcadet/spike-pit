@@ -20,6 +20,11 @@ function gameLoop(currentTime) {
     const deltaTime = currentTime - lastTime;
     lastTime = currentTime;
     
+    // Check for reset (P key)
+    if (Input.isResetPressed()) {
+        Physics.reset();
+    }
+    
     // Update systems
     AI.update();
     const aiInput = AI.getInput();

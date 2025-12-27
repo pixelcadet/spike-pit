@@ -41,6 +41,10 @@ const Input = {
         return this.isPressed('i');
     },
     
+    isResetPressed() {
+        return this.isPressed('p');
+    },
+    
     // Check if any key is pressed (for restart)
     anyKeyPressed() {
         return Object.values(this.keys).some(pressed => pressed === true);

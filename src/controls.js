@@ -9,6 +9,14 @@ const Controls = {
     // Air Time: maps old 3-10 range, with 5 = old slider 7 (0.296 multiplier)
     
     init() {
+        // Set up toggle for collapsing/expanding controls
+        const controlsMenu = document.getElementById('controls-menu');
+        const controlsToggle = document.getElementById('controls-toggle');
+        
+        controlsToggle.addEventListener('click', () => {
+            controlsMenu.classList.toggle('collapsed');
+        });
+        
         // Set up movement speed slider
         const movementSpeedSlider = document.getElementById('movement-speed');
         const movementSpeedValue = document.getElementById('movement-speed-value');
@@ -49,11 +57,22 @@ const Controls = {
             this.updateAirTime(value);
         });
         
+        // Set up ball movement speed slider
+        const ballSpeedSlider = document.getElementById('ball-speed');
+        const ballSpeedValue = document.getElementById('ball-speed-value');
+        
+        ballSpeedSlider.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value);
+            ballSpeedValue.textContent = value;
+            this.updateBallMovementSpeed(value);
+        });
+        
         // Initialize with default values (5 on 1-10 scale)
         this.updateMovementSpeed(5);
         this.updateJumpPower(5);
         this.updateGravity(5);
         this.updateAirTime(5);
+        this.updateBallMovementSpeed(5);
     },
     
     // Convert 1-10 scale to movement speed (0.025 to 0.075, with 5 = 0.05)
@@ -118,6 +137,22 @@ const Controls = {
         
         // Apply to physics system
         Physics.peakHangMultiplier = multiplier;
+    },
+    
+    // Convert 1-10 scale to ball movement speed multiplier (0.2 to 0.6, with 5 = 0.378)
+    // Recalibrated: old slider 3 → new slider 5 (comfortable default)
+    // Lower value = slower ball movement (easier to follow visually)
+    updateBallMovementSpeed(scale) {
+        // Linear interpolation: min + (max - min) * ((scale - 1) / 9)
+        // Slider 1 = 0.2 (20% speed = very slow, easy to follow)
+        // Slider 5 = 0.378 (37.8% speed = comfortable default, was old slider 3)
+        // Slider 10 = 0.6 (60% speed = faster)
+        const minSpeed = 0.2;
+        const maxSpeed = 0.6;
+        const speed = minSpeed + (maxSpeed - minSpeed) * ((scale - 1) / 9);
+        
+        // Apply to physics system
+        Physics.ballMovementSpeed = speed;
     }
 };
 

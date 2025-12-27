@@ -277,6 +277,44 @@ const Render = {
         ctx.fillRect(proj.x - rectWidth * 0.2, proj.y - rectHeight * 0.4, rectWidth * 0.4, rectHeight * 0.2);
     },
     
+    // Draw ball
+    drawBall() {
+        const ctx = this.ctx;
+        const ball = Physics.ball;
+        const proj = this.project(ball.x, ball.y, ball.z);
+        
+        // Draw shadow
+        const shadowProj = this.project(ball.x, ball.y, 0);
+        const shadowSize = ball.radius * this.courtTileSize * shadowProj.scale * (1 + ball.z * 0.5);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.beginPath();
+        ctx.ellipse(shadowProj.x, shadowProj.y, shadowSize, shadowSize * 0.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Draw ball
+        const ballSize = ball.radius * this.courtTileSize * proj.scale;
+        
+        // Ensure minimum size for visibility
+        const minBallSize = 6;
+        const finalBallSize = Math.max(ballSize, minBallSize);
+        
+        ctx.fillStyle = '#ff0000';
+        ctx.beginPath();
+        ctx.arc(proj.x, proj.y, finalBallSize, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Draw ball border
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        
+        // Draw ball highlight
+        ctx.fillStyle = '#ff6666';
+        ctx.beginPath();
+        ctx.arc(proj.x - finalBallSize * 0.3, proj.y - finalBallSize * 0.3, finalBallSize * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+    },
+    
     // Main render function
     render() {
         const ctx = this.ctx;
@@ -291,7 +329,8 @@ const Render = {
         // Sort by y position for proper depth
         const entities = [
             { type: 'character', data: Physics.player, color: '#4a9eff', y: Physics.player.y },
-            { type: 'character', data: Physics.ai, color: '#ff4a4a', y: Physics.ai.y }
+            { type: 'character', data: Physics.ai, color: '#ff4a4a', y: Physics.ai.y },
+            { type: 'ball', y: Physics.ball.y }
         ];
         
         // Sort by y (farther = higher y = draw first)
@@ -301,8 +340,174 @@ const Render = {
         entities.forEach(entity => {
             if (entity.type === 'character') {
                 this.drawCharacter(entity.data, entity.color);
+            } else if (entity.type === 'ball') {
+                this.drawBall();
             }
         });
+        
+        // Draw hitboxes for debugging
+        this.drawHitboxes();
+    },
+    
+    // Draw hitboxes for debugging
+    drawHitboxes() {
+        const ctx = this.ctx;
+        
+        // Draw character hitboxes
+        this.drawCharacterHitbox(Physics.player, '#4a9eff');
+        this.drawCharacterHitbox(Physics.ai, '#ff4a4a');
+        
+        // Draw ball hitbox
+        this.drawBallHitbox();
+        
+        // Draw net hitbox
+        this.drawNetHitbox();
+    },
+    
+    // Draw character hitbox (3D sphere projected to 2D)
+    drawCharacterHitbox(character, color) {
+        const ctx = this.ctx;
+        const proj = this.project(character.x, character.y, character.z);
+        
+        // Draw hitbox circle at character position
+        const hitboxSize = character.radius * this.courtTileSize * proj.scale;
+        const minSize = 8;
+        const finalSize = Math.max(hitboxSize, minSize);
+        
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]); // Dashed line
+        ctx.beginPath();
+        ctx.arc(proj.x, proj.y, finalSize, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]); // Reset to solid
+        
+        // Draw hitbox at ground level too (shadow of hitbox)
+        const groundProj = this.project(character.x, character.y, 0);
+        const groundSize = character.radius * this.courtTileSize * groundProj.scale;
+        const finalGroundSize = Math.max(groundSize, minSize);
+        
+        ctx.strokeStyle = color + '80'; // Semi-transparent
+        ctx.beginPath();
+        ctx.arc(groundProj.x, groundProj.y, finalGroundSize, 0, Math.PI * 2);
+        ctx.stroke();
+    },
+    
+    // Draw ball hitbox
+    drawBallHitbox() {
+        const ctx = this.ctx;
+        const ball = Physics.ball;
+        const proj = this.project(ball.x, ball.y, ball.z);
+        
+        const hitboxSize = ball.radius * this.courtTileSize * proj.scale;
+        const minSize = 6;
+        const finalSize = Math.max(hitboxSize, minSize);
+        
+        ctx.strokeStyle = '#ff0000';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.arc(proj.x, proj.y, finalSize, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        // Draw hitbox at ground level
+        const groundProj = this.project(ball.x, ball.y, 0);
+        const groundSize = ball.radius * this.courtTileSize * groundProj.scale;
+        const finalGroundSize = Math.max(groundSize, minSize);
+        
+        ctx.strokeStyle = '#ff000080';
+        ctx.beginPath();
+        ctx.arc(groundProj.x, groundProj.y, finalGroundSize, 0, Math.PI * 2);
+        ctx.stroke();
+    },
+    
+    // Draw net hitbox
+    drawNetHitbox() {
+        const ctx = this.ctx;
+        const netX = Physics.NET_X;
+        const netHeight = Physics.NET_HEIGHT;
+        const topThreshold = Physics.NET_TOP_THRESHOLD;
+        
+        // Draw net hitbox as vertical lines at front and back
+        const netFrontTop = this.project(netX, 0, netHeight);
+        const netFrontBottom = this.project(netX, 0, 0);
+        const netBackTop = this.project(netX, Physics.COURT_LENGTH, netHeight);
+        const netBackBottom = this.project(netX, Physics.COURT_LENGTH, 0);
+        
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        
+        // Draw front edge
+        ctx.beginPath();
+        ctx.moveTo(netFrontTop.x, netFrontTop.y);
+        ctx.lineTo(netFrontBottom.x, netFrontBottom.y);
+        ctx.stroke();
+        
+        // Draw back edge
+        ctx.beginPath();
+        ctx.moveTo(netBackTop.x, netBackTop.y);
+        ctx.lineTo(netBackBottom.x, netBackBottom.y);
+        ctx.stroke();
+        
+        // Draw top edge (the tape/rope)
+        ctx.strokeStyle = '#ffff00'; // Yellow for top edge
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(netFrontTop.x, netFrontTop.y);
+        ctx.lineTo(netBackTop.x, netBackTop.y);
+        ctx.stroke();
+        
+        // Draw bottom edge
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(netFrontBottom.x, netFrontBottom.y);
+        ctx.lineTo(netBackBottom.x, netBackBottom.y);
+        ctx.stroke();
+        
+        ctx.setLineDash([]);
+        
+        // Draw main collision zone (below net height, within ball radius)
+        const ballRadius = Physics.ball.radius;
+        const frontLeft = this.project(netX - ballRadius, 0, 0);
+        const frontRight = this.project(netX + ballRadius, 0, 0);
+        const backLeft = this.project(netX - ballRadius, Physics.COURT_LENGTH, 0);
+        const backRight = this.project(netX + ballRadius, Physics.COURT_LENGTH, 0);
+        
+        ctx.strokeStyle = '#ffff0080'; // Yellow, semi-transparent
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(frontLeft.x, frontLeft.y);
+        ctx.lineTo(frontRight.x, frontRight.y);
+        ctx.lineTo(backRight.x, backRight.y);
+        ctx.lineTo(backLeft.x, backLeft.y);
+        ctx.closePath();
+        ctx.stroke();
+        
+        // Draw top edge collision zone (at net height ± threshold)
+        const topEdgeFrontTop = this.project(netX, 0, netHeight + topThreshold);
+        const topEdgeFrontBottom = this.project(netX, 0, netHeight - topThreshold);
+        const topEdgeBackTop = this.project(netX, Physics.COURT_LENGTH, netHeight + topThreshold);
+        const topEdgeBackBottom = this.project(netX, Physics.COURT_LENGTH, netHeight - topThreshold);
+        
+        ctx.strokeStyle = '#ff8800'; // Orange for top edge collision zone
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3, 3]);
+        
+        // Draw top edge collision zone boundaries
+        ctx.beginPath();
+        ctx.moveTo(topEdgeFrontTop.x, topEdgeFrontTop.y);
+        ctx.lineTo(topEdgeBackTop.x, topEdgeBackTop.y);
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.moveTo(topEdgeFrontBottom.x, topEdgeFrontBottom.y);
+        ctx.lineTo(topEdgeBackBottom.x, topEdgeBackBottom.y);
+        ctx.stroke();
+        
+        ctx.setLineDash([]);
     }
 };
 

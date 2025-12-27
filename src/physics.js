@@ -337,6 +337,17 @@ const Physics = {
         
         // Ground collision - only if footprint is on court
         if (p.z <= 0) {
+            // Check if character's body edge would overlap with the net
+            // Player is on left side, so check if right edge (x + radius) would cross net
+            const characterRightEdge = p.x + p.radius;
+            const isTooCloseToNet = characterRightEdge >= this.NET_X;
+            
+            if (isTooCloseToNet) {
+                // Push character away so body edge aligns with net
+                // Set character's right edge to be exactly at the net
+                p.x = this.NET_X - p.radius;
+            }
+            
             // Only allow standing if footprint is on court (less than 70% outside)
             if (this.isFootprintOnCourt(p) && !p.isFalling) {
                 p.z = 0; // Clamp to ground level only if on court
@@ -377,9 +388,23 @@ const Physics = {
             }
         }
         
-        // Only prevent player from crossing the net (x < NET_X)
-        if (p.x >= this.NET_X) {
-            p.x = this.NET_X - 0.01; // Keep slightly away from net
+        // Prevent player from crossing the net horizontally
+        // Check if character's body edge (right edge for player) would cross net
+        const characterRightEdge = p.x + p.radius;
+        if (characterRightEdge >= this.NET_X) {
+            // Push character away so body edge aligns with net
+            p.x = this.NET_X - p.radius;
+        }
+        
+        // Prevent player from standing on top of the net (mid-air)
+        // Check if character's body edge is too close to net AND z position is at/above net height
+        if (characterRightEdge >= this.NET_X && p.z >= this.NET_HEIGHT) {
+            // Push character away from the net horizontally
+            p.x = this.NET_X - p.radius;
+            // If on ground, also push them down slightly to prevent floating
+            if (p.onGround && p.z <= this.NET_HEIGHT + 0.1) {
+                p.z = Math.max(0, p.z - 0.05);
+            }
         }
     },
     
@@ -472,6 +497,17 @@ const Physics = {
         
         // Ground collision - only if footprint is on court
         if (ai.z <= 0) {
+            // Check if character's body edge would overlap with the net
+            // AI is on right side, so check if left edge (x - radius) would cross net
+            const characterLeftEdge = ai.x - ai.radius;
+            const isTooCloseToNet = characterLeftEdge <= this.NET_X;
+            
+            if (isTooCloseToNet) {
+                // Push character away so body edge aligns with net
+                // Set character's left edge to be exactly at the net
+                ai.x = this.NET_X + ai.radius;
+            }
+            
             // Only allow standing if footprint is on court (edge-specific thresholds) and not falling
             if (this.isFootprintOnCourt(ai) && !ai.isFalling) {
                 ai.z = 0; // Clamp to ground level only if on court
@@ -513,9 +549,23 @@ const Physics = {
             }
         }
         
-        // Only prevent AI from crossing the net (x > NET_X)
-        if (ai.x <= this.NET_X) {
-            ai.x = this.NET_X + 0.01; // Keep slightly away from net
+        // Prevent AI from crossing the net horizontally
+        // Check if character's body edge (left edge for AI) would cross net
+        const characterLeftEdge = ai.x - ai.radius;
+        if (characterLeftEdge <= this.NET_X) {
+            // Push character away so body edge aligns with net
+            ai.x = this.NET_X + ai.radius;
+        }
+        
+        // Prevent AI from standing on top of the net (mid-air)
+        // Check if character's body edge is too close to net AND z position is at/above net height
+        if (characterLeftEdge <= this.NET_X && ai.z >= this.NET_HEIGHT) {
+            // Push character away from the net horizontally
+            ai.x = this.NET_X + ai.radius;
+            // If on ground, also push them down slightly to prevent floating
+            if (ai.onGround && ai.z <= this.NET_HEIGHT + 0.1) {
+                ai.z = Math.max(0, ai.z - 0.05);
+            }
         }
     },
     

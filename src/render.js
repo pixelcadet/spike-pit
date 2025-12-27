@@ -222,12 +222,12 @@ const Render = {
         ctx.stroke();
     },
     
-    // Draw character (placeholder - colored rectangle)
-    drawCharacter(character, color) {
+    // Draw character shadow (separated for proper rendering order)
+    drawCharacterShadow(character) {
         const ctx = this.ctx;
         const proj = this.project(character.x, character.y, character.z);
         
-        // Calculate character rectangle dimensions first
+        // Calculate character rectangle dimensions
         const charSize = character.radius * this.courtTileSize * proj.scale;
         const minSize = 8;
         const finalSize = Math.max(charSize, minSize);
@@ -235,33 +235,41 @@ const Render = {
         const rectHeight = finalSize * 1.5;
         
         // Draw shadow - directly below character at ground level (z=0)
-        // Project ground position at same x,y coordinates
         const shadowProj = this.project(character.x, character.y, 0);
         
         // Shadow size reduces as character jumps higher (z increases)
-        // At z=0 (ground), shadow is full size (scale = 1.0)
-        // As z increases, shadow gets smaller proportionally
-        const shadowScale = Math.max(0.2, 1.0 - character.z * 0.4); // Reduces by 40% per unit of height, min 20%
-        const baseShadowWidth = character.radius * this.courtTileSize * shadowProj.scale * 2;
+        const shadowScale = Math.max(0.2, 1.0 - character.z * 0.4);
+        const baseShadowWidth = character.radius * this.courtTileSize * shadowProj.scale * 2 * 0.6; // Reduced by 40% (0.6 = 60% of original)
         const shadowWidth = baseShadowWidth * shadowScale;
-        const shadowHeight = shadowWidth * 0.5; // Flattened for perspective
-        
-        // Character's bottom edge in screen coordinates
-        const characterBottomY = proj.y + rectHeight / 2;
+        const shadowHeight = shadowWidth * 0.5;
         
         // Shadow X matches character X exactly
         const shadowX = proj.x;
-        // Shadow Y should be at ground level, positioned to align with character's bottom edge
-        // When character is on ground (z=0), proj.y equals shadowProj.y (both at center)
-        // Character's bottom is at proj.y + rectHeight/2, so shadow should be offset down by half height
-        // Account for scale difference between character position and ground position
+        // Shadow Y at ground level, aligned with character's bottom edge
         const scaleRatio = shadowProj.scale / proj.scale;
         const shadowY = shadowProj.y + (rectHeight / 2) * scaleRatio;
         
         ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-        ctx.beginPath();
-        ctx.ellipse(shadowX, shadowY, shadowWidth * 0.5, shadowHeight * 0.5, 0, 0, Math.PI * 2);
-        ctx.fill();
+        // Draw square shadow instead of ellipse
+        ctx.fillRect(
+            shadowX - shadowWidth * 0.5,
+            shadowY - shadowHeight * 0.5,
+            shadowWidth,
+            shadowHeight
+        );
+    },
+    
+    // Draw character body (without shadow)
+    drawCharacterBody(character, color) {
+        const ctx = this.ctx;
+        const proj = this.project(character.x, character.y, character.z);
+        
+        // Calculate character rectangle dimensions
+        const charSize = character.radius * this.courtTileSize * proj.scale;
+        const minSize = 8;
+        const finalSize = Math.max(charSize, minSize);
+        const rectWidth = finalSize * 1.2;
+        const rectHeight = finalSize * 1.5;
         
         // Draw character rectangle (centered on position)
         ctx.fillStyle = color;
@@ -277,21 +285,65 @@ const Render = {
         ctx.fillRect(proj.x - rectWidth * 0.2, proj.y - rectHeight * 0.4, rectWidth * 0.4, rectHeight * 0.2);
     },
     
-    // Draw ball
-    drawBall() {
+    // Draw ball shadow (separated for proper rendering order)
+    drawBallShadow() {
+        const ctx = this.ctx;
+        const ball = Physics.ball;
+        const shadowProj = this.project(ball.x, ball.y, 0);
+        
+        // Shadow gets smaller when ball is higher (inverse relationship)
+        const shadowSize = ball.radius * this.courtTileSize * shadowProj.scale * Math.max(0.3, 1.0 - ball.z * 0.3);
+        
+        // Check if ball is directly above a character (same x, y) and align shadow
+        let shadowY = shadowProj.y;
+        const alignmentThreshold = 0.3; // Distance threshold for "directly above"
+        
+        // Check player character
+        const player = Physics.player;
+        const distToPlayer = Math.sqrt(
+            Math.pow(ball.x - player.x, 2) + Math.pow(ball.y - player.y, 2)
+        );
+        if (distToPlayer < alignmentThreshold) {
+            // Ball is above player, use player's shadow Y position
+            const playerProj = this.project(player.x, player.y, player.z);
+            const playerShadowProj = this.project(player.x, player.y, 0);
+            const charSize = player.radius * this.courtTileSize * playerProj.scale;
+            const minSize = 8;
+            const finalSize = Math.max(charSize, minSize);
+            const rectHeight = finalSize * 1.5;
+            const scaleRatio = playerShadowProj.scale / playerProj.scale;
+            shadowY = playerShadowProj.y + (rectHeight / 2) * scaleRatio;
+        } else {
+            // Check AI character
+            const ai = Physics.ai;
+            const distToAI = Math.sqrt(
+                Math.pow(ball.x - ai.x, 2) + Math.pow(ball.y - ai.y, 2)
+            );
+            if (distToAI < alignmentThreshold) {
+                // Ball is above AI, use AI's shadow Y position
+                const aiProj = this.project(ai.x, ai.y, ai.z);
+                const aiShadowProj = this.project(ai.x, ai.y, 0);
+                const charSize = ai.radius * this.courtTileSize * aiProj.scale;
+                const minSize = 8;
+                const finalSize = Math.max(charSize, minSize);
+                const rectHeight = finalSize * 1.5;
+                const scaleRatio = aiShadowProj.scale / aiProj.scale;
+                shadowY = aiShadowProj.y + (rectHeight / 2) * scaleRatio;
+            }
+        }
+        
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.beginPath();
+        ctx.ellipse(shadowProj.x, shadowY, shadowSize, shadowSize * 0.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+    },
+    
+    // Draw ball body (without shadow)
+    drawBallBody() {
         const ctx = this.ctx;
         const ball = Physics.ball;
         const proj = this.project(ball.x, ball.y, ball.z);
         
-        // Draw shadow
-        const shadowProj = this.project(ball.x, ball.y, 0);
-        const shadowSize = ball.radius * this.courtTileSize * shadowProj.scale * (1 + ball.z * 0.5);
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-        ctx.beginPath();
-        ctx.ellipse(shadowProj.x, shadowProj.y, shadowSize, shadowSize * 0.5, 0, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Draw ball
         const ballSize = ball.radius * this.courtTileSize * proj.scale;
         
         // Ensure minimum size for visibility
@@ -325,6 +377,11 @@ const Render = {
         // Draw court
         this.drawCourt();
         
+        // Draw all shadows first (so they appear behind entities)
+        this.drawCharacterShadow(Physics.player);
+        this.drawCharacterShadow(Physics.ai);
+        this.drawBallShadow();
+        
         // Draw entities (depth sorted by y position - higher y = farther = drawn first)
         // Sort by y position for proper depth
         const entities = [
@@ -336,12 +393,12 @@ const Render = {
         // Sort by y (farther = higher y = draw first)
         entities.sort((a, b) => b.y - a.y);
         
-        // Draw sorted entities
+        // Draw sorted entities (without shadows, since we drew them separately)
         entities.forEach(entity => {
             if (entity.type === 'character') {
-                this.drawCharacter(entity.data, entity.color);
+                this.drawCharacterBody(entity.data, entity.color);
             } else if (entity.type === 'ball') {
-                this.drawBall();
+                this.drawBallBody();
             }
         });
         

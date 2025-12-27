@@ -49,7 +49,7 @@ const Physics = {
         vx: 0,
         vy: 0,
         vz: 0,
-        radius: 0.2,     // Ball size
+        radius: 0.24,   // Ball size (20% bigger: 0.2 * 1.2)
         groundLevel: 0,
         bounceDamping: 0.7,  // Energy loss on bounce (0.7 = 70% of velocity retained)
         friction: 0.9        // Ground friction (0.9 = 90% of velocity retained)
@@ -226,9 +226,10 @@ const Physics = {
             // Bounce direction: opposite of collision normal + character velocity influence
             // The ball bounces away from the character in the direction opposite to where it came from
             // Plus it gets pushed in the direction the character is moving
-            b.vx = pushDirX * (bouncePower + speedMultiplier) + character.vx * 0.3;
-            b.vy = pushDirY * (bouncePower + speedMultiplier) + character.vy * 0.3;
-            b.vz = pushDirZ * (bouncePower + speedMultiplier) + 0.1; // Always add some upward component
+            // Scale by ballMovementSpeed to maintain same trajectory at different time scales
+            b.vx = (pushDirX * (bouncePower + speedMultiplier) + character.vx * 0.3) * this.ballMovementSpeed;
+            b.vy = (pushDirY * (bouncePower + speedMultiplier) + character.vy * 0.3) * this.ballMovementSpeed;
+            b.vz = (pushDirZ * (bouncePower + speedMultiplier) + 0.1) * this.ballMovementSpeed; // Always add some upward component
             
             // Apply bounce damping
             b.vx *= b.bounceDamping;
@@ -274,11 +275,13 @@ const Physics = {
                 }
                 
                 // Bounce off net - reverse horizontal velocity with damping
+                // Scale by ballMovementSpeed to maintain trajectory
                 b.vx = -b.vx * b.bounceDamping;
                 
                 // Slight upward component to prevent ball from getting stuck
-                if (b.vz < 0.05) {
-                    b.vz = 0.05;
+                // Scale by ballMovementSpeed to maintain trajectory
+                if (b.vz < 0.05 * this.ballMovementSpeed) {
+                    b.vz = 0.05 * this.ballMovementSpeed;
                 }
                 
                 // Apply slight damping to other velocities
@@ -297,6 +300,7 @@ const Physics = {
                 }
                 
                 // Top edge bounce - deflects ball with reduced horizontal bounce
+                // Velocities already scaled by ballMovementSpeed from previous updates
                 b.vx = -b.vx * b.bounceDamping * 0.7; // Less horizontal bounce on top edge
                 
                 // Deflect downward slightly (ball hits top and bounces down)
@@ -322,13 +326,18 @@ const Physics = {
         this.checkBallCharacterCollision(this.ai);
         
         // Apply gravity (same as characters - uses Physics.GRAVITY which is controlled by slider)
-        b.vz -= this.GRAVITY;
+        // Scale gravity by ballMovementSpeed to act as time-scale factor
+        // This ensures the same trajectory but at different time scales
+        b.vz -= this.GRAVITY * this.ballMovementSpeed;
         
-        // Update position with movement speed multiplier
-        // This controls how fast the ball visually moves on screen
-        b.x += b.vx * this.ballMovementSpeed;
-        b.y += b.vy * this.ballMovementSpeed;
-        b.z += b.vz * this.ballMovementSpeed;
+        // Update position
+        // ballMovementSpeed acts as time-scale: lower = slower = same distance takes longer
+        // Since velocities are already scaled by ballMovementSpeed (from forces),
+        // we update position directly with the scaled velocities
+        // This maintains the same trajectory but at different time scales
+        b.x += b.vx;
+        b.y += b.vy;
+        b.z += b.vz;
         
         // Check net collision (after position update)
         this.checkBallNetCollision();

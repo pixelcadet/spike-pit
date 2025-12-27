@@ -419,6 +419,10 @@ const Render = {
         
         // Draw net hitbox
         this.drawNetHitbox();
+        
+        // Draw spike zones
+        this.drawSpikeZone(Physics.player, '#4a9eff');
+        this.drawSpikeZone(Physics.ai, '#ff4a4a');
     },
     
     // Draw character hitbox (3D sphere projected to 2D)
@@ -565,6 +569,60 @@ const Render = {
         ctx.stroke();
         
         ctx.setLineDash([]);
+    },
+    
+    // Draw spike zone (3D sphere above character's head)
+    drawSpikeZone(character, color) {
+        const ctx = this.ctx;
+        const spikeZoneZ = character.z + Physics.SPIKE_ZONE_HEAD_OFFSET;
+        const spikeZoneRadius = Physics.SPIKE_ZONE_RADIUS;
+        
+        // Project spike zone center (above character's head)
+        const centerProj = this.project(character.x, character.y, spikeZoneZ);
+        
+        // Draw sphere as multiple circles at different heights
+        // Top circle (at spike zone center)
+        const topSize = spikeZoneRadius * this.courtTileSize * centerProj.scale;
+        const minSize = 6;
+        const finalTopSize = Math.max(topSize, minSize);
+        
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3, 3]); // Dotted line for spike zone
+        ctx.beginPath();
+        ctx.arc(centerProj.x, centerProj.y, finalTopSize, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Draw circles at different heights to show 3D sphere
+        const numRings = 3;
+        for (let i = 1; i <= numRings; i++) {
+            const offsetZ = (spikeZoneRadius / numRings) * i;
+            const ringZTop = spikeZoneZ + offsetZ;
+            const ringZBottom = spikeZoneZ - offsetZ;
+            
+            // Top ring
+            const ringTopProj = this.project(character.x, character.y, ringZTop);
+            const ringTopSize = Math.sqrt(spikeZoneRadius * spikeZoneRadius - offsetZ * offsetZ) * this.courtTileSize * ringTopProj.scale;
+            const finalRingTopSize = Math.max(ringTopSize, minSize);
+            
+            ctx.strokeStyle = color + '60'; // More transparent for rings
+            ctx.beginPath();
+            ctx.arc(ringTopProj.x, ringTopProj.y, finalRingTopSize, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            // Bottom ring (if above ground)
+            if (ringZBottom > 0) {
+                const ringBottomProj = this.project(character.x, character.y, ringZBottom);
+                const ringBottomSize = Math.sqrt(spikeZoneRadius * spikeZoneRadius - offsetZ * offsetZ) * this.courtTileSize * ringBottomProj.scale;
+                const finalRingBottomSize = Math.max(ringBottomSize, minSize);
+                
+                ctx.beginPath();
+                ctx.arc(ringBottomProj.x, ringBottomProj.y, finalRingBottomSize, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+        
+        ctx.setLineDash([]); // Reset to solid
     }
 };
 

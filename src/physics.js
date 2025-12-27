@@ -13,6 +13,13 @@ const Physics = {
     peakHangMultiplier: 0.15, // Gravity multiplier when near peak (0.0 = no gravity at peak = max hang, 1.0 = full gravity)
     peakVelocityThreshold: 0.02, // When |vz| < this, character is considered "at peak" (tighter window for hang effect)
     
+    // Spike zone parameters
+    SPIKE_ZONE_RADIUS: 0.84,     // Radius of spike zone sphere (scaled 20% with character size: 0.7 * 1.2)
+    SPIKE_ZONE_HEAD_OFFSET: 0.6, // Height above character center for spike zone
+    SPIKE_MAX_POWER: 0.3,        // Maximum spike power (at center of zone)
+    SPIKE_MIN_POWER: 0.08,       // Minimum spike power (at edge of zone)
+    SPIKE_WOBBLE_MAX_ANGLE: 25,  // Maximum angle deviation in degrees (at edge)
+    
     // Player character
     player: {
         x: 2.0,          // Start on left side (4 cells available)
@@ -23,8 +30,9 @@ const Physics = {
         vz: 0,
         speed: 0.15,
         jumpPower: 0.3,
-        radius: 0.345,   // Size for visibility (15% bigger: 0.3 * 1.15)
-        onGround: true
+        radius: 0.414,   // Size (20% bigger: 0.345 * 1.2)
+        onGround: true,
+        hasSpiked: false // Spike cooldown flag (reset when landing)
     },
     
     // AI character
@@ -37,8 +45,9 @@ const Physics = {
         vz: 0,
         speed: 0.12,
         jumpPower: 0.3,
-        radius: 0.345,   // Size for visibility (15% bigger: 0.3 * 1.15)
-        onGround: true
+        radius: 0.414,   // Size (20% bigger: 0.345 * 1.2)
+        onGround: true,
+        hasSpiked: false // Spike cooldown flag (reset when landing)
     },
     
     // Ball
@@ -49,7 +58,7 @@ const Physics = {
         vx: 0,
         vy: 0,
         vz: 0,
-        radius: 0.24,   // Ball size (20% bigger: 0.2 * 1.2)
+        radius: 0.3036, // Ball size (15% bigger: 0.264 * 1.15)
         groundLevel: 0,
         bounceDamping: 0.7,  // Energy loss on bounce (0.7 = 70% of velocity retained)
         friction: 0.9        // Ground friction (0.9 = 90% of velocity retained)
@@ -79,6 +88,7 @@ const Physics = {
         this.player.vy = 0;
         this.player.vz = 0;
         this.player.onGround = true;
+        this.player.hasSpiked = false;
         
         // Reset AI to middle of their side
         this.ai.x = 6.0;  // Middle of right side
@@ -88,6 +98,7 @@ const Physics = {
         this.ai.vy = 0;
         this.ai.vz = 0;
         this.ai.onGround = true;
+        this.ai.hasSpiked = false;
         
         // Reset ball above player
         this.resetBall();
@@ -133,6 +144,7 @@ const Physics = {
             p.z = 0;
             p.vz = 0;
             p.onGround = true;
+            p.hasSpiked = false; // Reset spike cooldown when landing
         }
         
         // Clamp to player side (x < NET_X, left side)
@@ -181,6 +193,7 @@ const Physics = {
             ai.z = 0;
             ai.vz = 0;
             ai.onGround = true;
+            ai.hasSpiked = false; // Reset spike cooldown when landing
         }
         
         // Clamp to AI side (x > NET_X, right side)
@@ -239,6 +252,79 @@ const Physics = {
             return true;
         }
         return false;
+    },
+    
+    // Attempt to spike the ball (called when character presses spike key mid-air)
+    attemptSpike(character) {
+        // Can only spike when mid-air and haven't spiked this jump
+        if (character.onGround || character.hasSpiked) {
+            return false;
+        }
+        
+        const b = this.ball;
+        
+        // Calculate spike zone center (above character's head)
+        const spikeZoneX = character.x;
+        const spikeZoneY = character.y;
+        const spikeZoneZ = character.z + this.SPIKE_ZONE_HEAD_OFFSET;
+        
+        // Check if ball is within spike zone (3D distance)
+        const dx = b.x - spikeZoneX;
+        const dy = b.y - spikeZoneY;
+        const dz = b.z - spikeZoneZ;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        
+        if (dist > this.SPIKE_ZONE_RADIUS) {
+            return false; // Ball not in spike zone
+        }
+        
+        // Calculate power based on distance from center
+        // Closer to center = more power
+        const normalizedDist = dist / this.SPIKE_ZONE_RADIUS; // 0.0 (center) to 1.0 (edge)
+        const power = this.SPIKE_MAX_POWER * (1.0 - normalizedDist) + this.SPIKE_MIN_POWER * normalizedDist;
+        
+        // Determine target (opponent's side)
+        let targetX, targetY;
+        if (character === this.player) {
+            // Player spikes toward AI side (right side, x > NET_X)
+            targetX = this.COURT_WIDTH * 0.75; // 75% across court (AI side)
+            targetY = this.COURT_LENGTH * 0.5;  // Middle depth
+        } else {
+            // AI spikes toward player side (left side, x < NET_X)
+            targetX = this.COURT_WIDTH * 0.25; // 25% across court (player side)
+            targetY = this.COURT_LENGTH * 0.5;  // Middle depth
+        }
+        
+        // Calculate direction to target
+        const dirX = targetX - b.x;
+        const dirY = targetY - b.y;
+        const dirZ = -0.3; // Slight downward angle for spike effect
+        const dirLength = Math.sqrt(dirX * dirX + dirY * dirY + dirZ * dirZ);
+        
+        // Add wobble based on distance from center (further = more wobble)
+        const wobbleAmount = normalizedDist * (this.SPIKE_WOBBLE_MAX_ANGLE * Math.PI / 180);
+        const wobbleAngle = (Math.random() - 0.5) * wobbleAmount * 2; // Random angle within wobble range
+        
+        // Apply wobble to horizontal direction
+        const cosWobble = Math.cos(wobbleAngle);
+        const sinWobble = Math.sin(wobbleAngle);
+        const wobbledDirX = dirX * cosWobble - dirY * sinWobble;
+        const wobbledDirY = dirX * sinWobble + dirY * cosWobble;
+        
+        // Normalize and apply power
+        const finalDirLength = Math.sqrt(wobbledDirX * wobbledDirX + wobbledDirY * wobbledDirY + dirZ * dirZ);
+        b.vx = (wobbledDirX / finalDirLength) * power * this.ballMovementSpeed;
+        b.vy = (wobbledDirY / finalDirLength) * power * this.ballMovementSpeed;
+        b.vz = (dirZ / finalDirLength) * power * this.ballMovementSpeed;
+        
+        // Add character's velocity influence (slight)
+        b.vx += character.vx * 0.2;
+        b.vy += character.vy * 0.2;
+        
+        // Mark character as having spiked
+        character.hasSpiked = true;
+        
+        return true;
     },
     
     checkBallNetCollision() {

@@ -29,6 +29,16 @@ function gameLoop(currentTime) {
     AI.update();
     const aiInput = AI.getInput();
     
+    // Check for player spike (I key pressed mid-air)
+    if (Input.isHitPressed() && !Physics.player.onGround) {
+        Physics.attemptSpike(Physics.player);
+    }
+    
+    // Check for AI spike
+    if (aiInput.spike) {
+        Physics.attemptSpike(Physics.ai);
+    }
+    
     Physics.update(Input, aiInput);
     Game.update(Input);
     

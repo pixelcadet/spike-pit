@@ -203,14 +203,10 @@ const Physics = {
             p.hasReceived = false; // Reset receive cooldown when landing
         }
         
-        // Clamp to player side (x < NET_X, left side)
-        // Keep character within court bounds using radius
-        const minX = p.radius;
-        const maxX = this.NET_X - p.radius;
-        const minY = p.radius;
-        const maxY = this.COURT_LENGTH - p.radius;
-        p.x = Math.max(minX, Math.min(p.x, maxX));
-        p.y = Math.max(minY, Math.min(p.y, maxY));
+        // Only prevent player from crossing the net (x < NET_X)
+        if (p.x >= this.NET_X) {
+            p.x = this.NET_X - 0.01; // Keep slightly away from net
+        }
     },
     
     updateAI(aiInput) {
@@ -253,14 +249,10 @@ const Physics = {
             ai.hasReceived = false; // Reset receive cooldown when landing
         }
         
-        // Clamp to AI side (x > NET_X, right side)
-        // Keep character within court bounds using radius
-        const minX = this.NET_X + ai.radius;
-        const maxX = this.COURT_WIDTH - ai.radius;
-        const minY = ai.radius;
-        const maxY = this.COURT_LENGTH - ai.radius;
-        ai.x = Math.max(minX, Math.min(ai.x, maxX));
-        ai.y = Math.max(minY, Math.min(ai.y, maxY));
+        // Only prevent AI from crossing the net (x > NET_X)
+        if (ai.x <= this.NET_X) {
+            ai.x = this.NET_X + 0.01; // Keep slightly away from net
+        }
     },
     
     checkBallCharacterCollision(character) {
@@ -638,9 +630,7 @@ const Physics = {
             if (Math.abs(b.vz) < 0.001) b.vz = 0;
         }
         
-        // Keep ball within court bounds
-        b.x = Math.max(b.radius, Math.min(b.x, this.COURT_WIDTH - b.radius));
-        b.y = Math.max(b.radius, Math.min(b.y, this.COURT_LENGTH - b.radius));
+        // Ball can move freely (no clamping)
     },
     
     update(input, aiInput) {

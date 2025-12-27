@@ -88,7 +88,7 @@ const Render = {
         const ctx = this.ctx;
         
         // Court background
-        ctx.fillStyle = '#4a7c59';
+        ctx.fillStyle = '#1a0a1a'; // Really dark purple (almost black)
         ctx.fillRect(0, 0, this.width, this.height);
         
         // Draw tiles with forced perspective
@@ -492,19 +492,66 @@ const Render = {
         // this.drawCharacterHitbox(Physics.player, '#4a9eff');
         // this.drawCharacterHitbox(Physics.ai, '#ff4a4a');
         
+        // Draw character footprint boxes (boundary detection) - visible
+        this.drawCharacterFootprint(Physics.player, '#00ff00');
+        this.drawCharacterFootprint(Physics.ai, '#00ff00');
+        
         // Draw ball hitbox (hidden)
         // this.drawBallHitbox();
         
         // Draw net hitbox (hidden)
         // this.drawNetHitbox();
         
-        // Draw spike zones (hidden for now)
+        // Draw spike zones (hidden)
         // this.drawSpikeZone(Physics.player, '#4a9eff', this.playerSpikeHighlight);
         // this.drawSpikeZone(Physics.ai, '#ff4a4a', this.aiSpikeHighlight);
         
-        // Draw receiving zones (hidden for now)
+        // Draw receiving zones (hidden)
         // this.drawReceivingZone(Physics.player, '#4a9eff', this.playerReceivingHighlight);
         // this.drawReceivingZone(Physics.ai, '#ff4a4a', this.aiReceivingHighlight);
+    },
+    
+    // Draw character footprint (rectangular boundary detection box at character's base)
+    drawCharacterFootprint(character, color) {
+        const ctx = this.ctx;
+        // Project character at their actual height to find their body position
+        const charProj = this.project(character.x, character.y, character.z);
+        const charSize = character.radius * this.courtTileSize * charProj.scale;
+        const minSize = 8;
+        const finalSize = Math.max(charSize, minSize);
+        const rectHeight = finalSize * 1.5;
+        
+        // Calculate footprint dimensions (matches physics boundary detection)
+        const footprintWidth = character.radius * 1.2;
+        const footprintDepth = character.radius * 0.5;
+        
+        // Project character position at ground level to get proper scale for footprint
+        const groundProj = this.project(character.x, character.y, 0);
+        
+        // Convert to screen space (footprint follows character directly, no clamping)
+        const screenWidth = footprintWidth * this.courtTileSize * groundProj.scale;
+        const screenDepth = footprintDepth * this.courtTileSize * groundProj.scale;
+        
+        // Position footprint to cover the lower portion of the character body
+        const charCenterScreenY = charProj.y;
+        
+        // Start footprint from middle of character (covers lower half)
+        // Make footprint height match the lower half of character
+        const lowerHalfHeight = rectHeight / 2;
+        const footprintScreenHeight = Math.max(screenDepth, lowerHalfHeight);
+        
+        // Draw rectangle covering lower portion of character body
+        // Footprint follows character position directly (centered on character)
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([2, 2]); // Dashed line
+        ctx.strokeRect(
+            groundProj.x - screenWidth / 2, // Center on character's X position
+            charCenterScreenY, // Start from middle of character (covers lower half)
+            screenWidth, // Full width
+            footprintScreenHeight // Height to cover lower half
+        );
+        ctx.setLineDash([]); // Reset to solid
     },
     
     // Draw character hitbox (3D sphere projected to 2D)

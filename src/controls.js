@@ -67,12 +67,34 @@ const Controls = {
             this.updateBallMovementSpeed(value);
         });
         
-        // Initialize with default values (5 on 1-10 scale)
+        // Set up receive zone size slider
+        const receiveZoneSlider = document.getElementById('receive-zone');
+        const receiveZoneValue = document.getElementById('receive-zone-value');
+        
+        receiveZoneSlider.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value);
+            receiveZoneValue.textContent = value;
+            this.updateReceiveZoneSize(value);
+        });
+        
+        // Set up spike zone size slider
+        const spikeZoneSlider = document.getElementById('spike-zone');
+        const spikeZoneValue = document.getElementById('spike-zone-value');
+        
+        spikeZoneSlider.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value);
+            spikeZoneValue.textContent = value;
+            this.updateSpikeZoneSize(value);
+        });
+        
+        // Initialize with default values (5 on 1-10 scale, except spike zone = 3)
         this.updateMovementSpeed(5);
         this.updateJumpPower(5);
         this.updateGravity(5);
         this.updateAirTime(5);
         this.updateBallMovementSpeed(5);
+        this.updateReceiveZoneSize(5);
+        this.updateSpikeZoneSize(3);
     },
     
     // Convert 1-10 scale to movement speed (0.025 to 0.075, with 5 = 0.05)
@@ -153,6 +175,40 @@ const Controls = {
         
         // Apply to physics system
         Physics.ballMovementSpeed = speed;
+    },
+    
+    // Convert 1-10 scale to receiving zone radius (0.6 to 1.8, with 5 = 1.2)
+    // Current default is 1.2, so slider 5 = 1.2
+    updateReceiveZoneSize(scale) {
+        // Linear interpolation: min + (max - min) * ((scale - 1) / 9)
+        // Slider 1 = 0.6 (small zone)
+        // Slider 5 = 1.2 (current default)
+        // Slider 10 = 1.8 (large zone)
+        const minRadius = 0.6;
+        const maxRadius = 1.8;
+        const radius = minRadius + (maxRadius - minRadius) * ((scale - 1) / 9);
+        
+        // Apply to physics system
+        Physics.RECEIVING_ZONE_RADIUS = radius;
+    },
+    
+    // Convert 1-10 scale to spike zone radius (0.42 to 1.26, with 3 = 0.84)
+    // Recalibrated: slider 3 = 0.84 (new standard/default)
+    updateSpikeZoneSize(scale) {
+        // Map scale 1-10 to radius range, with scale 3 = 0.84
+        // We want: scale 1 = 0.42, scale 3 = 0.84, scale 10 = 1.26
+        // Using piecewise linear mapping to ensure scale 3 = 0.84
+        let radius;
+        if (scale <= 3) {
+            // Map 1-3 to 0.42-0.84
+            radius = 0.42 + (0.84 - 0.42) * ((scale - 1) / (3 - 1));
+        } else {
+            // Map 3-10 to 0.84-1.26
+            radius = 0.84 + (1.26 - 0.84) * ((scale - 3) / (10 - 3));
+        }
+        
+        // Apply to physics system
+        Physics.SPIKE_ZONE_RADIUS = radius;
     }
 };
 

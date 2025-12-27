@@ -20,6 +20,12 @@ const Physics = {
     SPIKE_MIN_POWER: 0.08,       // Minimum spike power (at edge of zone)
     SPIKE_WOBBLE_MAX_ANGLE: 25,  // Maximum angle deviation in degrees (at edge)
     
+    // Receiving zone parameters
+    RECEIVING_ZONE_RADIUS: 1.2,  // Radius of receiving zone (bigger than spike zone)
+    RECEIVE_MOVE_SPEED: 0.25,    // Speed boost when moving toward ball to receive
+    RECEIVE_POWER: 0.12,         // Power for receiving hit (weaker than spike, arching trajectory)
+    RECEIVE_ARCH_HEIGHT: 0.4,    // Upward component for arching trajectory (higher arc)
+    
     // Player character
     player: {
         x: 2.0,          // Start on left side (4 cells available)
@@ -32,7 +38,8 @@ const Physics = {
         jumpPower: 0.3,
         radius: 0.414,   // Size (20% bigger: 0.345 * 1.2)
         onGround: true,
-        hasSpiked: false // Spike cooldown flag (reset when landing)
+        hasSpiked: false, // Spike cooldown flag (reset when landing)
+        hasReceived: false // Receive cooldown flag (reset when landing)
     },
     
     // AI character
@@ -47,7 +54,8 @@ const Physics = {
         jumpPower: 0.3,
         radius: 0.414,   // Size (20% bigger: 0.345 * 1.2)
         onGround: true,
-        hasSpiked: false // Spike cooldown flag (reset when landing)
+        hasSpiked: false, // Spike cooldown flag (reset when landing)
+        hasReceived: false // Receive cooldown flag (reset when landing)
     },
     
     // Ball
@@ -89,6 +97,7 @@ const Physics = {
         this.player.vz = 0;
         this.player.onGround = true;
         this.player.hasSpiked = false;
+        this.player.hasReceived = false;
         
         // Reset AI to middle of their side
         this.ai.x = 6.0;  // Middle of right side
@@ -99,6 +108,7 @@ const Physics = {
         this.ai.vz = 0;
         this.ai.onGround = true;
         this.ai.hasSpiked = false;
+        this.ai.hasReceived = false;
         
         // Reset ball above player
         this.resetBall();
@@ -107,13 +117,54 @@ const Physics = {
     updatePlayer(input) {
         const p = this.player;
         
+        // Check if we're in receiving mode (ball in zone but not at center)
+        // If so, automatic movement takes priority
+        let isReceiving = false;
+        if (input.isHitPressed()) {
+            const b = this.ball;
+            // Check if ball is in receiving zone
+            const receiveZoneX = p.x;
+            const receiveZoneY = p.y;
+            const receiveZoneZ = p.z;
+            const dx = b.x - receiveZoneX;
+            const dy = b.y - receiveZoneY;
+            const dz = b.z - receiveZoneZ;
+            const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            const effectiveRadius = this.RECEIVING_ZONE_RADIUS + b.radius;
+            
+            if (dist <= effectiveRadius && b.z > b.groundLevel) {
+                // Ball is in receiving zone and mid-air
+                const horizontalDist = Math.sqrt(dx * dx + dy * dy);
+                const centerThreshold = this.RECEIVING_ZONE_RADIUS * 0.3;
+                
+                // If not close to center, we're in receiving mode (automatic movement active)
+                if (horizontalDist > centerThreshold) {
+                    isReceiving = true;
+                }
+            }
+        }
+        
         // Horizontal movement (x-axis)
         const hDir = input.getHorizontal();
-        p.vx = hDir * p.speed;
+        // If receiving, don't override automatic movement (it's already set by attemptReceive)
+        if (!isReceiving) {
+            p.vx = hDir * p.speed;
+        } else {
+            // Combine automatic movement with manual input (manual adds to automatic)
+            const manualVx = hDir * p.speed;
+            p.vx += manualVx * 0.3; // Manual input adds 30% influence
+        }
         
         // Depth movement (y-axis)
         const dDir = input.getDepth();
-        p.vy = dDir * p.speed;
+        // If receiving, don't override automatic movement
+        if (!isReceiving) {
+            p.vy = dDir * p.speed;
+        } else {
+            // Combine automatic movement with manual input
+            const manualVy = dDir * p.speed;
+            p.vy += manualVy * 0.3; // Manual input adds 30% influence
+        }
         
         // Jump
         if (input.isJumpPressed() && p.onGround) {
@@ -145,6 +196,7 @@ const Physics = {
             p.vz = 0;
             p.onGround = true;
             p.hasSpiked = false; // Reset spike cooldown when landing
+            p.hasReceived = false; // Reset receive cooldown when landing
         }
         
         // Clamp to player side (x < NET_X, left side)
@@ -194,6 +246,7 @@ const Physics = {
             ai.vz = 0;
             ai.onGround = true;
             ai.hasSpiked = false; // Reset spike cooldown when landing
+            ai.hasReceived = false; // Reset receive cooldown when landing
         }
         
         // Clamp to AI side (x > NET_X, right side)
@@ -257,11 +310,17 @@ const Physics = {
     // Attempt to spike the ball (called when character presses spike key mid-air)
     attemptSpike(character) {
         // Can only spike when mid-air and haven't spiked this jump
-        if (character.onGround || character.hasSpiked) {
+        // Also can't spike if already received this jump (prevent spamming)
+        if (character.onGround || character.hasSpiked || character.hasReceived) {
             return false;
         }
         
         const b = this.ball;
+        
+        // Can't spike ball that is on the ground (only mid-air balls)
+        if (b.z <= b.groundLevel) {
+            return false;
+        }
         
         // Calculate spike zone center (above character's head)
         const spikeZoneX = character.x;
@@ -269,12 +328,14 @@ const Physics = {
         const spikeZoneZ = character.z + this.SPIKE_ZONE_HEAD_OFFSET;
         
         // Check if ball is within spike zone (3D distance)
+        // Account for ball's radius - if any part of ball overlaps zone, it's in
         const dx = b.x - spikeZoneX;
         const dy = b.y - spikeZoneY;
         const dz = b.z - spikeZoneZ;
         const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const effectiveRadius = this.SPIKE_ZONE_RADIUS + b.radius;
         
-        if (dist > this.SPIKE_ZONE_RADIUS) {
+        if (dist > effectiveRadius) {
             return false; // Ball not in spike zone
         }
         
@@ -323,6 +384,94 @@ const Physics = {
         
         // Mark character as having spiked
         character.hasSpiked = true;
+        
+        return true;
+    },
+    
+    // Attempt to receive the ball (can be called mid-air or on ground)
+    attemptReceive(character) {
+        // Can't receive if already received this jump (prevent spamming)
+        if (character.hasReceived) {
+            return false;
+        }
+        
+        const b = this.ball;
+        
+        // Can't receive ball that is on the ground (only mid-air balls)
+        if (b.z <= b.groundLevel) {
+            return false;
+        }
+        
+        // Calculate receiving zone center (at character's center mass)
+        const receiveZoneX = character.x;
+        const receiveZoneY = character.y;
+        const receiveZoneZ = character.z; // At ground level
+        
+        // Check if ball is within receiving zone (3D distance)
+        // Account for ball's radius - if any part of ball overlaps zone, it's in
+        const dx = b.x - receiveZoneX;
+        const dy = b.y - receiveZoneY;
+        const dz = b.z - receiveZoneZ;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const effectiveRadius = this.RECEIVING_ZONE_RADIUS + b.radius;
+        
+        if (dist > effectiveRadius) {
+            return false; // Ball not in receiving zone
+        }
+        
+        // Calculate distance from ball to center of receiving zone (horizontal)
+        const horizontalDist = Math.sqrt(dx * dx + dy * dy);
+        const centerThreshold = this.RECEIVING_ZONE_RADIUS * 0.3; // 30% of zone radius from center
+        
+        // If ball is not close enough to center, move character toward ball first
+        if (horizontalDist > centerThreshold) {
+            // Move character toward ball to get it closer to center
+            const moveDirX = dx / horizontalDist;
+            const moveDirY = dy / horizontalDist;
+            
+            // Apply movement boost toward ball
+            character.vx = moveDirX * this.RECEIVE_MOVE_SPEED;
+            character.vy = moveDirY * this.RECEIVE_MOVE_SPEED;
+            
+            // Don't hit yet, just move closer
+            return true;
+        }
+        
+        // Ball is close enough to center, now hit it
+        // Determine target (opponent's side)
+        let targetX, targetY;
+        if (character === this.player) {
+            // Player receives toward AI side (right side, x > NET_X)
+            targetX = this.COURT_WIDTH * 0.75; // 75% across court (AI side)
+            targetY = this.COURT_LENGTH * 0.5;  // Middle depth
+        } else {
+            // AI receives toward player side (left side, x < NET_X)
+            targetX = this.COURT_WIDTH * 0.25; // 25% across court (player side)
+            targetY = this.COURT_LENGTH * 0.5;  // Middle depth
+        }
+        
+        // Calculate direction to target
+        const dirX = targetX - b.x;
+        const dirY = targetY - b.y;
+        const dirLength = Math.sqrt(dirX * dirX + dirY * dirY);
+        
+        // Normalize horizontal direction
+        const normDirX = dirX / dirLength;
+        const normDirY = dirY / dirLength;
+        
+        // Apply arching trajectory (weaker and more arching than spike)
+        // Reduce horizontal power more than vertical to create a higher arc
+        const horizontalPower = this.RECEIVE_POWER * 0.8; // Even weaker horizontal component
+        b.vx = normDirX * horizontalPower * this.ballMovementSpeed;
+        b.vy = normDirY * horizontalPower * this.ballMovementSpeed;
+        b.vz = this.RECEIVE_ARCH_HEIGHT * this.ballMovementSpeed; // Higher upward component for arch
+        
+        // Add slight character velocity influence (reduced for lob)
+        b.vx += character.vx * 0.1;
+        b.vy += character.vy * 0.1;
+        
+        // Mark character as having received (prevent spamming)
+        character.hasReceived = true;
         
         return true;
     },

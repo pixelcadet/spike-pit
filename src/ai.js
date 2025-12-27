@@ -7,6 +7,7 @@ const AI = {
         targetY: 0,
         shouldJump: false,
         shouldSpike: false,
+        shouldReceive: false,
         lastBallX: 0,
         lastBallY: 0
     },
@@ -70,21 +71,58 @@ const AI = {
                 this.state.shouldJump = false;
             }
             
-            // Check if AI should spike (mid-air and ball in spike zone)
-            if (!ai.onGround && !ai.hasSpiked) {
+            // Check if AI should spike or receive (mid-air or on ground)
+            // Account for ball's radius in zone checks
+            const ballRadius = Physics.ball.radius;
+            const effectiveSpikeRadius = Physics.SPIKE_ZONE_RADIUS + ballRadius;
+            const effectiveReceiveRadius = Physics.RECEIVING_ZONE_RADIUS + ballRadius;
+            
+            if (!ai.onGround && !ai.hasSpiked && !ai.hasReceived) {
+                // Mid-air: check both zones, prioritize spike zone
                 const spikeZoneZ = ai.z + Physics.SPIKE_ZONE_HEAD_OFFSET;
-                const dx = ball.x - ai.x;
-                const dy = ball.y - ai.y;
-                const dz = ball.z - spikeZoneZ;
-                const distToSpikeZone = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                const dxSpike = ball.x - ai.x;
+                const dySpike = ball.y - ai.y;
+                const dzSpike = ball.z - spikeZoneZ;
+                const distToSpikeZone = Math.sqrt(dxSpike * dxSpike + dySpike * dySpike + dzSpike * dzSpike);
                 
-                if (distToSpikeZone < Physics.SPIKE_ZONE_RADIUS) {
+                if (distToSpikeZone < effectiveSpikeRadius) {
                     this.state.shouldSpike = true;
+                    this.state.shouldReceive = false;
                 } else {
-                    this.state.shouldSpike = false;
+                    // Check receiving zone if not in spike zone
+                    const receiveZoneZ = ai.z;
+                    const dxReceive = ball.x - ai.x;
+                    const dyReceive = ball.y - ai.y;
+                    const dzReceive = ball.z - receiveZoneZ;
+                    const distToReceiveZone = Math.sqrt(dxReceive * dxReceive + dyReceive * dyReceive + dzReceive * dzReceive);
+                    
+                    if (distToReceiveZone < effectiveReceiveRadius) {
+                        this.state.shouldSpike = false;
+                        this.state.shouldReceive = true;
+                    } else {
+                        this.state.shouldSpike = false;
+                        this.state.shouldReceive = false;
+                    }
                 }
+            } else if (ai.onGround && !ai.hasReceived) {
+                // On ground: check receiving zone
+                const receiveZoneX = ai.x;
+                const receiveZoneY = ai.y;
+                const receiveZoneZ = ai.z;
+                const dx = ball.x - receiveZoneX;
+                const dy = ball.y - receiveZoneY;
+                const dz = ball.z - receiveZoneZ;
+                const distToReceiveZone = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                
+                if (distToReceiveZone < effectiveReceiveRadius) {
+                    this.state.shouldReceive = true;
+                } else {
+                    this.state.shouldReceive = false;
+                }
+                this.state.shouldSpike = false;
             } else {
                 this.state.shouldSpike = false;
+                this.state.shouldReceive = false;
             }
             
             // Store last ball position for tracking
@@ -108,6 +146,7 @@ const AI = {
             }
             
             this.state.shouldJump = false;
+            this.state.shouldReceive = false;
         }
     },
     
@@ -116,7 +155,8 @@ const AI = {
             vx: this.state.targetX * this.reactionSpeed,
             vy: this.state.targetY * this.reactionSpeed,
             jump: this.state.shouldJump,
-            spike: this.state.shouldSpike
+            spike: this.state.shouldSpike,
+            receive: this.state.shouldReceive
         };
     }
 };

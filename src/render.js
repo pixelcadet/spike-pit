@@ -4,6 +4,11 @@
 const Render = {
     canvas: null,
     ctx: null,
+    // Highlight states for visual feedback
+    playerSpikeHighlight: false,
+    playerReceivingHighlight: false,
+    aiSpikeHighlight: false,
+    aiReceivingHighlight: false,
     
     // Canvas dimensions
     width: 800,
@@ -368,6 +373,65 @@ const Render = {
     },
     
     // Main render function
+    // Update highlight states based on input and character states
+    updateHighlights(input, aiInput) {
+        // Reset highlights
+        this.playerSpikeHighlight = false;
+        this.playerReceivingHighlight = false;
+        this.aiSpikeHighlight = false;
+        this.aiReceivingHighlight = false;
+        
+        // Player highlights
+        if (input.isHitPressed()) {
+            if (!Physics.player.onGround) {
+                // Mid-air: check which zone ball is in
+                const ball = Physics.ball;
+                const spikeZoneZ = Physics.player.z + Physics.SPIKE_ZONE_HEAD_OFFSET;
+                const dxSpike = ball.x - Physics.player.x;
+                const dySpike = ball.y - Physics.player.y;
+                const dzSpike = ball.z - spikeZoneZ;
+                const distToSpikeZone = Math.sqrt(dxSpike * dxSpike + dySpike * dySpike + dzSpike * dzSpike);
+                
+                // Account for ball's radius in zone checks
+                const ballRadius = Physics.ball.radius;
+                const effectiveSpikeRadius = Physics.SPIKE_ZONE_RADIUS + ballRadius;
+                const effectiveReceiveRadius = Physics.RECEIVING_ZONE_RADIUS + ballRadius;
+                
+                if (distToSpikeZone < effectiveSpikeRadius) {
+                    this.playerSpikeHighlight = true;
+                    this.playerReceivingHighlight = false;
+                } else {
+                    // Check receiving zone
+                    const receiveZoneZ = Physics.player.z;
+                    const dxReceive = ball.x - Physics.player.x;
+                    const dyReceive = ball.y - Physics.player.y;
+                    const dzReceive = ball.z - receiveZoneZ;
+                    const distToReceiveZone = Math.sqrt(dxReceive * dxReceive + dyReceive * dyReceive + dzReceive * dzReceive);
+                    
+                    if (distToReceiveZone < effectiveReceiveRadius) {
+                        this.playerSpikeHighlight = false;
+                        this.playerReceivingHighlight = true;
+                    } else {
+                        this.playerSpikeHighlight = false;
+                        this.playerReceivingHighlight = false;
+                    }
+                }
+            } else {
+                // On ground: highlight receiving zone
+                this.playerSpikeHighlight = false;
+                this.playerReceivingHighlight = true;
+            }
+        }
+        
+        // AI highlights
+        if (aiInput.spike) {
+            this.aiSpikeHighlight = true;
+        }
+        if (aiInput.receive) {
+            this.aiReceivingHighlight = true;
+        }
+    },
+    
     render() {
         const ctx = this.ctx;
         
@@ -376,6 +440,18 @@ const Render = {
         
         // Draw court
         this.drawCourt();
+        
+        // Draw receiving zone ground rings (always visible, on court ground)
+        this.drawReceivingZoneGroundRing(Physics.player, '#4a9eff');
+        this.drawReceivingZoneGroundRing(Physics.ai, '#ff4a4a');
+        
+        // Draw spike zone rings (only visible when character is jumping)
+        if (!Physics.player.onGround) {
+            this.drawSpikeZoneGroundRing(Physics.player, '#4a9eff');
+        }
+        if (!Physics.ai.onGround) {
+            this.drawSpikeZoneGroundRing(Physics.ai, '#ff4a4a');
+        }
         
         // Draw all shadows first (so they appear behind entities)
         this.drawCharacterShadow(Physics.player);
@@ -410,19 +486,23 @@ const Render = {
     drawHitboxes() {
         const ctx = this.ctx;
         
-        // Draw character hitboxes
-        this.drawCharacterHitbox(Physics.player, '#4a9eff');
-        this.drawCharacterHitbox(Physics.ai, '#ff4a4a');
+        // Draw character hitboxes (hidden)
+        // this.drawCharacterHitbox(Physics.player, '#4a9eff');
+        // this.drawCharacterHitbox(Physics.ai, '#ff4a4a');
         
-        // Draw ball hitbox
-        this.drawBallHitbox();
+        // Draw ball hitbox (hidden)
+        // this.drawBallHitbox();
         
-        // Draw net hitbox
-        this.drawNetHitbox();
+        // Draw net hitbox (hidden)
+        // this.drawNetHitbox();
         
-        // Draw spike zones
-        this.drawSpikeZone(Physics.player, '#4a9eff');
-        this.drawSpikeZone(Physics.ai, '#ff4a4a');
+        // Draw spike zones (hidden for now)
+        // this.drawSpikeZone(Physics.player, '#4a9eff', this.playerSpikeHighlight);
+        // this.drawSpikeZone(Physics.ai, '#ff4a4a', this.aiSpikeHighlight);
+        
+        // Draw receiving zones (hidden for now)
+        // this.drawReceivingZone(Physics.player, '#4a9eff', this.playerReceivingHighlight);
+        // this.drawReceivingZone(Physics.ai, '#ff4a4a', this.aiReceivingHighlight);
     },
     
     // Draw character hitbox (3D sphere projected to 2D)
@@ -572,7 +652,7 @@ const Render = {
     },
     
     // Draw spike zone (3D sphere above character's head)
-    drawSpikeZone(character, color) {
+    drawSpikeZone(character, color, highlight = false) {
         const ctx = this.ctx;
         const spikeZoneZ = character.z + Physics.SPIKE_ZONE_HEAD_OFFSET;
         const spikeZoneRadius = Physics.SPIKE_ZONE_RADIUS;
@@ -580,11 +660,18 @@ const Render = {
         // Project spike zone center (above character's head)
         const centerProj = this.project(character.x, character.y, spikeZoneZ);
         
-        // Draw sphere as multiple circles at different heights
-        // Top circle (at spike zone center)
+        // Single circle at spike zone center
         const topSize = spikeZoneRadius * this.courtTileSize * centerProj.scale;
         const minSize = 6;
         const finalTopSize = Math.max(topSize, minSize);
+        
+        // Fill with transparent color if highlighted
+        if (highlight) {
+            ctx.fillStyle = color + '30'; // 30% opacity
+            ctx.beginPath();
+            ctx.arc(centerProj.x, centerProj.y, finalTopSize, 0, Math.PI * 2);
+            ctx.fill();
+        }
         
         ctx.strokeStyle = color;
         ctx.lineWidth = 2;
@@ -592,36 +679,82 @@ const Render = {
         ctx.beginPath();
         ctx.arc(centerProj.x, centerProj.y, finalTopSize, 0, Math.PI * 2);
         ctx.stroke();
+        ctx.setLineDash([]); // Reset to solid
+    },
+    
+    // Draw receiving zone (3D sphere at character's center mass)
+    drawReceivingZone(character, color, highlight = false) {
+        const ctx = this.ctx;
+        const receiveZoneZ = character.z; // At character's center mass (ground level)
+        const receiveZoneRadius = Physics.RECEIVING_ZONE_RADIUS;
+        const minSize = 6;
         
-        // Draw circles at different heights to show 3D sphere
-        const numRings = 3;
-        for (let i = 1; i <= numRings; i++) {
-            const offsetZ = (spikeZoneRadius / numRings) * i;
-            const ringZTop = spikeZoneZ + offsetZ;
-            const ringZBottom = spikeZoneZ - offsetZ;
-            
-            // Top ring
-            const ringTopProj = this.project(character.x, character.y, ringZTop);
-            const ringTopSize = Math.sqrt(spikeZoneRadius * spikeZoneRadius - offsetZ * offsetZ) * this.courtTileSize * ringTopProj.scale;
-            const finalRingTopSize = Math.max(ringTopSize, minSize);
-            
-            ctx.strokeStyle = color + '60'; // More transparent for rings
+        // Single circle at center (ground level) - properly scaled with perspective
+        const centerProj = this.project(character.x, character.y, receiveZoneZ);
+        const mainSize = receiveZoneRadius * this.courtTileSize * centerProj.scale;
+        const finalMainSize = Math.max(mainSize, minSize);
+        
+        // Fill with transparent color if highlighted
+        if (highlight) {
+            ctx.fillStyle = color + '30'; // 30% opacity
             ctx.beginPath();
-            ctx.arc(ringTopProj.x, ringTopProj.y, finalRingTopSize, 0, Math.PI * 2);
-            ctx.stroke();
-            
-            // Bottom ring (if above ground)
-            if (ringZBottom > 0) {
-                const ringBottomProj = this.project(character.x, character.y, ringZBottom);
-                const ringBottomSize = Math.sqrt(spikeZoneRadius * spikeZoneRadius - offsetZ * offsetZ) * this.courtTileSize * ringBottomProj.scale;
-                const finalRingBottomSize = Math.max(ringBottomSize, minSize);
-                
-                ctx.beginPath();
-                ctx.arc(ringBottomProj.x, ringBottomProj.y, finalRingBottomSize, 0, Math.PI * 2);
-                ctx.stroke();
-            }
+            ctx.arc(centerProj.x, centerProj.y, finalMainSize, 0, Math.PI * 2);
+            ctx.fill();
         }
         
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 4]); // Different dash pattern for receiving zone
+        ctx.beginPath();
+        ctx.arc(centerProj.x, centerProj.y, finalMainSize, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]); // Reset to solid
+    },
+    
+    // Draw receiving zone ground ring (always visible, shows area on court ground)
+    drawReceivingZoneGroundRing(character, color) {
+        const ctx = this.ctx;
+        const receiveZoneRadius = Physics.RECEIVING_ZONE_RADIUS;
+        
+        // Project character position at ground level (z=0)
+        const groundProj = this.project(character.x, character.y, 0);
+        
+        // Calculate ring size with perspective scaling
+        const ringSize = receiveZoneRadius * this.courtTileSize * groundProj.scale;
+        const minSize = 6;
+        const finalRingSize = Math.max(ringSize, minSize);
+        
+        // Draw ring on ground (always visible, more prominent)
+        ctx.strokeStyle = color + 'AA'; // 67% opacity (AA in hex = 170/255) for more prominent visibility
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3, 3]); // Slightly larger dashes
+        ctx.beginPath();
+        ctx.arc(groundProj.x, groundProj.y, finalRingSize, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]); // Reset to solid
+    },
+    
+    // Draw spike zone ring (only visible when character is jumping, shows area above character's head)
+    drawSpikeZoneGroundRing(character, color) {
+        const ctx = this.ctx;
+        const spikeZoneRadius = Physics.SPIKE_ZONE_RADIUS;
+        const spikeZoneZ = character.z + Physics.SPIKE_ZONE_HEAD_OFFSET;
+        
+        // Project spike zone position (above character's head)
+        const spikeZoneProj = this.project(character.x, character.y, spikeZoneZ);
+        
+        // Calculate ring size with perspective scaling
+        const ringSize = spikeZoneRadius * this.courtTileSize * spikeZoneProj.scale;
+        const minSize = 6;
+        const finalRingSize = Math.max(ringSize, minSize);
+        
+        // Draw ring at spike zone position (more prominent)
+        ctx.strokeStyle = color + 'AA'; // 67% opacity (AA in hex = 170/255) for more prominent visibility
+        ctx.lineWidth = 2;
+        ctx.setLineDash([3, 3]); // Slightly larger dashes
+        ctx.beginPath();
+        ctx.arc(spikeZoneProj.x, spikeZoneProj.y, finalRingSize, 0, Math.PI * 2);
+        ctx.stroke();
         ctx.setLineDash([]); // Reset to solid
     }
 };

@@ -29,18 +29,35 @@ function gameLoop(currentTime) {
     AI.update();
     const aiInput = AI.getInput();
     
-    // Check for player spike (I key pressed mid-air)
-    if (Input.isHitPressed() && !Physics.player.onGround) {
-        Physics.attemptSpike(Physics.player);
+    // Check for player actions (I key pressed)
+    if (Input.isHitPressed()) {
+        if (!Physics.player.onGround) {
+            // Mid-air: check which zone the ball is in
+            // Try spike first (if ball in spike zone), then receive (if ball in receiving zone)
+            const spikeAttempted = Physics.attemptSpike(Physics.player);
+            if (!spikeAttempted) {
+                // If spike didn't work (ball not in spike zone), try receive
+                Physics.attemptReceive(Physics.player);
+            }
+        } else {
+            // On ground: attempt receive
+            Physics.attemptReceive(Physics.player);
+        }
     }
     
-    // Check for AI spike
+    // Check for AI actions
     if (aiInput.spike) {
         Physics.attemptSpike(Physics.ai);
+    }
+    if (aiInput.receive) {
+        Physics.attemptReceive(Physics.ai);
     }
     
     Physics.update(Input, aiInput);
     Game.update(Input);
+    
+    // Update visual highlights
+    Render.updateHighlights(Input, aiInput);
     
     // Render
     Render.render();

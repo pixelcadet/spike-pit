@@ -79,9 +79,11 @@ const AI = {
             
             if (!ai.onGround && !ai.hasSpiked && !ai.hasReceived) {
                 // Mid-air: check both zones, prioritize spike zone
-                const spikeZoneZ = ai.z + Physics.SPIKE_ZONE_HEAD_OFFSET;
-                const dxSpike = ball.x - ai.x;
-                const dySpike = ball.y - ai.y;
+                const spikeZoneX = ai.x - Physics.SPIKE_ZONE_FORWARD_OFFSET; // AI forward is left (decreasing x)
+                const spikeZoneY = ai.y;
+                const spikeZoneZ = ai.z + Physics.SPIKE_ZONE_UPWARD_OFFSET; // Slightly above center mass
+                const dxSpike = ball.x - spikeZoneX;
+                const dySpike = ball.y - spikeZoneY;
                 const dzSpike = ball.z - spikeZoneZ;
                 const distToSpikeZone = Math.sqrt(dxSpike * dxSpike + dySpike * dySpike + dzSpike * dzSpike);
                 

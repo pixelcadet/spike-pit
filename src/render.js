@@ -386,9 +386,11 @@ const Render = {
             if (!Physics.player.onGround) {
                 // Mid-air: check which zone ball is in
                 const ball = Physics.ball;
-                const spikeZoneZ = Physics.player.z + Physics.SPIKE_ZONE_HEAD_OFFSET;
-                const dxSpike = ball.x - Physics.player.x;
-                const dySpike = ball.y - Physics.player.y;
+                const spikeZoneX = Physics.player.x + Physics.SPIKE_ZONE_FORWARD_OFFSET;
+                const spikeZoneY = Physics.player.y;
+                const spikeZoneZ = Physics.player.z + Physics.SPIKE_ZONE_UPWARD_OFFSET; // Slightly above center mass
+                const dxSpike = ball.x - spikeZoneX;
+                const dySpike = ball.y - spikeZoneY;
                 const dzSpike = ball.z - spikeZoneZ;
                 const distToSpikeZone = Math.sqrt(dxSpike * dxSpike + dySpike * dySpike + dzSpike * dzSpike);
                 
@@ -654,11 +656,20 @@ const Render = {
     // Draw spike zone (3D sphere above character's head)
     drawSpikeZone(character, color, highlight = false) {
         const ctx = this.ctx;
-        const spikeZoneZ = character.z + Physics.SPIKE_ZONE_HEAD_OFFSET;
         const spikeZoneRadius = Physics.SPIKE_ZONE_RADIUS;
         
-        // Project spike zone center (above character's head)
-        const centerProj = this.project(character.x, character.y, spikeZoneZ);
+        // Calculate spike zone position (offset forward and upward)
+        let forwardOffset = Physics.SPIKE_ZONE_FORWARD_OFFSET;
+        if (character === Physics.ai) {
+            // AI is on right side, forward is toward left (decreasing x)
+            forwardOffset = -forwardOffset;
+        }
+        const spikeZoneX = character.x + forwardOffset;
+        const spikeZoneY = character.y;
+        const spikeZoneZ = character.z + Physics.SPIKE_ZONE_UPWARD_OFFSET; // Slightly above center mass
+        
+        // Project spike zone center (at character's center mass, offset forward and upward)
+        const centerProj = this.project(spikeZoneX, spikeZoneY, spikeZoneZ);
         
         // Single circle at spike zone center
         const topSize = spikeZoneRadius * this.courtTileSize * centerProj.scale;
@@ -734,14 +745,23 @@ const Render = {
         ctx.setLineDash([]); // Reset to solid
     },
     
-    // Draw spike zone ring (only visible when character is jumping, shows area above character's head)
+    // Draw spike zone ring (only visible when character is jumping, shows area at character's center mass)
     drawSpikeZoneGroundRing(character, color) {
         const ctx = this.ctx;
         const spikeZoneRadius = Physics.SPIKE_ZONE_RADIUS;
-        const spikeZoneZ = character.z + Physics.SPIKE_ZONE_HEAD_OFFSET;
         
-        // Project spike zone position (above character's head)
-        const spikeZoneProj = this.project(character.x, character.y, spikeZoneZ);
+        // Calculate spike zone position (offset forward and upward)
+        let forwardOffset = Physics.SPIKE_ZONE_FORWARD_OFFSET;
+        if (character === Physics.ai) {
+            // AI is on right side, forward is toward left (decreasing x)
+            forwardOffset = -forwardOffset;
+        }
+        const spikeZoneX = character.x + forwardOffset;
+        const spikeZoneY = character.y;
+        const spikeZoneZ = character.z + Physics.SPIKE_ZONE_UPWARD_OFFSET; // Slightly above center mass
+        
+        // Project spike zone position (at character's center mass, offset forward and upward)
+        const spikeZoneProj = this.project(spikeZoneX, spikeZoneY, spikeZoneZ);
         
         // Calculate ring size with perspective scaling
         const ringSize = spikeZoneRadius * this.courtTileSize * spikeZoneProj.scale;

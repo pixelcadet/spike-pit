@@ -16,9 +16,11 @@ const Physics = {
     // Spike zone parameters
     SPIKE_ZONE_RADIUS: 0.84,     // Radius of spike zone sphere (scaled 20% with character size: 0.7 * 1.2)
     SPIKE_ZONE_HEAD_OFFSET: 0.6, // Height above character center for spike zone
-    SPIKE_MAX_POWER: 0.3,        // Maximum spike power (at center of zone)
-    SPIKE_MIN_POWER: 0.08,       // Minimum spike power (at edge of zone)
-    SPIKE_WOBBLE_MAX_ANGLE: 25,  // Maximum angle deviation in degrees (at edge)
+    SPIKE_ZONE_FORWARD_OFFSET: 0.3, // Forward offset (toward net) so can't hit balls behind character
+    SPIKE_ZONE_UPWARD_OFFSET: 0.2, // Upward offset above character center mass
+    SPIKE_POWER: 0.3,            // Power for spike (straight trajectory, fast)
+    SPIKE_LOB_POWER: 0.12,      // Power for lob (arching trajectory, slow) - when below/at net height
+    SPIKE_LOB_ARCH_HEIGHT: 0.4, // Upward component for lob arching trajectory
     
     // Receiving zone parameters
     RECEIVING_ZONE_RADIUS: 1.2,  // Radius of receiving zone (bigger than spike zone)
@@ -39,7 +41,8 @@ const Physics = {
         radius: 0.414,   // Size (20% bigger: 0.345 * 1.2)
         onGround: true,
         hasSpiked: false, // Spike cooldown flag (reset when landing)
-        hasReceived: false // Receive cooldown flag (reset when landing)
+        hasReceived: false, // Receive cooldown flag (reset when landing)
+        justAttemptedAction: false // Flag to prevent collision bounce when action was just attempted
     },
     
     // AI character
@@ -55,7 +58,8 @@ const Physics = {
         radius: 0.414,   // Size (20% bigger: 0.345 * 1.2)
         onGround: true,
         hasSpiked: false, // Spike cooldown flag (reset when landing)
-        hasReceived: false // Receive cooldown flag (reset when landing)
+        hasReceived: false, // Receive cooldown flag (reset when landing)
+        justAttemptedAction: false // Flag to prevent collision bounce when action was just attempted
     },
     
     // Ball
@@ -260,6 +264,12 @@ const Physics = {
     },
     
     checkBallCharacterCollision(character) {
+        // Skip collision bounce if character just attempted an action (spike/receive)
+        // This prevents the bounce from overriding the action's velocity
+        if (character.justAttemptedAction) {
+            return false;
+        }
+        
         const b = this.ball;
         const dx = b.x - character.x;
         const dy = b.y - character.y;
@@ -322,10 +332,16 @@ const Physics = {
             return false;
         }
         
-        // Calculate spike zone center (above character's head)
-        const spikeZoneX = character.x;
+        // Calculate spike zone center (at character's center mass, offset forward and upward)
+        // Offset forward so character can't spike balls behind them
+        let forwardOffset = this.SPIKE_ZONE_FORWARD_OFFSET;
+        if (character === this.ai) {
+            // AI is on right side, forward is toward left (decreasing x)
+            forwardOffset = -forwardOffset;
+        }
+        const spikeZoneX = character.x + forwardOffset;
         const spikeZoneY = character.y;
-        const spikeZoneZ = character.z + this.SPIKE_ZONE_HEAD_OFFSET;
+        const spikeZoneZ = character.z + this.SPIKE_ZONE_UPWARD_OFFSET; // Slightly above center mass
         
         // Check if ball is within spike zone (3D distance)
         // Account for ball's radius - if any part of ball overlaps zone, it's in
@@ -339,52 +355,57 @@ const Physics = {
             return false; // Ball not in spike zone
         }
         
-        // Calculate power based on distance from center
-        // Closer to center = more power
-        const normalizedDist = dist / this.SPIKE_ZONE_RADIUS; // 0.0 (center) to 1.0 (edge)
-        const power = this.SPIKE_MAX_POWER * (1.0 - normalizedDist) + this.SPIKE_MIN_POWER * normalizedDist;
-        
         // Determine target (opponent's side)
         let targetX, targetY;
         if (character === this.player) {
-            // Player spikes toward AI side (right side, x > NET_X)
+            // Player hits toward AI side (right side, x > NET_X)
             targetX = this.COURT_WIDTH * 0.75; // 75% across court (AI side)
             targetY = this.COURT_LENGTH * 0.5;  // Middle depth
         } else {
-            // AI spikes toward player side (left side, x < NET_X)
+            // AI hits toward player side (left side, x < NET_X)
             targetX = this.COURT_WIDTH * 0.25; // 25% across court (player side)
             targetY = this.COURT_LENGTH * 0.5;  // Middle depth
         }
         
-        // Calculate direction to target
-        const dirX = targetX - b.x;
-        const dirY = targetY - b.y;
-        const dirZ = -0.3; // Slight downward angle for spike effect
-        const dirLength = Math.sqrt(dirX * dirX + dirY * dirY + dirZ * dirZ);
+        // Determine trajectory based on ball height relative to net
+        // If ball is at or below net height: lob (arching, slow)
+        // If ball is above net height: spike (straight, fast)
+        const isLob = b.z <= this.NET_HEIGHT;
         
-        // Add wobble based on distance from center (further = more wobble)
-        const wobbleAmount = normalizedDist * (this.SPIKE_WOBBLE_MAX_ANGLE * Math.PI / 180);
-        const wobbleAngle = (Math.random() - 0.5) * wobbleAmount * 2; // Random angle within wobble range
+        if (isLob) {
+            // LOB: Arching trajectory (slow, high arc)
+            const dirX = targetX - b.x;
+            const dirY = targetY - b.y;
+            const horizontalDist = Math.sqrt(dirX * dirX + dirY * dirY);
+            
+            // Normalize horizontal direction
+            const horizontalPower = this.SPIKE_LOB_POWER * 0.8; // Slightly weaker horizontal
+            b.vx = (dirX / horizontalDist) * horizontalPower * this.ballMovementSpeed;
+            b.vy = (dirY / horizontalDist) * horizontalPower * this.ballMovementSpeed;
+            b.vz = this.SPIKE_LOB_ARCH_HEIGHT * this.ballMovementSpeed; // Upward for arch
+            
+            // Add character's velocity influence (slight)
+            b.vx += character.vx * 0.1;
+            b.vy += character.vy * 0.1;
+        } else {
+            // SPIKE: Straight trajectory (fast, direct)
+            const dirX = targetX - b.x;
+            const dirY = targetY - b.y;
+            const dirZ = -0.3; // Slight downward angle for spike effect
+            const dirLength = Math.sqrt(dirX * dirX + dirY * dirY + dirZ * dirZ);
+            
+            // Normalize and apply power
+            b.vx = (dirX / dirLength) * this.SPIKE_POWER * this.ballMovementSpeed;
+            b.vy = (dirY / dirLength) * this.SPIKE_POWER * this.ballMovementSpeed;
+            b.vz = (dirZ / dirLength) * this.SPIKE_POWER * this.ballMovementSpeed;
+            
+            // Add character's velocity influence (slight)
+            b.vx += character.vx * 0.1;
+            b.vy += character.vy * 0.1;
+        }
         
-        // Apply wobble to horizontal direction
-        const cosWobble = Math.cos(wobbleAngle);
-        const sinWobble = Math.sin(wobbleAngle);
-        const wobbledDirX = dirX * cosWobble - dirY * sinWobble;
-        const wobbledDirY = dirX * sinWobble + dirY * cosWobble;
-        
-        // Normalize and apply power
-        const finalDirLength = Math.sqrt(wobbledDirX * wobbledDirX + wobbledDirY * wobbledDirY + dirZ * dirZ);
-        b.vx = (wobbledDirX / finalDirLength) * power * this.ballMovementSpeed;
-        b.vy = (wobbledDirY / finalDirLength) * power * this.ballMovementSpeed;
-        b.vz = (dirZ / finalDirLength) * power * this.ballMovementSpeed;
-        
-        // Add character's velocity influence (slight)
-        b.vx += character.vx * 0.2;
-        b.vy += character.vy * 0.2;
-        
-        // Mark character as having spiked
         character.hasSpiked = true;
-        
+        character.justAttemptedAction = true; // Flag to prevent collision bounce this frame
         return true;
     },
     
@@ -424,7 +445,8 @@ const Physics = {
         const centerThreshold = this.RECEIVING_ZONE_RADIUS * 0.3; // 30% of zone radius from center
         
         // If ball is not close enough to center, move character toward ball first
-        if (horizontalDist > centerThreshold) {
+        // BUT only if character is on the ground (no automatic chasing mid-air)
+        if (horizontalDist > centerThreshold && character.onGround) {
             // Move character toward ball to get it closer to center
             const moveDirX = dx / horizontalDist;
             const moveDirY = dy / horizontalDist;
@@ -434,45 +456,63 @@ const Physics = {
             character.vy = moveDirY * this.RECEIVE_MOVE_SPEED;
             
             // Don't hit yet, just move closer
+            // Don't set justAttemptedAction here - we want collision to still work while moving
             return true;
         }
         
-        // Ball is close enough to center, now hit it
-        // Determine target (opponent's side)
-        let targetX, targetY;
-        if (character === this.player) {
-            // Player receives toward AI side (right side, x > NET_X)
-            targetX = this.COURT_WIDTH * 0.75; // 75% across court (AI side)
-            targetY = this.COURT_LENGTH * 0.5;  // Middle depth
-        } else {
-            // AI receives toward player side (left side, x < NET_X)
-            targetX = this.COURT_WIDTH * 0.25; // 25% across court (player side)
-            targetY = this.COURT_LENGTH * 0.5;  // Middle depth
+        // If mid-air and ball not centered, don't attempt receive (need to be more precise mid-air)
+        if (!character.onGround && horizontalDist > centerThreshold) {
+            return false; // Can't receive if ball not centered and mid-air
         }
         
-        // Calculate direction to target
-        const dirX = targetX - b.x;
-        const dirY = targetY - b.y;
-        const dirLength = Math.sqrt(dirX * dirX + dirY * dirY);
-        
-        // Normalize horizontal direction
-        const normDirX = dirX / dirLength;
-        const normDirY = dirY / dirLength;
-        
-        // Apply arching trajectory (weaker and more arching than spike)
-        // Reduce horizontal power more than vertical to create a higher arc
-        const horizontalPower = this.RECEIVE_POWER * 0.8; // Even weaker horizontal component
-        b.vx = normDirX * horizontalPower * this.ballMovementSpeed;
-        b.vy = normDirY * horizontalPower * this.ballMovementSpeed;
-        b.vz = this.RECEIVE_ARCH_HEIGHT * this.ballMovementSpeed; // Higher upward component for arch
-        
-        // Add slight character velocity influence (reduced for lob)
-        b.vx += character.vx * 0.1;
-        b.vy += character.vy * 0.1;
+        // Ball is close enough to center, now hit it
+        // If on ground, just bounce ball upward (for testing spikes)
+        // If mid-air, lob to opponent's side
+        if (character.onGround) {
+            // Just bounce the ball upward (no horizontal movement)
+            // Reduced power for ground bounce (so it doesn't fly too high)
+            b.vx = 0;
+            b.vy = 0;
+            b.vz = this.RECEIVE_ARCH_HEIGHT * 0.7 * this.ballMovementSpeed; // Reduced upward bounce (70% of normal)
+            character.justAttemptedAction = true; // Flag to prevent collision bounce this frame
+        } else {
+            // Mid-air: lob to opponent's side
+            // Determine target (opponent's side)
+            let targetX, targetY;
+            if (character === this.player) {
+                // Player receives toward AI side (right side, x > NET_X)
+                targetX = this.COURT_WIDTH * 0.75; // 75% across court (AI side)
+                targetY = this.COURT_LENGTH * 0.5;  // Middle depth
+            } else {
+                // AI receives toward player side (left side, x < NET_X)
+                targetX = this.COURT_WIDTH * 0.25; // 25% across court (player side)
+                targetY = this.COURT_LENGTH * 0.5;  // Middle depth
+            }
+            
+            // Calculate direction to target
+            const dirX = targetX - b.x;
+            const dirY = targetY - b.y;
+            const dirLength = Math.sqrt(dirX * dirX + dirY * dirY);
+            
+            // Normalize horizontal direction
+            const normDirX = dirX / dirLength;
+            const normDirY = dirY / dirLength;
+            
+            // Apply arching trajectory (weaker and more arching than spike)
+            // Reduce horizontal power more than vertical to create a higher arc
+            const horizontalPower = this.RECEIVE_POWER * 0.8; // Even weaker horizontal component
+            b.vx = normDirX * horizontalPower * this.ballMovementSpeed;
+            b.vy = normDirY * horizontalPower * this.ballMovementSpeed;
+            b.vz = this.RECEIVE_ARCH_HEIGHT * this.ballMovementSpeed; // Higher upward component for arch
+            
+            // Add slight character velocity influence (reduced for lob)
+            b.vx += character.vx * 0.1;
+            b.vy += character.vy * 0.1;
+        }
         
         // Mark character as having received (prevent spamming)
         character.hasReceived = true;
-        
+        character.justAttemptedAction = true; // Flag to prevent collision bounce this frame
         return true;
     },
     
@@ -604,6 +644,10 @@ const Physics = {
     },
     
     update(input, aiInput) {
+        // Reset action flags at start of frame (before actions are attempted)
+        this.player.justAttemptedAction = false;
+        this.ai.justAttemptedAction = false;
+        
         this.updatePlayer(input);
         this.updateAI(aiInput);
         

@@ -59,6 +59,16 @@ const AI = {
         const netX = Physics.NET_X;
         this.state.spikeCooldown = Math.max(0, this.state.spikeCooldown - deltaTime);
         
+        // Score splash / reset window: freeze AI completely (prevents weird pre-serve jumps).
+        if (Game?.state?.isResetting || Game?.state?.matchOver) {
+            this.state.targetX = 0;
+            this.state.targetY = 0;
+            this.state.shouldJump = false;
+            this.state.shouldSpike = false;
+            this.state.shouldReceive = false;
+            return;
+        }
+        
         // Serving state: AI should NOT try to chase/jump/hit the held ball.
         // When AI is serving, it should stand still until main.js triggers Game.serveBall().
         if (Game?.state?.isServing) {

@@ -676,15 +676,12 @@ const Game = {
             targetY = Physics.COURT_LENGTH * 0.5;
         } else {
             // AI normal serve only (no spike serve), but with some variation:
-            // - Direction: high y vs low y
-            // - Distance: closer to net (high x on player side) vs deeper (low x on player side)
-            const highY = Physics.COURT_LENGTH * 0.8;
-            const lowY = Physics.COURT_LENGTH * 0.2;
-            targetY = (Math.random() < 0.5) ? highY : lowY;
-            
-            const nearNetX = Physics.NET_X * 0.85; // closer to net (still on player side)
-            const deepX = Physics.NET_X * 0.35;    // deeper toward back-left
-            targetX = (Math.random() < 0.5) ? nearNetX : deepX;
+            // - X: always middle of player's side (center of x-axis on player court)
+            // - Y: randomized (front/back)
+            targetX = Physics.NET_X * 0.5; // middle of player side (NET_X=4 => x=2)
+            const minY = Physics.COURT_LENGTH * 0.2;
+            const maxY = Physics.COURT_LENGTH * 0.8;
+            targetY = minY + Math.random() * (maxY - minY);
         }
         
         // Calculate direction to target

@@ -621,9 +621,13 @@ const Physics = {
             // AI cannot move or jump while serving
             ai.vx = 0;
             ai.vy = 0;
-            if (ai.onGround) {
-                ai.vz = 0;
-            }
+            // Force AI to be grounded during serve (prevents any leftover mid-air state looking like a jump)
+            ai.vz = 0;
+            ai.z = 0;
+            ai.onGround = true;
+            ai.isFalling = false;
+            ai.fallTimer = 0;
+            ai.fallEdge = null;
         } else {
             // Apply blinking penalty: half speed and jump power while blinking
             const speedMultiplier = ai.isBlinking ? 0.5 : 1.0;
@@ -1370,6 +1374,8 @@ const Physics = {
     },
     
     // Respawn character near the edge they fell from, but snap to nearest intact tile on their side.
+    // Called when character falls out of court OR falls into a destroyed tile (hole).
+    // Both cases trigger the same falling/respawn flow, so blinking works for both.
     respawnCharacter(character) {
         const side = (character === this.player) ? 'player' : 'ai';
         
@@ -1387,7 +1393,7 @@ const Physics = {
             preferredTy = 0;
             preferredTx = side === 'player' ? 1 : 6;
         } else {
-            // Center-ish
+            // Center-ish (also used when falling into holes in the middle of court)
             preferredTy = Math.floor(this.COURT_LENGTH * 0.5);
             preferredTx = side === 'player' ? 2 : 5;
         }
@@ -1408,7 +1414,7 @@ const Physics = {
         character.hasSpiked = false;
         character.hasReceived = false;
         
-        // Start blinking state (1 second)
+        // Start blinking state (1 second) - applies to both falling out of court and falling into holes
         character.isBlinking = true;
         character.blinkTimer = 0;
     },

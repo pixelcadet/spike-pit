@@ -8,7 +8,8 @@ const Game = {
         resetTimer: 0, // Timer for reset after scoring
         isResetting: false,
         isServing: true, // Game starts with serving state
-        servingPlayer: 'player' // Who is currently serving ('player' or 'ai')
+        servingPlayer: 'player', // Who is currently serving ('player' or 'ai')
+        serveMovementLock: 0 // Timer to lock movement briefly after serving (prevents W/S from moving character)
     },
     
     // Serve multipliers (set by sliders)
@@ -23,8 +24,15 @@ const Game = {
         this.state.isResetting = false;
         this.state.isServing = true;
         this.state.servingPlayer = 'player';
-        this.serveHorizontalMultiplier = 0.2022; // Default horizontal (slider 5)
-        this.serveVerticalMultiplier = 0.2111;   // Default vertical (slider 5)
+        this.state.serveMovementLock = 0;
+        // Don't reset serve multipliers here - they're controlled by sliders
+        // Only set defaults if they haven't been set yet (first initialization)
+        if (this.serveHorizontalMultiplier === undefined) {
+            this.serveHorizontalMultiplier = 0.2022; // Default horizontal (slider 5)
+        }
+        if (this.serveVerticalMultiplier === undefined) {
+            this.serveVerticalMultiplier = 0.2111;   // Default vertical (slider 5)
+        }
         this.updateScoreDisplay();
         this.setupServe();
     },
@@ -45,6 +53,14 @@ const Game = {
                 this.resetAfterScore();
                 this.state.isResetting = false;
                 this.state.resetTimer = 0;
+            }
+        }
+        
+        // Update serve movement lock timer
+        if (this.state.serveMovementLock > 0) {
+            this.state.serveMovementLock -= deltaTime;
+            if (this.state.serveMovementLock < 0) {
+                this.state.serveMovementLock = 0;
             }
         }
     },
@@ -125,16 +141,44 @@ const Game = {
         
         const servingChar = this.state.servingPlayer === 'player' ? Physics.player : Physics.ai;
         
+        // Check for directional input (W/S keys) and distance input (A/D keys) when serving
+        // Only check for player serves (AI serves straight)
+        let serveDirection = 0; // 0 = forward (middle), -1 = left (up from camera), 1 = right (down from camera)
+        let serveDistance = 0; // 0 = middle, -1 = short (A), 1 = long (D)
+        if (this.state.servingPlayer === 'player') {
+            if (Input.isPressed('w')) {
+                serveDirection = -1; // W: ball goes left (up from camera view, lower y)
+            } else if (Input.isPressed('s')) {
+                serveDirection = 1; // S: ball goes right (down from camera view, higher y)
+            }
+            
+            if (Input.isPressed('a')) {
+                serveDistance = -1; // A: short serve (front of net)
+            } else if (Input.isPressed('d')) {
+                serveDistance = 1; // D: long serve (back of court)
+            }
+        }
+        
         // Determine target (opponent's side)
         let targetX, targetY;
         if (this.state.servingPlayer === 'player') {
             // Player serves toward AI side (right side, x > NET_X)
             targetX = Physics.COURT_WIDTH * 0.75; // 75% across court (AI side)
-            targetY = Physics.COURT_LENGTH * 0.5;  // Middle depth
+            // Adjust targetY based on serve direction
+            if (serveDirection === -1) {
+                // W: left (up from camera view) = higher y (back of opponent's court)
+                targetY = Physics.COURT_LENGTH * 0.8; // Back of opponent's court
+            } else if (serveDirection === 1) {
+                // S: right (down from camera view) = lower y (front of opponent's court)
+                targetY = Physics.COURT_LENGTH * 0.2; // Front of opponent's court
+            } else {
+                // I alone: forward (middle)
+                targetY = Physics.COURT_LENGTH * 0.5;  // Middle depth
+            }
         } else {
             // AI serves toward player side (left side, x < NET_X)
             targetX = Physics.COURT_WIDTH * 0.25; // 25% across court (player side)
-            targetY = Physics.COURT_LENGTH * 0.5;  // Middle depth
+            targetY = Physics.COURT_LENGTH * 0.5;  // Middle depth (AI always serves straight)
         }
         
         // Calculate direction to target
@@ -145,8 +189,21 @@ const Game = {
         // Calculate velocities - create a nice arcing trajectory
         // Use sliders to control horizontal and vertical multipliers independently
         // Higher vertical relative to horizontal = steeper arc (higher peak, same/slightly less horizontal distance)
-        const horizontalMultiplier = this.serveHorizontalMultiplier;
-        const verticalMultiplier = this.serveVerticalMultiplier;
+        // Override with A/D keys if pressed (short/long serve)
+        let horizontalMultiplier, verticalMultiplier;
+        if (serveDistance === -1) {
+            // A: short serve (front of net) - h power 1, v power 8
+            horizontalMultiplier = 0.14 + (0.28 - 0.14) * ((1 - 1) / 9); // Slider 1 = 0.14
+            verticalMultiplier = 0.14 + (0.3 - 0.14) * ((8 - 1) / 9); // Slider 8 = 0.2778
+        } else if (serveDistance === 1) {
+            // D: long serve (back of court) - h power 8, v power 7
+            horizontalMultiplier = 0.14 + (0.28 - 0.14) * ((8 - 1) / 9); // Slider 8 = 0.2489
+            verticalMultiplier = 0.14 + (0.3 - 0.14) * ((7 - 1) / 9); // Slider 7 = 0.2467
+        } else {
+            // I alone: medium serve (middle) - use slider values (default h power 5, v power 5)
+            horizontalMultiplier = this.serveHorizontalMultiplier;
+            verticalMultiplier = this.serveVerticalMultiplier;
+        }
         
         let vx, vy;
         if (dirLength < 0.01) {
@@ -188,6 +245,10 @@ const Game = {
         // Exit serving state LAST, after everything is set up
         // This ensures Physics.update() will process the ball with the new velocities
         this.state.isServing = false;
+        
+        // Lock movement for 0.1 seconds after serving to prevent W/S from moving character
+        // This ensures directional input only affects serve direction, not character movement
+        this.state.serveMovementLock = 0.1;
         
         // Debug log to verify serve
         console.log('Serve executed:', {

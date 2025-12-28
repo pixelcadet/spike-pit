@@ -22,6 +22,7 @@ const Input = {
     getHorizontal() {
         if (Physics.player.isFalling) return 0;
         if (Game.state.isServing && Game.state.servingPlayer === 'player') return 0; // Lock movement when serving
+        if (Game.state.serveMovementLock > 0) return 0; // Lock movement briefly after serving
         let dir = 0;
         if (this.isPressed('a')) dir -= 1;
         if (this.isPressed('d')) dir += 1;
@@ -31,6 +32,7 @@ const Input = {
     getDepth() {
         if (Physics.player.isFalling) return 0;
         if (Game.state.isServing && Game.state.servingPlayer === 'player') return 0; // Lock movement when serving
+        if (Game.state.serveMovementLock > 0) return 0; // Lock movement briefly after serving
         let dir = 0;
         if (this.isPressed('w')) dir += 1;  // W moves forward (increase y)
         if (this.isPressed('s')) dir -= 1;  // S moves backward (decrease y)

@@ -26,7 +26,7 @@ function gameLoop(currentTime) {
     }
     
     // Update systems
-    AI.update();
+    AI.update(deltaTime / 1000);
     const aiInput = AI.getInput();
     
     // Check for player actions (I key)

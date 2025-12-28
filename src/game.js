@@ -285,6 +285,8 @@ const Game = {
     
     scorePoint(winner) {
         if (this.state.matchOver) return;
+        // If we're already showing the score splash / resetting, ignore any additional scoring triggers.
+        if (this.state.isResetting) return;
         // Prevent multiple scores from same bounce/fall
         if (this.state.scoreCooldown > 0) {
             return;

@@ -1261,8 +1261,10 @@ const Physics = {
             // Only bounce if ball is on court - if off court, let it fall through
             if (this.isBallOnCourt()) {
                 // Tile system: determine impacted tile (single tile) and apply damage / holes.
+                // IMPORTANT: Never damage tiles (or trigger hole scoring) during the score splash/reset window.
+                const tileEffectsEnabled = !(Game?.state?.isResetting) && !(Game?.state?.matchOver);
                 const landing = this.getBallLandingTile();
-                if (landing && Game?.getTileState) {
+                if (tileEffectsEnabled && landing && Game?.getTileState) {
                     const { tx, ty } = landing;
                     const tile = Game.getTileState(tx, ty);
                     

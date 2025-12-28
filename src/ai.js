@@ -10,9 +10,8 @@ const AI = {
         shouldReceive: false,
         lastBallX: 0,
         lastBallY: 0,
-        // Not-too-OP behavior: AI doesn't make perfect decisions every frame.
-        decisionTimer: 0,
-        ignoreBallThisDecision: false
+        // Imperfection: AI won't spike every time it can.
+        spikeCooldown: 0
     },
     
     // AI parameters
@@ -21,8 +20,7 @@ const AI = {
     hitDistance: 0.4,       // Distance at which AI can hit the ball
     predictionTime: 0.3,    // How far ahead to predict ball position
     isActive: true,         // Whether AI should chase ball (true) or stand still (false)
-    decisionInterval: 0.18, // Seconds between "strategic" decisions (avoid perfect reactions)
-    outMargin: 0.6,         // How far outside bounds before AI considers ball "obviously out"
+    outChaseMargin: 0.9,    // If ball is clearly far out, AI stops chasing (kept forgiving so AI still chases sometimes)
     
     init() {
         // AI starts on right side
@@ -31,90 +29,39 @@ const AI = {
         this.state.targetY = 0;
         this.state.lastBallX = 0;
         this.state.lastBallY = 0;
-        this.state.decisionTimer = 0;
-        this.state.ignoreBallThisDecision = false;
+        this.state.spikeCooldown = 0;
         this.isActive = true; // Default: AI is active
     },
     
-    // Snap a desired position to the nearest intact tile on AI side (prevents walking into holes).
-    // Returns { x, y } in world coords.
-    snapToSafeAISide(desiredX, desiredY) {
+    // If a desired position is on a destroyed tile, snap to nearest intact tile (prevents walking into holes).
+    // Otherwise, keep the original desired position for smoother tracking.
+    snapIfOnHoleAISide(desiredX, desiredY) {
         if (!Game?.findNearestIntactTileCenter) {
             return { x: desiredX, y: desiredY };
         }
         
         const tx = Math.floor(desiredX);
         const ty = Math.floor(desiredY);
-        const safe = Game.findNearestIntactTileCenter(
-            Math.max(Physics.NET_X, Math.min(Physics.COURT_WIDTH - 1, tx)),
-            Math.max(0, Math.min(Physics.COURT_LENGTH - 1, ty)),
-            'ai'
-        );
-        return { x: safe.x, y: safe.y };
-    },
-    
-    // Roughly predict where the ball will hit the ground (in world coords).
-    // This uses the same general ballistic math we use elsewhere (good enough, not perfect).
-    predictBallLanding() {
-        const b = Physics.ball;
-        const gEff = Physics.GRAVITY * Physics.ballMovementSpeed;
-        const z0 = Math.max(0.001, b.z - b.groundLevel);
-        const disc = b.vz * b.vz + 2 * gEff * z0;
-        const flightFrames = disc > 0 ? (b.vz + Math.sqrt(disc)) / gEff : 12;
-        const tFrames = Math.max(3, flightFrames);
-        return {
-            x: b.x + b.vx * tFrames,
-            y: b.y + b.vy * tFrames,
-            tFrames
-        };
-    },
-    
-    // Decide (imperfectly) whether this ball is likely to go far out-of-bounds so AI shouldn't chase hard.
-    // Intentionally fuzzy: uses margins + randomness + only updates every decisionInterval.
-    computeShouldIgnoreBall() {
-        const b = Physics.ball;
-        const landing = this.predictBallLanding();
-        
-        const outX = landing.x > Physics.COURT_WIDTH + this.outMargin || landing.x < -this.outMargin;
-        const outY = landing.y > Physics.COURT_LENGTH + this.outMargin || landing.y < -this.outMargin;
-        const obviouslyOutNow =
-            b.x > Physics.COURT_WIDTH + this.outMargin ||
-            b.y > Physics.COURT_LENGTH + this.outMargin ||
-            b.y < -this.outMargin;
-        
-        // Only consider "ignore" when ball is heading down / lower-ish, to avoid being too smart early.
-        const isDescending = b.vz < 0;
-        const lowEnough = b.z < 1.2;
-        const likelyOut = (outX || outY) && isDescending && lowEnough;
-        
-        // Randomness so AI isn't perfect: sometimes it still chases out balls, sometimes it gives up early.
-        const r = Math.random();
-        
-        if (obviouslyOutNow) {
-            // Pretty strong confidence, but still not perfect.
-            return r < 0.8;
+        if (tx < Physics.NET_X || tx >= Physics.COURT_WIDTH || ty < 0 || ty >= Physics.COURT_LENGTH) {
+            return { x: desiredX, y: desiredY };
         }
-        if (likelyOut) {
-            return r < 0.6;
+        const tile = Game.getTileState?.(tx, ty);
+        if (tile && !tile.indestructible && tile.destroyed) {
+            const safe = Game.findNearestIntactTileCenter(tx, ty, 'ai');
+            return { x: safe.x, y: safe.y };
         }
-        return false;
+        return { x: desiredX, y: desiredY };
     },
     
     update(deltaTime = 1/60) {
         const ai = Physics.ai;
         const ball = Physics.ball;
         const netX = Physics.NET_X;
-        
-        // Update coarse decision timer (for imperfect out-of-bounds judgement)
-        this.state.decisionTimer += deltaTime;
-        if (this.state.decisionTimer >= this.decisionInterval) {
-            this.state.decisionTimer = 0;
-            this.state.ignoreBallThisDecision = this.computeShouldIgnoreBall();
-        }
+        this.state.spikeCooldown = Math.max(0, this.state.spikeCooldown - deltaTime);
         
         // If AI is inactive, just stand in the middle and don't do anything
         if (!this.isActive) {
-            const center = this.snapToSafeAISide(6.0, Physics.COURT_LENGTH / 2);
+            const center = this.snapIfOnHoleAISide(6.0, Physics.COURT_LENGTH / 2);
             const centerX = center.x;
             const centerY = center.y;
             
@@ -139,7 +86,13 @@ const AI = {
         // Check if ball is on AI's side of the court (x > NET_X)
         const ballOnAISide = ball.x > netX;
         
-        if (ballOnAISide && !this.state.ignoreBallThisDecision) {
+        // If ball is clearly far out, don't chase it (but this is intentionally forgiving).
+        const farOut =
+            ball.x > Physics.COURT_WIDTH + this.outChaseMargin ||
+            ball.y > Physics.COURT_LENGTH + this.outChaseMargin ||
+            ball.y < -this.outChaseMargin;
+        
+        if (ballOnAISide && !farOut) {
             // Ball is on AI's side - track and try to hit it
             // Predict where ball will be
             const predictedX = ball.x + ball.vx * this.predictionTime;
@@ -149,7 +102,7 @@ const AI = {
             // Clamp predicted position to court bounds (AI shouldn't run off court chasing a wild ball)
             const clampedX = Math.max(netX + 0.2, Math.min(Physics.COURT_WIDTH - 0.2, predictedX));
             const clampedY = Math.max(0.2, Math.min(Physics.COURT_LENGTH - 0.2, predictedY));
-            const safe = this.snapToSafeAISide(clampedX, clampedY);
+            const safe = this.snapIfOnHoleAISide(clampedX, clampedY);
             
             // Calculate distance to predicted ball position
             const dx = safe.x - ai.x;
@@ -197,8 +150,14 @@ const AI = {
                 const distToSpikeZone = Math.sqrt(dxSpike * dxSpike + dySpike * dySpike + dzSpike * dzSpike);
                 
                 if (distToSpikeZone < effectiveSpikeRadius) {
-                    this.state.shouldSpike = true;
+                    // AI can spike, but not always (keeps it beatable)
+                    const canSpikeNow = this.state.spikeCooldown <= 0;
+                    const willSpike = canSpikeNow && Math.random() < 0.35; // occasional spike
+                    this.state.shouldSpike = willSpike;
                     this.state.shouldReceive = false;
+                    if (willSpike) {
+                        this.state.spikeCooldown = 0.6; // small cooldown between spikes
+                    }
                 } else {
                     // Check receiving zone if not in spike zone
                     const receiveZoneZ = ai.z;
@@ -241,7 +200,7 @@ const AI = {
             this.state.lastBallY = ball.y;
         } else {
             // Ball is on player's side - return to center position
-            const center = this.snapToSafeAISide(6.0, Physics.COURT_LENGTH / 2);
+            const center = this.snapIfOnHoleAISide(6.0, Physics.COURT_LENGTH / 2);
             const centerX = center.x;
             const centerY = center.y;
             

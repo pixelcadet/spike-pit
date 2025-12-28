@@ -1286,11 +1286,13 @@ const Physics = {
                     }
                     
                     // Apply tile damage on ground contact (tile HP persists across points).
-                    // First ground impact since last touch uses big damage; subsequent bounces use chip damage (0.2).
+                    // Only the FIRST ground impact since last touch deals damage.
                     if (tile && !tile.indestructible) {
                         const spikeLike = b.lastHitType === 'spike' || b.lastHitType === 'spikeServe';
-                        const damage = (b.tileDamageBounces > 0) ? 0.2 : (spikeLike ? 3 : 1);
-                        Game.damageTile(tx, ty, damage);
+                        if ((b.tileDamageBounces ?? 0) === 0) {
+                            const damage = spikeLike ? 3 : 1;
+                            Game.damageTile(tx, ty, damage);
+                        }
                         b.tileDamageBounces = (b.tileDamageBounces ?? 0) + 1;
                     } else if (tile) {
                         // Still count the bounce so later bounces (before next touch) are treated as "repeated".

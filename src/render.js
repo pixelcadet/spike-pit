@@ -133,9 +133,13 @@ const Render = {
                         // Brittleness visualization: fade opacity as HP drops.
                         // 4hp → 1.0, 3hp → 0.75, 2hp → 0.5, 1hp → 0.25
                         const hp = tileState.hp ?? 0;
-                        const ratio = tileState.maxHp > 0 ? (hp / tileState.maxHp) : 0;
                         fill = destructibleColor;
-                        fillAlpha = Math.max(0.15, Math.min(1.0, ratio)); // keep a tiny minimum so 1hp is still visible
+                        // HP → opacity mapping:
+                        // 4 → 1.00, 3 → 0.85, 2 → 0.60, 1 → 0.40, 0 → destroyed (handled above)
+                        if (hp >= 4) fillAlpha = 1.0;
+                        else if (hp >= 3) fillAlpha = 0.85;
+                        else if (hp >= 2) fillAlpha = 0.60;
+                        else fillAlpha = 0.40;
                     }
                 } else {
                     fill = destructibleColor;

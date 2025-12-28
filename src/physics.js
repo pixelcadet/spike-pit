@@ -986,6 +986,7 @@ const Physics = {
                 
                 // Bounce off net - reverse horizontal velocity with damping
                 // Scale by ballMovementSpeed to maintain trajectory
+                const vxBeforeBounce = b.vx;
                 b.vx = -b.vx * b.bounceDamping;
                 
                 // Slight upward component to prevent ball from getting stuck
@@ -1042,9 +1043,13 @@ const Physics = {
         
         // Check collisions with characters first (before updating position)
         // Skip collision check if ball was just served (prevents immediate collision with serving character)
+        const velocitiesBeforeCollisionCheck = { vx: b.vx, vy: b.vy, vz: b.vz };
+        
         if (!b.justServed) {
-            this.checkBallCharacterCollision(this.player);
-            this.checkBallCharacterCollision(this.ai);
+            const playerCollision = this.checkBallCharacterCollision(this.player);
+            const aiCollision = this.checkBallCharacterCollision(this.ai);
+            
+        } else {
         }
         
         // Apply gravity (same as characters - uses Physics.GRAVITY which is controlled by slider)
@@ -1062,7 +1067,8 @@ const Physics = {
         b.z += b.vz;
         
         // Check net collision (after position update)
-        this.checkBallNetCollision();
+        const velocitiesBeforeNetCheck = { vx: b.vx, vy: b.vy, vz: b.vz };
+        const netCollision = this.checkBallNetCollision();
         
         // Ground collision with bounce (only if ball is on court)
         if (b.z <= b.groundLevel) {
@@ -1235,6 +1241,9 @@ const Physics = {
         } else {
             // Update ball after character movement (so collisions work correctly)
             // Only update ball physics if not serving
+            const velocitiesBeforeUpdate = { vx: this.ball.vx, vy: this.ball.vy, vz: this.ball.vz };
+            const posBeforeUpdate = { x: this.ball.x, y: this.ball.y, z: this.ball.z };
+            
             this.updateBall();
         }
     }

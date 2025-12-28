@@ -13,6 +13,11 @@ const Input = {
         window.addEventListener('keyup', (e) => {
             this.keys[e.key.toLowerCase()] = false;
             
+            // Always unblock hit after 'I' is released
+            if (e.key.toLowerCase() === 'i') {
+                Game.state.blockHitUntilIRelease = false;
+            }
+            
             // Handle serve release (I key released during serving)
             // Don't handle release if spike serve is pending (character is jumping)
             if (e.key.toLowerCase() === 'i' && 
@@ -72,6 +77,7 @@ const Input = {
     
     isHitPressed() {
         if (Physics.player.isFalling) return false;
+        if (Game.state.blockHitUntilIRelease) return false;
         return this.isPressed('i');
     },
     

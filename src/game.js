@@ -18,7 +18,12 @@ const Game = {
         spikeServePending: false, // True when spike serve detected but waiting for jump peak
         spikeServePower: null, // Store spike serve power values when pending
         spikeServeTarget: null, // Store spike serve target when pending
-        isOverchargedSpikeServe: false // True if spike serve is overcharged (90-100%, lands out of court)
+        isOverchargedSpikeServe: false, // True if spike serve is overcharged (90-100%, lands out of court)
+        
+        // Prevent holding 'I' after a serve/spike-serve from being treated as a normal gameplay hit.
+        // Without this, main.js will call Physics.attemptSpike()/attemptReceive() on the next frame and
+        // overwrite the serve velocities (this is exactly the vx/vz jump you saw).
+        blockHitUntilIRelease: false
     },
     
     // Serve multipliers (set by sliders)
@@ -43,6 +48,7 @@ const Game = {
         this.state.spikeServePower = null;
         this.state.spikeServeTarget = null;
         this.state.isOverchargedSpikeServe = false;
+        this.state.blockHitUntilIRelease = false;
         // Don't reset serve multipliers here - they're controlled by sliders
         // Only set defaults if they haven't been set yet (first initialization)
         if (this.serveHorizontalMultiplier === undefined) {
@@ -109,7 +115,21 @@ const Game = {
             if (!servingChar.onGround && servingChar.vz <= 0.01) {
                 // At peak! Execute the spike serve
                 console.log('Spike serve at jump peak!');
+                console.log('🔴 BEFORE executeSpikeServe: Ball velocities', {
+                    vx: Physics.ball.vx.toFixed(4),
+                    vy: Physics.ball.vy.toFixed(4),
+                    vz: Physics.ball.vz.toFixed(4),
+                    isServing: this.state.isServing,
+                    spikeServePending: this.state.spikeServePending
+                });
                 this.executeSpikeServe();
+                console.log('🔴 AFTER executeSpikeServe: Ball velocities', {
+                    vx: Physics.ball.vx.toFixed(4),
+                    vy: Physics.ball.vy.toFixed(4),
+                    vz: Physics.ball.vz.toFixed(4),
+                    isServing: this.state.isServing,
+                    spikeServePending: this.state.spikeServePending
+                });
             }
         }
     },
@@ -184,25 +204,9 @@ const Game = {
     
     // Serve with charge power (called on release or max charge)
     serveBallWithCharge() {
-        console.log('=== serveBallWithCharge CALLED ===', {
-            isServing: this.state.isServing,
-            isChargingServe: this.state.isChargingServe,
-            spikeServePending: this.state.spikeServePending,
-            serveChargeTimer: this.state.serveChargeTimer,
-            maxChargeTime: this.state.maxChargeTime,
-            hasStoredTarget: !!this.state.spikeServeTarget,
-            storedTarget: this.state.spikeServeTarget,
-            callStack: new Error().stack
-        });
-        
         // Only allow serve if in serving state and charging
         // Don't allow if spike serve is already pending (prevents double-serve and target overwrite)
         if (!this.state.isServing || !this.state.isChargingServe || this.state.spikeServePending) {
-            console.log('serveBallWithCharge REJECTED - conditions not met', {
-                isServing: this.state.isServing,
-                isChargingServe: this.state.isChargingServe,
-                spikeServePending: this.state.spikeServePending
-            });
             return false;
         }
         
@@ -246,14 +250,6 @@ const Game = {
         const isSpikeServe = chargePercent > 65 && chargePercent <= 85; // Sweet spot: >65% to 85% (exclusive of 65%, inclusive of 85%)
         const isOverchargedSpikeServe = chargePercent > 85; // Overcharged: >85% to 100% (exclusive of 85%)
         
-        console.log('=== CHARGE CALCULATION ===', {
-            serveChargeTimer: this.state.serveChargeTimer,
-            maxChargeTime: this.state.maxChargeTime,
-            chargePercent: chargePercent.toFixed(2) + '%',
-            isSpikeServe: isSpikeServe,
-            isOverchargedSpikeServe: isOverchargedSpikeServe
-        });
-        
         let horizontalMultiplier, verticalMultiplier;
         
         if (isSpikeServe || isOverchargedSpikeServe) {
@@ -269,15 +265,6 @@ const Game = {
                 const sPressed = Input.isPressed('s');
                 const iPressed = Input.isPressed('i');
                 
-                console.log('=== DIRECTIONAL INPUT CHECK ===', {
-                    wPressed: wPressed,
-                    sPressed: sPressed,
-                    iPressed: iPressed,
-                    allKeys: Object.keys(Input.keys).filter(k => Input.keys[k]),
-                    isServing: this.state.isServing,
-                    spikeServePending: this.state.spikeServePending
-                });
-                
                 if (wPressed) {
                     currentServeDirection = -1; // W: left (up from camera view)
                 } else if (sPressed) {
@@ -292,18 +279,10 @@ const Game = {
                     // Overcharged spike serve (85-100%): lands out of court
                     // Target beyond court bounds for out-of-court landing
                     targetX = Physics.COURT_WIDTH * 1.05; // Beyond court edge (8 * 1.05 = 8.4, out of bounds)
-                    console.log('=== OVERCHARGED SPIKE SERVE TARGET SET ===', {
-                        targetX: targetX,
-                        COURT_WIDTH: Physics.COURT_WIDTH,
-                        calculation: `${Physics.COURT_WIDTH} * 1.05 = ${targetX}`
-                    });
                 } else {
                     // Normal spike serve (75-85%): lands inside court
                     // Keep targetX fixed at high x (right side) but inside court
                     targetX = 5.5; // Right side (AI side), high but inside court (COURT_WIDTH = 8)
-                    console.log('=== NORMAL SPIKE SERVE TARGET SET ===', {
-                        targetX: targetX
-                    });
                 }
                 
                 // W/S controls y (front/back) like normal serve
@@ -318,15 +297,6 @@ const Game = {
                     targetY = Physics.COURT_LENGTH * 0.5; // Middle depth
                 }
                 
-                console.log('Spike serve target calculation:', {
-                    isOvercharged: isOverchargedSpikeServe,
-                    serveDirection: serveDirection,
-                    currentServeDirection: currentServeDirection,
-                    wPressed: Input.isPressed('w'),
-                    sPressed: Input.isPressed('s'),
-                    targetX: targetX,
-                    targetY: targetY
-                });
             } else {
                 // AI always serves forward (toward player side)
                 targetX = Physics.COURT_WIDTH * 0.15; // Forward, toward opponent
@@ -362,34 +332,15 @@ const Game = {
             // Store the charge timer value that was used for calculation
             // This ensures executeSpikeServe() uses the same charge percentage that was used to determine isOverchargedSpikeServe
             
-            console.log('=== SPIKE SERVE STORED (LOCKED) ===', {
-                spikeServePending: this.state.spikeServePending,
-                storedTarget: this.state.spikeServeTarget,
-                storedPower: this.state.spikeServePower,
-                isOverchargedSpikeServe: this.state.isOverchargedSpikeServe,
-                targetX: storedTargetX,
-                targetY: storedTargetY,
-                chargePercent: ((storedChargeTimer / this.state.maxChargeTime) * 100).toFixed(2) + '%',
-                isOvercharged: isOverchargedSpikeServe,
-                targetXShouldBe: isOverchargedSpikeServe ? '8.4 (out of bounds)' : '5.5 (inside court)',
-                targetXActual: storedTargetX,
-                lockedChargeTimer: storedChargeTimer
-            });
-            
-            // Verify the target was stored correctly
-            if (this.state.spikeServeTarget.x !== storedTargetX) {
-                console.error('ERROR: Target was overwritten immediately after storage!', {
-                    expected: storedTargetX,
-                    actual: this.state.spikeServeTarget.x
-                });
-            }
-            
             // Make character jump automatically
             if (servingChar.onGround) {
                 servingChar.vz = servingChar.jumpPower;
                 servingChar.onGround = false;
-                console.log('Spike serve: Character jumping...', isOverchargedSpikeServe ? '(overcharged - will go out)' : '(normal - lands inside)');
             }
+            
+            // IMPORTANT: If player keeps holding 'I' after this moment, we must not treat it as a normal hit,
+            // otherwise next frame main.js will overwrite our spike-serve velocities via Physics.attemptSpike().
+            this.state.blockHitUntilIRelease = true;
             
             // Exit charging state but keep serving state (ball stays held)
             // CRITICAL: Do NOT reset serveChargeTimer here - it's locked and will be used by executeSpikeServe()
@@ -587,76 +538,31 @@ const Game = {
         // Exit serving state
         this.state.isServing = false;
         
+        // If the serve was triggered while 'I' is still held (auto-serve), block hit until release
+        // to prevent immediate Physics.attemptSpike()/attemptReceive() overwriting serve velocities.
+        this.state.blockHitUntilIRelease = true;
+        
         return true;
     },
     
     // Execute spike serve at jump peak
     executeSpikeServe() {
-        console.log('=== executeSpikeServe CALLED ===', {
-            spikeServePending: this.state.spikeServePending,
-            hasPower: !!this.state.spikeServePower,
-            hasTarget: !!this.state.spikeServeTarget,
-            storedTarget: this.state.spikeServeTarget,
-            storedPower: this.state.spikeServePower,
-            isOverchargedSpikeServe: this.state.isOverchargedSpikeServe,
-            storedTargetX: this.state.spikeServeTarget?.x,
-            storedTargetY: this.state.spikeServeTarget?.y
-        });
-        
-        // Verify target hasn't been overwritten
-        if (this.state.spikeServeTarget && this.state.isOverchargedSpikeServe) {
-            if (this.state.spikeServeTarget.x !== 8.4) {
-                console.error('ERROR: Overcharged spike serve target was overwritten!', {
-                    expected: 8.4,
-                    actual: this.state.spikeServeTarget.x,
-                    isOvercharged: this.state.isOverchargedSpikeServe
-                });
-            }
-        }
-        
         if (!this.state.spikeServePending || !this.state.spikeServePower || !this.state.spikeServeTarget) {
-            console.log('executeSpikeServe REJECTED - missing data');
             return false;
         }
+        
+        // CRITICAL: Exit serving state FIRST, before setting velocities
+        // This prevents Physics.update() from resetting velocities to 0 in the same frame
+        this.state.isServing = false;
         
         const servingChar = this.state.servingPlayer === 'player' ? Physics.player : Physics.ai;
         const { horizontal, vertical } = this.state.spikeServePower;
         const { x: targetX, y: targetY } = this.state.spikeServeTarget;
         
-        console.log('=== EXECUTING SPIKE SERVE ===', {
-            retrievedTargetX: targetX,
-            retrievedTargetY: targetY,
-            isOvercharged: this.state.isOverchargedSpikeServe,
-            horizontalPower: horizontal,
-            verticalPower: vertical,
-            ballPos: { x: Physics.ball.x, y: Physics.ball.y, z: Physics.ball.z }
-        });
-        
-        console.log('Spike serve executing - stored target:', {
-            storedTarget: this.state.spikeServeTarget,
-            targetX: targetX,
-            targetY: targetY,
-            ballStartPos: { x: Physics.ball.x.toFixed(2), y: Physics.ball.y.toFixed(2) },
-            storedPower: this.state.spikeServePower,
-            horizontal: horizontal,
-            vertical: vertical,
-            ballMovementSpeed: Physics.ballMovementSpeed
-        });
-        
         // Calculate direction to target
         const dirX = targetX - Physics.ball.x;
         const dirY = targetY - Physics.ball.y;
         const dirLength = Math.sqrt(dirX * dirX + dirY * dirY);
-        
-        console.log('=== VELOCITY CALCULATION ===', {
-            ballPos: { x: Physics.ball.x, y: Physics.ball.y, z: Physics.ball.z },
-            target: { x: targetX, y: targetY },
-            direction: { dirX: dirX, dirY: dirY, dirLength: dirLength },
-            horizontalPower: horizontal,
-            verticalPower: vertical,
-            ballMovementSpeed: Physics.ballMovementSpeed,
-            isOvercharged: this.state.isOverchargedSpikeServe
-        });
         
         // Calculate velocities
         let vx, vy;
@@ -672,12 +578,6 @@ const Game = {
             const normDirY = dirY / dirLength;
             vx = normDirX * horizontal * Physics.ballMovementSpeed;
             vy = normDirY * horizontal * Physics.ballMovementSpeed;
-            
-            console.log('=== VELOCITY COMPONENTS ===', {
-                normalizedDir: { normDirX: normDirX, normDirY: normDirY },
-                vxCalculation: `${normDirX.toFixed(4)} * ${horizontal.toFixed(4)} * ${Physics.ballMovementSpeed.toFixed(4)} = ${vx.toFixed(4)}`,
-                vyCalculation: `${normDirY.toFixed(4)} * ${horizontal.toFixed(4)} * ${Physics.ballMovementSpeed.toFixed(4)} = ${vy.toFixed(4)}`
-            });
         }
         
         // Downward spike trajectory (negative vz for downward)
@@ -685,24 +585,20 @@ const Game = {
         const downwardMultiplier = this.state.isOverchargedSpikeServe ? 0.8 : 1.5; // Even less steep for overcharged (0.8 instead of 1.0)
         const vz = -vertical * Physics.ballMovementSpeed * downwardMultiplier;
         
-        console.log('=== DOWNWARD VELOCITY ===', {
-            verticalPower: vertical,
-            ballMovementSpeed: Physics.ballMovementSpeed,
-            downwardMultiplier: downwardMultiplier,
-            vzCalculation: `-${vertical.toFixed(4)} * ${Physics.ballMovementSpeed.toFixed(4)} * ${downwardMultiplier.toFixed(4)} = ${vz.toFixed(4)}`
-        });
-        
         // Set ball velocities
+        const timestamp = performance.now();
         Physics.ball.vx = vx;
         Physics.ball.vy = vy;
         Physics.ball.vz = vz;
         
-        console.log('=== FINAL VELOCITIES SET ===', {
-            vx: vx,
-            vy: vy,
-            vz: vz,
-            ballAfter: { vx: Physics.ball.vx, vy: Physics.ball.vy, vz: Physics.ball.vz }
-        });
+        // Store timestamp for debugging
+        Physics.ball._lastVelocitySetTime = timestamp;
+        Physics.ball._lastVelocitySetValues = { vx, vy, vz };
+        
+        // CRITICAL: If player keeps holding 'I' after spike serve executes, main.js would treat it as a hit
+        // and call Physics.attemptSpike(), overwriting these velocities (matches your log: vx=0.2497, vz=-0.0907).
+        this.state.blockHitUntilIRelease = true;
+        
         
         // Mark ball as just served
         Physics.ball.justServed = true;
@@ -712,8 +608,7 @@ const Game = {
         Physics.ball.lastTouchedBy = this.state.servingPlayer;
         Physics.ball.hasScored = false;
         
-        // Exit serving state
-        this.state.isServing = false;
+        // Exit serving state (isServing already set to false at the beginning of this function)
         this.state.spikeServePending = false;
         this.state.spikeServePower = null;
         this.state.spikeServeTarget = null;
@@ -721,13 +616,6 @@ const Game = {
         
         // Lock movement briefly
         this.state.serveMovementLock = 0.1;
-        
-        console.log('Spike serve executed at jump peak!', {
-            target: { x: targetX.toFixed(2), y: targetY.toFixed(2) },
-            ballPos: { x: Physics.ball.x.toFixed(2), y: Physics.ball.y.toFixed(2), z: Physics.ball.z.toFixed(2) },
-            direction: { dirX: dirX.toFixed(4), dirY: dirY.toFixed(4), dirLength: dirLength.toFixed(4) },
-            velocities: { vx: vx.toFixed(4), vy: vy.toFixed(4), vz: vz.toFixed(4) }
-        });
         
         return true;
     },

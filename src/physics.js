@@ -912,11 +912,63 @@ const Physics = {
         // If on ground, just bounce ball upward (for testing spikes)
         // If mid-air, lob to opponent's side
         if (character.onGround) {
-            // Just bounce the ball upward (no horizontal movement)
-            // Reduced power for ground bounce (so it doesn't fly too high)
-            b.vx = 0;
-            b.vy = 0;
-            b.vz = this.RECEIVE_ARCH_HEIGHT * 0.7 * this.ballMovementSpeed; // Reduced upward bounce (70% of normal)
+            // Ground receive = "toss" (for future teammates/sets).
+            // Keep it short (clamped distance) but allow aiming with buffered WASD (supports diagonals).
+            const vz0 = this.RECEIVE_ARCH_HEIGHT * 0.7 * this.ballMovementSpeed; // Reduced upward toss (70% of normal)
+            b.vz = vz0;
+            
+            const aim = Input.getAim2D?.() ?? { x: 0, y: 0 };
+            // Disallow "back toss" (away from the net) so ground receives stay simple and forward-oriented.
+            // If a back component is present, cancel ALL aiming (including diagonal back aims) → straight up.
+            // Player (left side): back = negative x (A). AI (right side): back = positive x.
+            const rawAx = aim.x ?? 0;
+            const rawAy = aim.y ?? 0;
+            const hasBackComponent = (character === this.player) ? (rawAx < -0.01) : (rawAx > 0.01);
+            
+            let ax = rawAx;
+            let ay = rawAy;
+            if (hasBackComponent) {
+                ax = 0;
+                ay = 0;
+            } else {
+                // Still prevent tiny numerical back drift; allow only forward-or-neutral x.
+                if (character === this.player) {
+                    ax = Math.max(0, ax);
+                } else {
+                    ax = Math.min(0, ax);
+                }
+            }
+            const aimLen = Math.sqrt(ax * ax + ay * ay);
+            
+            if (aimLen < 0.01) {
+                // No aim input → straight up (current behavior)
+                b.vx = 0;
+                b.vy = 0;
+            } else {
+                // Normalize aim so diagonals aren't stronger
+                const nx = ax / aimLen;
+                const ny = ay / aimLen;
+                
+                // Estimate flight time (in frames) until ground contact, then choose vx/vy so horizontal
+                // displacement is limited to a small max distance (prevents "toss" becoming an attack).
+                const gEff = this.GRAVITY * this.ballMovementSpeed;
+                const z0 = Math.max(0.001, b.z - b.groundLevel);
+                const disc = vz0 * vz0 + 2 * gEff * z0;
+                const flightFrames = disc > 0 ? (vz0 + Math.sqrt(disc)) / gEff : 18;
+                const tFrames = Math.max(8, flightFrames);
+                
+                // Toss distance caps:
+                // - Forward/diagonal tosses: slightly longer (helps setting forward)
+                // - Pure side tosses (I+W or I+S): shorter for control (can’t drift too far laterally)
+                const isPureSideToss = Math.abs(ax) < 0.01 && Math.abs(ay) >= 0.01;
+                const maxTossDistance = isPureSideToss ? 1.4 : 1.8; // court units
+                b.vx = (nx * maxTossDistance) / tFrames;
+                b.vy = (ny * maxTossDistance) / tFrames;
+                
+                // Tiny influence from character movement (kept very small for control)
+                b.vx += character.vx * 0.02;
+                b.vy += character.vy * 0.02;
+            }
             character.justAttemptedAction = true; // Flag to prevent collision bounce this frame
         } else {
             // Mid-air: lob to opponent's side

@@ -323,12 +323,13 @@ const Physics = {
             }
         }
         
-        // Lock movement and jump when serving
+        // Lock movement when serving (but allow jump for spike serve)
         if (Game.state.isServing && Game.state.servingPlayer === 'player') {
-            // Character cannot move or jump while serving
+            // Character cannot move while serving
             p.vx = 0;
             p.vy = 0;
-            if (p.onGround) {
+            // Allow jump if spike serve is pending (jump already triggered in serveBallWithCharge)
+            if (!Game.state.spikeServePending && p.onGround) {
                 p.vz = 0;
             }
         } else {
@@ -1178,9 +1179,10 @@ const Physics = {
         if (Game.state.isServing) {
             const servingChar = Game.state.servingPlayer === 'player' ? this.player : this.ai;
             // Keep ball at character position (held)
+            // Ball follows character's position, including z (for jump)
             this.ball.x = servingChar.x;
             this.ball.y = servingChar.y;
-            this.ball.z = servingChar.radius * 1.5; // Slightly above character
+            this.ball.z = servingChar.z + servingChar.radius * 1.5; // Slightly above character (follows z position)
             this.ball.vx = 0;
             this.ball.vy = 0;
             this.ball.vz = 0;

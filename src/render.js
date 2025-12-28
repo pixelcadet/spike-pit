@@ -611,6 +611,32 @@ const Render = {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
         ctx.fillRect(barX, barY, barWidth, barHeight);
         
+        // Draw spike serve sweet spot indicator (80-90% of bar)
+        const spikeServeStart = 0.80; // 80%
+        const spikeServeEnd = 0.90;   // 90%
+        const spikeStartX = barX + (barWidth * spikeServeStart);
+        const spikeEndX = barX + (barWidth * spikeServeEnd);
+        const spikeWidth = spikeEndX - spikeStartX;
+        
+        // Draw sweet spot box (gold/yellow highlight)
+        ctx.fillStyle = 'rgba(255, 215, 0, 0.4)'; // Gold with transparency
+        ctx.fillRect(spikeStartX, barY - 2, spikeWidth, barHeight + 4);
+        
+        // Draw sweet spot border
+        ctx.strokeStyle = '#FFD700'; // Gold
+        ctx.lineWidth = 2;
+        ctx.strokeRect(spikeStartX, barY - 2, spikeWidth, barHeight + 4);
+        
+        // Draw arrow pointing to sweet spot center
+        const spikeCenterX = spikeStartX + (spikeWidth / 2);
+        ctx.fillStyle = '#FFD700';
+        ctx.beginPath();
+        ctx.moveTo(spikeCenterX, barY - 15); // Arrow tip (above bar)
+        ctx.lineTo(spikeCenterX - 8, barY - 5); // Left side of arrow
+        ctx.lineTo(spikeCenterX + 8, barY - 5); // Right side of arrow
+        ctx.closePath();
+        ctx.fill();
+        
         // Draw charge bar (green to red as it approaches max)
         const chargeWidth = barWidth * chargeRatio;
         const r = Math.min(chargeRatio * 2, 1.0) * 255;
@@ -628,6 +654,12 @@ const Render = {
         ctx.font = '14px monospace';
         ctx.textAlign = 'center';
         ctx.fillText('Hold I to charge serve', this.width / 2, barY - 5);
+        
+        // Draw "SPIKE" label above sweet spot
+        ctx.fillStyle = '#FFD700';
+        ctx.font = 'bold 12px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('SPIKE', spikeCenterX, barY - 20);
     },
     
     // Draw hitboxes for debugging

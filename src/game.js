@@ -14,7 +14,10 @@ const Game = {
         serveChargeTimer: 0, // How long I has been held (0.0 to maxChargeTime)
         maxChargeTime: 0.5, // Maximum charge time (beyond this = out of bounds)
         minChargeTime: 0.1, // Minimum charge time to allow serve (prevents accidental taps)
-        earlyReleaseThreshold: 0.2 // Releases before this time get "too close" power (punishment)
+        earlyReleaseThreshold: 0.2, // Releases before this time get "too close" power (punishment)
+        spikeServePending: false, // True when spike serve detected but waiting for jump peak
+        spikeServePower: null, // Store spike serve power values when pending
+        spikeServeTarget: null // Store spike serve target when pending
     },
     
     // Serve multipliers (set by sliders)
@@ -35,6 +38,9 @@ const Game = {
         this.state.maxChargeTime = 0.5;
         this.state.minChargeTime = 0.1;
         this.state.earlyReleaseThreshold = 0.2;
+        this.state.spikeServePending = false;
+        this.state.spikeServePower = null;
+        this.state.spikeServeTarget = null;
         // Don't reset serve multipliers here - they're controlled by sliders
         // Only set defaults if they haven't been set yet (first initialization)
         if (this.serveHorizontalMultiplier === undefined) {
@@ -84,6 +90,18 @@ const Game = {
                 this.state.serveChargeTimer = this.state.maxChargeTime;
                 this.serveBallWithCharge();
                 // serveBallWithCharge will reset isChargingServe and serveChargeTimer
+            }
+        }
+        
+        // Check for spike serve at jump peak
+        if (this.state.spikeServePending && this.state.servingPlayer === 'player') {
+            const servingChar = Physics.player;
+            // Check if character is at jump peak (vz is near 0 or negative, and not on ground)
+            // Peak is when upward velocity becomes zero or negative
+            if (!servingChar.onGround && servingChar.vz <= 0.01) {
+                // At peak! Execute the spike serve
+                console.log('Spike serve at jump peak!');
+                this.executeSpikeServe();
             }
         }
     },
@@ -181,11 +199,16 @@ const Game = {
         // - 0.0s to minChargeTime (0.1s): No serve allowed
         // - minChargeTime (0.1s) to earlyReleaseThreshold (0.2s): "Too close" power (punishment for early release)
         // - earlyReleaseThreshold (0.2s) to maxChargeTime (0.5s): Normal scaling from too close to too far
+        // - 80-82% of maxChargeTime (0.4s-0.41s): Spike serve (strong, toward back edge)
         // Power range: too close (H=0.1711, V=0.1756) to too far (H=0.2644, V=0.2822)
         const minHorizontalPower = 0.1711; // Too close (slider 3) - might not cross net
         const maxHorizontalPower = 0.2644; // Too far (slider 9) - goes out of bounds
         const minVerticalPower = 0.1756;   // Too close (slider 3)
         const maxVerticalPower = 0.2822;   // Too far (slider 9)
+        
+        // Calculate charge percentage (0-100%)
+        const chargePercent = (this.state.serveChargeTimer / this.state.maxChargeTime) * 100;
+        const isSpikeServe = chargePercent >= 80 && chargePercent <= 90;
         
         let horizontalMultiplier, verticalMultiplier;
         
@@ -193,6 +216,73 @@ const Game = {
             // Early release: use "too close" power (punishment)
             horizontalMultiplier = minHorizontalPower;
             verticalMultiplier = minVerticalPower;
+        } else if (isSpikeServe) {
+            // Spike serve: trigger jump first, serve at peak
+            // Store serve parameters for later execution
+            const servingChar = this.state.servingPlayer === 'player' ? Physics.player : Physics.ai;
+            
+            // Calculate target - always forward (toward opponent), W/S controls left/right direction
+            // Re-check W/S keys at this moment to ensure correct direction
+            let currentServeDirection = 0;
+            if (this.state.servingPlayer === 'player') {
+                if (Input.isPressed('w')) {
+                    currentServeDirection = -1; // W: left (up from camera view)
+                } else if (Input.isPressed('s')) {
+                    currentServeDirection = 1; // S: right (down from camera view)
+                }
+            }
+            
+            let targetX, targetY;
+            if (this.state.servingPlayer === 'player') {
+                // Spike serve: W/S controls y (front/back) like normal serve
+                // Keep targetX fixed at high x (right side) for all spike serves
+                targetX = 5.5; // Right side (AI side), high but inside court (COURT_WIDTH = 8)
+                
+                if (currentServeDirection === -1) {
+                    // W: left (up from camera view) = higher y (back of court) - same as normal serve
+                    targetY = Physics.COURT_LENGTH * 0.8; // Back of court
+                } else if (currentServeDirection === 1) {
+                    // S: right (down from camera view) = lower y (front of court) - same as normal serve
+                    targetY = Physics.COURT_LENGTH * 0.2; // Front of court
+                } else {
+                    // I alone: middle y (middle depth)
+                    targetY = Physics.COURT_LENGTH * 0.5; // Middle depth
+                }
+                
+                console.log('Spike serve target calculation:', {
+                    serveDirection: serveDirection,
+                    currentServeDirection: currentServeDirection,
+                    wPressed: Input.isPressed('w'),
+                    sPressed: Input.isPressed('s'),
+                    targetX: targetX,
+                    targetY: targetY
+                });
+            } else {
+                // AI always serves forward (toward player side)
+                targetX = Physics.COURT_WIDTH * 0.15; // Forward, toward opponent
+                targetY = Physics.COURT_LENGTH * 0.98; // Back
+            }
+            
+            // Store spike serve parameters
+            // Increase horizontal power significantly to compensate for low ballMovementSpeed
+            this.state.spikeServePower = {
+                horizontal: maxHorizontalPower * 2.5, // Very strong horizontal (increased to compensate for ballMovementSpeed)
+                vertical: 0.12 // Lower vertical for flatter spike (reduced from 0.15)
+            };
+            this.state.spikeServeTarget = { x: targetX, y: targetY };
+            this.state.spikeServePending = true;
+            
+            // Make character jump automatically
+            if (servingChar.onGround) {
+                servingChar.vz = servingChar.jumpPower;
+                servingChar.onGround = false;
+                console.log('Spike serve: Character jumping...');
+            }
+            
+            // Exit charging state but keep serving state (ball stays held)
+            this.state.isChargingServe = false;
+            // Don't serve yet - wait for jump peak
+            return false;
         } else {
             // Normal charge: scale from too close to too far
             // Map charge time from earlyReleaseThreshold to maxChargeTime
@@ -209,21 +299,40 @@ const Game = {
         if (this.state.servingPlayer === 'player') {
             // Player serves toward AI side (right side, x > NET_X)
             targetX = Physics.COURT_WIDTH * 0.75; // 75% across court (AI side)
-            // Adjust targetY based on serve direction
-            if (serveDirection === -1) {
-                // W: left (up from camera view) = higher y (back of opponent's court)
-                targetY = Physics.COURT_LENGTH * 0.8; // Back of opponent's court
-            } else if (serveDirection === 1) {
-                // S: right (down from camera view) = lower y (front of opponent's court)
-                targetY = Physics.COURT_LENGTH * 0.2; // Front of opponent's court
+            
+            if (isSpikeServe) {
+                // Spike serve: target back edge, but allow W/S to adjust direction
+                if (serveDirection === -1) {
+                    // W: left (up from camera view) = higher y (back left)
+                    targetY = Physics.COURT_LENGTH * 0.95; // Back edge, left side
+                } else if (serveDirection === 1) {
+                    // S: right (down from camera view) = lower y (back right)
+                    targetY = Physics.COURT_LENGTH * 0.90; // Back edge, right side
+                } else {
+                    // I alone: straight to back center
+                    targetY = Physics.COURT_LENGTH * 0.95; // Back edge, center
+                }
             } else {
-                // I alone: forward (middle)
-                targetY = Physics.COURT_LENGTH * 0.5;  // Middle depth
+                // Adjust targetY based on serve direction
+                if (serveDirection === -1) {
+                    // W: left (up from camera view) = higher y (back of opponent's court)
+                    targetY = Physics.COURT_LENGTH * 0.8; // Back of opponent's court
+                } else if (serveDirection === 1) {
+                    // S: right (down from camera view) = lower y (front of opponent's court)
+                    targetY = Physics.COURT_LENGTH * 0.2; // Front of opponent's court
+                } else {
+                    // I alone: forward (middle)
+                    targetY = Physics.COURT_LENGTH * 0.5;  // Middle depth
+                }
             }
         } else {
             // AI serves toward player side (left side, x < NET_X)
             targetX = Physics.COURT_WIDTH * 0.25; // 25% across court (player side)
-            targetY = Physics.COURT_LENGTH * 0.5;  // Middle depth (AI always serves straight)
+            if (isSpikeServe) {
+                targetY = Physics.COURT_LENGTH * 0.95; // Spike serve: back edge
+            } else {
+                targetY = Physics.COURT_LENGTH * 0.5;  // Middle depth (AI always serves straight)
+            }
         }
         
         // Calculate direction to target
@@ -279,9 +388,12 @@ const Game = {
         
         // Debug log to verify serve (capture charge time before resetting)
         const chargeTimeUsed = this.state.serveChargeTimer;
+        const chargePercentUsed = (chargeTimeUsed / this.state.maxChargeTime) * 100;
         console.log('Serve executed:', {
             servingPlayer: this.state.servingPlayer,
             chargeTime: chargeTimeUsed.toFixed(3),
+            chargePercent: chargePercentUsed.toFixed(1) + '%',
+            isSpikeServe: isSpikeServe,
             ballPos: { x: Physics.ball.x.toFixed(2), y: Physics.ball.y.toFixed(2), z: Physics.ball.z.toFixed(2) },
             target: { x: targetX.toFixed(2), y: targetY.toFixed(2) },
             velocities: { vx: vx.toFixed(4), vy: vy.toFixed(4), vz: vz.toFixed(4) },
@@ -364,6 +476,84 @@ const Game = {
         
         // Exit serving state
         this.state.isServing = false;
+        
+        return true;
+    },
+    
+    // Execute spike serve at jump peak
+    executeSpikeServe() {
+        if (!this.state.spikeServePending || !this.state.spikeServePower || !this.state.spikeServeTarget) {
+            return false;
+        }
+        
+        const servingChar = this.state.servingPlayer === 'player' ? Physics.player : Physics.ai;
+        const { horizontal, vertical } = this.state.spikeServePower;
+        const { x: targetX, y: targetY } = this.state.spikeServeTarget;
+        
+        console.log('Spike serve executing - stored target:', {
+            storedTarget: this.state.spikeServeTarget,
+            targetX: targetX,
+            targetY: targetY,
+            ballStartPos: { x: Physics.ball.x.toFixed(2), y: Physics.ball.y.toFixed(2) },
+            storedPower: this.state.spikeServePower,
+            horizontal: horizontal,
+            vertical: vertical,
+            ballMovementSpeed: Physics.ballMovementSpeed
+        });
+        
+        // Calculate direction to target
+        const dirX = targetX - Physics.ball.x;
+        const dirY = targetY - Physics.ball.y;
+        const dirLength = Math.sqrt(dirX * dirX + dirY * dirY);
+        
+        // Calculate velocities
+        let vx, vy;
+        if (dirLength < 0.01) {
+            if (this.state.servingPlayer === 'player') {
+                vx = horizontal * Physics.ballMovementSpeed;
+            } else {
+                vx = -horizontal * Physics.ballMovementSpeed;
+            }
+            vy = 0;
+        } else {
+            const normDirX = dirX / dirLength;
+            const normDirY = dirY / dirLength;
+            vx = normDirX * horizontal * Physics.ballMovementSpeed;
+            vy = normDirY * horizontal * Physics.ballMovementSpeed;
+        }
+        
+        // Downward spike trajectory (negative vz for downward)
+        // Steeper angle to ensure ball lands at back of court
+        const vz = -vertical * Physics.ballMovementSpeed * 1.5; // Steeper downward force (increased from 1.2)
+        
+        // Set ball velocities
+        Physics.ball.vx = vx;
+        Physics.ball.vy = vy;
+        Physics.ball.vz = vz;
+        
+        // Mark ball as just served
+        Physics.ball.justServed = true;
+        Physics.ball.serveTimer = 0.2;
+        
+        // Track who served
+        Physics.ball.lastTouchedBy = this.state.servingPlayer;
+        Physics.ball.hasScored = false;
+        
+        // Exit serving state
+        this.state.isServing = false;
+        this.state.spikeServePending = false;
+        this.state.spikeServePower = null;
+        this.state.spikeServeTarget = null;
+        
+        // Lock movement briefly
+        this.state.serveMovementLock = 0.1;
+        
+        console.log('Spike serve executed at jump peak!', {
+            target: { x: targetX.toFixed(2), y: targetY.toFixed(2) },
+            ballPos: { x: Physics.ball.x.toFixed(2), y: Physics.ball.y.toFixed(2), z: Physics.ball.z.toFixed(2) },
+            direction: { dirX: dirX.toFixed(4), dirY: dirY.toFixed(4), dirLength: dirLength.toFixed(4) },
+            velocities: { vx: vx.toFixed(4), vy: vy.toFixed(4), vz: vz.toFixed(4) }
+        });
         
         return true;
     },

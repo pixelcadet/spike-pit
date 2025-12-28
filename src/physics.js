@@ -789,6 +789,16 @@ const Physics = {
             b.vx *= b.bounceDamping;
             b.vy *= b.bounceDamping;
             b.vz *= b.bounceDamping;
+
+            // If the ball bumps a character's body very close to the ground, it can end up with
+            // too little airtime (especially with low ballMovementSpeed) and immediately hit the ground,
+            // making it feel like you "can't receive" even though the ball is overlapping your body.
+            // Ensure body bounces always pop the ball slightly up so it remains interactable.
+            if (b.z <= b.groundLevel + 0.02) {
+                b.z = b.groundLevel + 0.05;
+                const minVz = 0.08 * this.ballMovementSpeed;
+                if (b.vz < minVz) b.vz = minVz;
+            }
             
             // Track who last touched the ball
             b.lastTouchedBy = (character === this.player) ? 'player' : 'ai';

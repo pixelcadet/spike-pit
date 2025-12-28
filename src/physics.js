@@ -1300,6 +1300,12 @@ const Physics = {
                         if ((b.tileDamageBounces ?? 0) === 0) {
                             const damage = spikeLike ? 3 : 1;
                             Game.damageTile(tx, ty, damage);
+
+                            // Camera shake: only for spike-like hits that directly impact the tile (first ground impact).
+                            // Includes spike serves and normal spikes.
+                            if (spikeLike && typeof Render !== 'undefined' && Render?.startShake) {
+                                Render.startShake(5, 0.12);
+                            }
                         }
                         b.tileDamageBounces = (b.tileDamageBounces ?? 0) + 1;
                     } else if (tile) {

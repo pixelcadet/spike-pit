@@ -14,12 +14,16 @@ const Input = {
             this.keys[e.key.toLowerCase()] = false;
             
             // Handle serve release (I key released during serving)
-            if (e.key.toLowerCase() === 'i' && Game.state.isServing && Game.state.servingPlayer === 'player' && Game.state.isChargingServe) {
+            // Don't handle release if spike serve is pending (character is jumping)
+            if (e.key.toLowerCase() === 'i' && 
+                Game.state.isServing && 
+                Game.state.servingPlayer === 'player' && 
+                Game.state.isChargingServe &&
+                !Game.state.spikeServePending) {
                 console.log('I key released, charge time:', Game.state.serveChargeTimer);
                 // Check minimum charge time - if too short, don't serve
                 if (Game.state.serveChargeTimer >= Game.state.minChargeTime) {
-                    const isEarlyRelease = Game.state.serveChargeTimer < Game.state.earlyReleaseThreshold;
-                    console.log('Serving with charge', isEarlyRelease ? '(EARLY RELEASE - punishment)' : '(normal)');
+                    console.log('Serving with charge');
                     Game.serveBallWithCharge();
                 } else {
                     console.log('Charge time too short, not serving');

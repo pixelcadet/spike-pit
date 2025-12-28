@@ -583,7 +583,12 @@ const Render = {
         this.drawHitboxes();
         
         // Draw serve charge indicator if charging (only after 0.1s has elapsed)
-        if (Game.state.isServing && Game.state.servingPlayer === 'player' && Game.state.isChargingServe && Game.state.serveChargeTimer >= Game.state.minChargeTime) {
+        // Don't show if spike serve is pending (character is jumping)
+        if (Game.state.isServing && 
+            Game.state.servingPlayer === 'player' && 
+            Game.state.isChargingServe && 
+            !Game.state.spikeServePending &&
+            Game.state.serveChargeTimer >= Game.state.minChargeTime) {
             this.drawServeChargeIndicator();
         }
         
@@ -598,68 +603,87 @@ const Render = {
     
     // Draw serve charge indicator (simple bar)
     drawServeChargeIndicator() {
+        // Only show gauge after minimum charge time to prevent blinking
+        if (Game.state.serveChargeTimer < Game.state.minChargeTime) {
+            return;
+        }
+        
         const ctx = this.ctx;
         const chargeRatio = Math.min(Game.state.serveChargeTimer / Game.state.maxChargeTime, 1.0);
         
-        // Position at bottom center of screen
-        const barWidth = 200;
-        const barHeight = 20;
-        const barX = (this.width - barWidth) / 2;
-        const barY = this.height - 60;
+        // Get ball's screen position
+        const ball = Physics.ball;
+        const ballProj = this.project(ball.x, ball.y, ball.z);
         
-        // Draw background (dark)
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        ctx.fillRect(barX, barY, barWidth, barHeight);
+        // Position gauge at bottom-right corner of the ball
+        const gaugeRadius = 40;
+        const offsetX = 15; // Offset to the right
+        const offsetY = 15; // Offset downward
+        const gaugeCenterX = ballProj.x + offsetX;
+        const gaugeCenterY = ballProj.y + offsetY;
         
-        // Draw spike serve sweet spot indicator (80-90% of bar)
-        const spikeServeStart = 0.80; // 80%
-        const spikeServeEnd = 0.90;   // 90%
-        const spikeStartX = barX + (barWidth * spikeServeStart);
-        const spikeEndX = barX + (barWidth * spikeServeEnd);
-        const spikeWidth = spikeEndX - spikeStartX;
+        // Arc parameters - 100 degrees total, starting from bottom, filling upward
+        const startAngle = Math.PI / 2; // Start at bottom (90 degrees)
+        const totalAngle = -(Math.PI / 180) * 100; // -100 degrees (counter-clockwise, upward)
+        const arcThickness = 8;
         
-        // Draw sweet spot box (gold/yellow highlight)
-        ctx.fillStyle = 'rgba(255, 215, 0, 0.4)'; // Gold with transparency
-        ctx.fillRect(spikeStartX, barY - 2, spikeWidth, barHeight + 4);
+        // Zone definitions (must match game.js logic):
+        // - 0% to 75%: Normal serve zone (white)
+        // - >75% to 85%: Sweet spot zone (blue)
+        // - >85% to 100%: Overcharged zone (white, but will go out of bounds)
+        const normalZoneEnd = 0.75;    // 75% - end of normal zone
+        const sweetSpotStart = 0.75;    // 75% - start of sweet spot (visual starts here, but code excludes exactly 75%)
+        const sweetSpotEnd = 0.85;      // 85% - end of sweet spot (inclusive)
+        const overchargedStart = 0.85;  // 85% - start of overcharged (visual starts here, but code excludes exactly 85%)
         
-        // Draw sweet spot border
-        ctx.strokeStyle = '#FFD700'; // Gold
-        ctx.lineWidth = 2;
-        ctx.strokeRect(spikeStartX, barY - 2, spikeWidth, barHeight + 4);
+        // Calculate zone boundaries
+        const normalZoneEndAngle = startAngle + (totalAngle * normalZoneEnd);
+        const sweetSpotStartAngle = startAngle + (totalAngle * sweetSpotStart);
+        const sweetSpotEndAngle = startAngle + (totalAngle * sweetSpotEnd);
+        const overchargedStartAngle = startAngle + (totalAngle * overchargedStart);
+        const maxAngle = startAngle + totalAngle; // End of arc (100%)
         
-        // Draw arrow pointing to sweet spot center
-        const spikeCenterX = spikeStartX + (spikeWidth / 2);
-        ctx.fillStyle = '#FFD700';
+        // Draw full arc background (transparent white - default for normal and overcharged zones)
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'; // Transparent white
+        ctx.lineWidth = arcThickness;
+        ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.moveTo(spikeCenterX, barY - 15); // Arrow tip (above bar)
-        ctx.lineTo(spikeCenterX - 8, barY - 5); // Left side of arrow
-        ctx.lineTo(spikeCenterX + 8, barY - 5); // Right side of arrow
-        ctx.closePath();
-        ctx.fill();
+        ctx.arc(gaugeCenterX, gaugeCenterY, gaugeRadius, startAngle, startAngle + totalAngle, true); // Full 100 degree arc
+        ctx.stroke();
         
-        // Draw charge bar (green to red as it approaches max)
-        const chargeWidth = barWidth * chargeRatio;
-        const r = Math.min(chargeRatio * 2, 1.0) * 255;
-        const g = (1.0 - Math.min(chargeRatio * 2, 1.0)) * 255;
-        ctx.fillStyle = `rgb(${r}, ${g}, 0)`;
-        ctx.fillRect(barX, barY, chargeWidth, barHeight);
+        // Draw blue sweet spot (>75% to 85%)
+        ctx.strokeStyle = 'rgba(46, 134, 171, 0.9)'; // Blue with 90% opacity
+        ctx.lineWidth = arcThickness;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.arc(gaugeCenterX, gaugeCenterY, gaugeRadius, sweetSpotStartAngle, sweetSpotEndAngle, true); // true = counter-clockwise
+        ctx.stroke();
         
-        // Draw border
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(barX, barY, barWidth, barHeight);
-        
-        // Draw text
-        ctx.fillStyle = '#fff';
-        ctx.font = '14px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('Hold I to charge serve', this.width / 2, barY - 5);
-        
-        // Draw "SPIKE" label above sweet spot
-        ctx.fillStyle = '#FFD700';
-        ctx.font = 'bold 12px monospace';
-        ctx.textAlign = 'center';
-        ctx.fillText('SPIKE', spikeCenterX, barY - 20);
+        // Draw charge progress arc (current charge level) - filling animation with distinct color
+        if (chargeRatio > 0) {
+            // Calculate the end angle based on charge ratio (filling from bottom upward)
+            const chargeAngle = startAngle + (totalAngle * chargeRatio);
+            
+            // Use character body color for filling animation
+            ctx.strokeStyle = 'rgba(74, 158, 255, 0.6)'; // Character body color (#4a9eff) with 60% opacity
+            ctx.lineWidth = arcThickness + 3; // Thicker to show progress
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            // For counter-clockwise arcs, we need to ensure we're drawing in the right direction
+            // startAngle is at bottom (Math.PI/2), chargeAngle goes upward (less than startAngle)
+            ctx.arc(gaugeCenterX, gaugeCenterY, gaugeRadius, startAngle, chargeAngle, true); // true = counter-clockwise
+            ctx.stroke();
+            
+            // Draw pointer circle at the end of the filling bar (dark blue, solid)
+            const pointerX = gaugeCenterX + Math.cos(chargeAngle) * gaugeRadius;
+            const pointerY = gaugeCenterY + Math.sin(chargeAngle) * gaugeRadius;
+            
+            // Draw a circle at the end of the progress arc for better visibility
+            ctx.fillStyle = '#1a4d6b'; // Dark blue solid color
+            ctx.beginPath();
+            ctx.arc(pointerX, pointerY, 4, 0, Math.PI * 2);
+            ctx.fill();
+        }
     },
     
     // Draw hitboxes for debugging

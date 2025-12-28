@@ -32,21 +32,28 @@ function gameLoop(currentTime) {
     // Check for player actions (I key)
     // Handle serve charging (hold and release) - only for player serves
     if (Game.state.isServing && Game.state.servingPlayer === 'player') {
-        // Check if I key is being held (keydown) - start charging
-        if (Input.isPressed('i')) {
-            if (!Game.state.isChargingServe) {
-                // Start charging serve
-                console.log('Starting charge serve', {
-                    isServing: Game.state.isServing,
-                    servingPlayer: Game.state.servingPlayer,
-                    isChargingServe: Game.state.isChargingServe
-                });
-                Game.state.isChargingServe = true;
-                Game.state.serveChargeTimer = 0;
-            }
+        // Don't allow charging if spike serve is pending (character is jumping)
+        // Completely ignore 'I' input when spike serve is pending - user must release and press again
+        if (Game.state.spikeServePending) {
+            // Ignore all 'I' input until spike serve completes
+            // This prevents any interference with the pending spike serve
         } else {
-            // If I key is not pressed but we were charging, don't reset here
-            // (keyup handler will handle the release)
+            // Check if I key is being held (keydown) - start charging
+            if (Input.isPressed('i')) {
+                if (!Game.state.isChargingServe) {
+                    // Start charging serve
+                    console.log('Starting charge serve', {
+                        isServing: Game.state.isServing,
+                        servingPlayer: Game.state.servingPlayer,
+                        isChargingServe: Game.state.isChargingServe
+                    });
+                    Game.state.isChargingServe = true;
+                    Game.state.serveChargeTimer = 0;
+                }
+            } else {
+                // If I key is not pressed but we were charging, don't reset here
+                // (keyup handler will handle the release)
+            }
         }
         // Keyup is handled in Input.init() keyup event listener
     } else if (Input.isHitPressed()) {

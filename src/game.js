@@ -17,7 +17,8 @@ const Game = {
         earlyReleaseThreshold: 0.2, // Releases before this time get "too close" power (punishment)
         spikeServePending: false, // True when spike serve detected but waiting for jump peak
         spikeServePower: null, // Store spike serve power values when pending
-        spikeServeTarget: null // Store spike serve target when pending
+        spikeServeTarget: null, // Store spike serve target when pending
+        isOverchargedSpikeServe: false // True if spike serve is overcharged (90-100%, lands out of court)
     },
     
     // Serve multipliers (set by sliders)
@@ -41,6 +42,7 @@ const Game = {
         this.state.spikeServePending = false;
         this.state.spikeServePower = null;
         this.state.spikeServeTarget = null;
+        this.state.isOverchargedSpikeServe = false;
         // Don't reset serve multipliers here - they're controlled by sliders
         // Only set defaults if they haven't been set yet (first initialization)
         if (this.serveHorizontalMultiplier === undefined) {
@@ -198,17 +200,23 @@ const Game = {
         // Charge mapping:
         // - 0.0s to minChargeTime (0.1s): No serve allowed
         // - minChargeTime (0.1s) to earlyReleaseThreshold (0.2s): "Too close" power (punishment for early release)
-        // - earlyReleaseThreshold (0.2s) to maxChargeTime (0.5s): Normal scaling from too close to too far
-        // - 80-82% of maxChargeTime (0.4s-0.41s): Spike serve (strong, toward back edge)
+        // - earlyReleaseThreshold (0.2s) to 80%: Normal arching serve scaling from too close to furthest (highest x before out of bounds)
+        // - 80-90%: Spike serve (jump, lands inside court)
+        // - 90-100%: Spike serve (jump, lands out of court)
         // Power range: too close (H=0.1711, V=0.1756) to too far (H=0.2644, V=0.2822)
         const minHorizontalPower = 0.1711; // Too close (slider 3) - might not cross net
         const maxHorizontalPower = 0.2644; // Too far (slider 9) - goes out of bounds
         const minVerticalPower = 0.1756;   // Too close (slider 3)
         const maxVerticalPower = 0.2822;   // Too far (slider 9)
         
+        // Furthest normal serve that still lands inside (slider 8 horizontal, slider 7 vertical)
+        const furthestNormalHorizontalPower = 0.2489; // Slider 8 - highest x before out of bounds
+        const furthestNormalVerticalPower = 0.2467;   // Slider 7
+        
         // Calculate charge percentage (0-100%)
         const chargePercent = (this.state.serveChargeTimer / this.state.maxChargeTime) * 100;
         const isSpikeServe = chargePercent >= 80 && chargePercent <= 90;
+        const isOverchargedSpikeServe = chargePercent > 90; // After sweet spot
         
         let horizontalMultiplier, verticalMultiplier;
         
@@ -216,7 +224,7 @@ const Game = {
             // Early release: use "too close" power (punishment)
             horizontalMultiplier = minHorizontalPower;
             verticalMultiplier = minVerticalPower;
-        } else if (isSpikeServe) {
+        } else if (isSpikeServe || isOverchargedSpikeServe) {
             // Spike serve: trigger jump first, serve at peak
             // Store serve parameters for later execution
             const servingChar = this.state.servingPlayer === 'player' ? Physics.player : Physics.ai;
@@ -264,11 +272,33 @@ const Game = {
             }
             
             // Store spike serve parameters
-            // Increase horizontal power significantly to compensate for low ballMovementSpeed
-            this.state.spikeServePower = {
-                horizontal: maxHorizontalPower * 2.5, // Very strong horizontal (increased to compensate for ballMovementSpeed)
-                vertical: 0.12 // Lower vertical for flatter spike (reduced from 0.15)
-            };
+            this.state.isOverchargedSpikeServe = isOverchargedSpikeServe;
+            if (isOverchargedSpikeServe) {
+                // Overcharged spike serve (90-100%): lands out of court
+                // Use less downward angle (reduce multiplier) so it goes further before landing
+                this.state.spikeServePower = {
+                    horizontal: maxHorizontalPower * 2.5, // Same strong horizontal
+                    vertical: 0.15 // Slightly higher vertical (less downward angle) to go further
+                };
+                // Target beyond court bounds for out-of-court landing
+                if (this.state.servingPlayer === 'player') {
+                    targetX = Physics.COURT_WIDTH * 1.05; // Beyond court edge (8 * 1.05 = 8.4, out of bounds)
+                    // Keep same y direction logic
+                    if (currentServeDirection === -1) {
+                        targetY = Physics.COURT_LENGTH * 0.8; // Back of court
+                    } else if (currentServeDirection === 1) {
+                        targetY = Physics.COURT_LENGTH * 0.2; // Front of court
+                    } else {
+                        targetY = Physics.COURT_LENGTH * 0.5; // Middle depth
+                    }
+                }
+            } else {
+                // Normal spike serve (80-90%): lands inside court
+                this.state.spikeServePower = {
+                    horizontal: maxHorizontalPower * 2.5, // Very strong horizontal (increased to compensate for ballMovementSpeed)
+                    vertical: 0.12 // Lower vertical for flatter spike (reduced from 0.15)
+                };
+            }
             this.state.spikeServeTarget = { x: targetX, y: targetY };
             this.state.spikeServePending = true;
             
@@ -276,7 +306,7 @@ const Game = {
             if (servingChar.onGround) {
                 servingChar.vz = servingChar.jumpPower;
                 servingChar.onGround = false;
-                console.log('Spike serve: Character jumping...');
+                console.log('Spike serve: Character jumping...', isOverchargedSpikeServe ? '(overcharged - will go out)' : '(normal - lands inside)');
             }
             
             // Exit charging state but keep serving state (ball stays held)
@@ -284,35 +314,30 @@ const Game = {
             // Don't serve yet - wait for jump peak
             return false;
         } else {
-            // Normal charge: scale from too close to too far
-            // Map charge time from earlyReleaseThreshold to maxChargeTime
+            // Normal charge (before 80%): scale from too close to furthest normal serve
+            // Map charge time from earlyReleaseThreshold to 80% of maxChargeTime
+            const sweetSpotStartTime = this.state.maxChargeTime * 0.8; // 80% = start of sweet spot
             const effectiveChargeTime = this.state.serveChargeTimer - this.state.earlyReleaseThreshold;
-            const effectiveMaxChargeTime = this.state.maxChargeTime - this.state.earlyReleaseThreshold;
+            const effectiveMaxChargeTime = sweetSpotStartTime - this.state.earlyReleaseThreshold;
             const chargeRatio = Math.min(effectiveChargeTime / effectiveMaxChargeTime, 1.0);
             
-            horizontalMultiplier = minHorizontalPower + (maxHorizontalPower - minHorizontalPower) * chargeRatio;
-            verticalMultiplier = minVerticalPower + (maxVerticalPower - minVerticalPower) * chargeRatio;
+            // Scale from too close to furthest normal serve (not all the way to too far)
+            horizontalMultiplier = minHorizontalPower + (furthestNormalHorizontalPower - minHorizontalPower) * chargeRatio;
+            verticalMultiplier = minVerticalPower + (furthestNormalVerticalPower - minVerticalPower) * chargeRatio;
         }
         
         // Determine target (opponent's side)
         let targetX, targetY;
         if (this.state.servingPlayer === 'player') {
-            // Player serves toward AI side (right side, x > NET_X)
-            targetX = Physics.COURT_WIDTH * 0.75; // 75% across court (AI side)
-            
-            if (isSpikeServe) {
-                // Spike serve: target back edge, but allow W/S to adjust direction
-                if (serveDirection === -1) {
-                    // W: left (up from camera view) = higher y (back left)
-                    targetY = Physics.COURT_LENGTH * 0.95; // Back edge, left side
-                } else if (serveDirection === 1) {
-                    // S: right (down from camera view) = lower y (back right)
-                    targetY = Physics.COURT_LENGTH * 0.90; // Back edge, right side
-                } else {
-                    // I alone: straight to back center
-                    targetY = Physics.COURT_LENGTH * 0.95; // Back edge, center
-                }
+            // For normal serves (before 80%): target highest x before out of bounds
+            // For spike serves (80-100%): target is already set in spike serve logic above
+            if (isSpikeServe || isOverchargedSpikeServe) {
+                // Spike serve target was already calculated above, skip here
+                // (targetX and targetY are set in the spike serve block)
             } else {
+                // Normal serve (before 80%): target highest x before out of bounds
+                targetX = Physics.COURT_WIDTH * 0.95; // 95% = 7.6 (highest x before out of bounds, COURT_WIDTH = 8)
+                
                 // Adjust targetY based on serve direction
                 if (serveDirection === -1) {
                     // W: left (up from camera view) = higher y (back of opponent's court)
@@ -523,8 +548,9 @@ const Game = {
         }
         
         // Downward spike trajectory (negative vz for downward)
-        // Steeper angle to ensure ball lands at back of court
-        const vz = -vertical * Physics.ballMovementSpeed * 1.5; // Steeper downward force (increased from 1.2)
+        // Steeper angle for normal spike serve, less steep for overcharged (goes out of court)
+        const downwardMultiplier = this.state.isOverchargedSpikeServe ? 1.0 : 1.5; // Less steep for overcharged
+        const vz = -vertical * Physics.ballMovementSpeed * downwardMultiplier;
         
         // Set ball velocities
         Physics.ball.vx = vx;
@@ -544,6 +570,7 @@ const Game = {
         this.state.spikeServePending = false;
         this.state.spikeServePower = null;
         this.state.spikeServeTarget = null;
+        this.state.isOverchargedSpikeServe = false;
         
         // Lock movement briefly
         this.state.serveMovementLock = 0.1;

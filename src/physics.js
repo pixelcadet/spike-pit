@@ -1427,10 +1427,6 @@ const Physics = {
     },
     
     update(input, aiInput, deltaTime = 1/60) {
-        // Reset action flags at start of frame (before actions are attempted)
-        this.player.justAttemptedAction = false;
-        this.ai.justAttemptedAction = false;
-        
         // Update fall timers with actual deltaTime
         if (this.player.isFalling) {
             this.player.fallTimer += deltaTime;
@@ -1478,6 +1474,13 @@ const Physics = {
             
             this.updateBall();
         }
+
+        // Reset action flags at end of frame.
+        // IMPORTANT: Actions (spike/receive) are triggered in main.js BEFORE Physics.update().
+        // We must keep justAttemptedAction=true through this update so collision bounce doesn't override the action,
+        // then clear it after collisions/physics have run.
+        this.player.justAttemptedAction = false;
+        this.ai.justAttemptedAction = false;
     }
 };
 

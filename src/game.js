@@ -10,9 +10,13 @@ const Game = {
         matchEndReason: null,
         scoreCooldown: 0, // Prevent multiple scores from same bounce/fall
         resetTimer: 0, // Timer for reset after scoring
-        resetDuration: 0.8, // Delay between point scored and next rally
+        resetDuration: 2.0, // Delay between point scored and next rally
         isResetting: false,
         lastPointWinner: null, // 'player' | 'ai' (for UI feedback)
+        
+        // AI serve pacing (when it's AI turn to serve)
+        aiServeDelay: 1.6,
+        aiServeTimer: 0,
         isServing: true, // Game starts with serving state
         servingPlayer: 'player', // Who is currently serving ('player' or 'ai')
         serveMovementLock: 0, // Timer to lock movement briefly after serving (prevents W/S from moving character)
@@ -50,9 +54,11 @@ const Game = {
         this.state.matchEndReason = null;
         this.state.scoreCooldown = 0;
         this.state.resetTimer = 0;
-        this.state.resetDuration = 0.8;
+        this.state.resetDuration = 2.0;
         this.state.isResetting = false;
         this.state.lastPointWinner = null;
+        this.state.aiServeDelay = 1.6;
+        this.state.aiServeTimer = 0;
         this.state.isServing = true;
         this.state.servingPlayer = 'player';
         this.state.serveMovementLock = 0;
@@ -217,6 +223,12 @@ const Game = {
             }
         }
         
+        // AI serve delay countdown
+        if (this.state.isServing && this.state.servingPlayer === 'ai' && this.state.aiServeTimer > 0) {
+            this.state.aiServeTimer -= deltaTime;
+            if (this.state.aiServeTimer < 0) this.state.aiServeTimer = 0;
+        }
+        
         // Update serve movement lock timer
         if (this.state.serveMovementLock > 0) {
             this.state.serveMovementLock -= deltaTime;
@@ -369,6 +381,9 @@ const Game = {
         Physics.ball.hasScored = false;
         Physics.ball.justServed = false;
         Physics.ball.serveTimer = 0;
+        
+        // AI serving pacing
+        this.state.aiServeTimer = (this.state.servingPlayer === 'ai') ? this.state.aiServeDelay : 0;
     },
     
     // Serve with charge power (called on release or max charge)
@@ -658,8 +673,16 @@ const Game = {
             targetX = Physics.COURT_WIDTH * 0.75;
             targetY = Physics.COURT_LENGTH * 0.5;
         } else {
-            targetX = Physics.COURT_WIDTH * 0.25;
-            targetY = Physics.COURT_LENGTH * 0.5;
+            // AI normal serve only (no spike serve), but with some variation:
+            // - Direction: high y vs low y
+            // - Distance: closer to net (high x on player side) vs deeper (low x on player side)
+            const highY = Physics.COURT_LENGTH * 0.8;
+            const lowY = Physics.COURT_LENGTH * 0.2;
+            targetY = (Math.random() < 0.5) ? highY : lowY;
+            
+            const nearNetX = Physics.NET_X * 0.85; // closer to net (still on player side)
+            const deepX = Physics.NET_X * 0.35;    // deeper toward back-left
+            targetX = (Math.random() < 0.5) ? nearNetX : deepX;
         }
         
         // Calculate direction to target

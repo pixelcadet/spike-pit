@@ -75,9 +75,10 @@ function gameLoop(currentTime) {
     // Check for AI actions
     // If AI is serving, handle serve
     if (Game.state.isServing && Game.state.servingPlayer === 'ai') {
-        // AI serves automatically after a short delay
-        // For now, AI serves immediately (you can add delay later if needed)
-        Game.serveBall();
+        // AI serves automatically after a short delay (pacing + "SCORED" splash)
+        if (Game.state.aiServeTimer <= 0) {
+            Game.serveBall();
+        }
     } else {
         // Normal gameplay: spike/receive
         if (aiInput.spike) {

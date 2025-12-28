@@ -10,7 +10,9 @@ const Game = {
         matchEndReason: null,
         scoreCooldown: 0, // Prevent multiple scores from same bounce/fall
         resetTimer: 0, // Timer for reset after scoring
+        resetDuration: 0.8, // Delay between point scored and next rally
         isResetting: false,
+        lastPointWinner: null, // 'player' | 'ai' (for UI feedback)
         isServing: true, // Game starts with serving state
         servingPlayer: 'player', // Who is currently serving ('player' or 'ai')
         serveMovementLock: 0, // Timer to lock movement briefly after serving (prevents W/S from moving character)
@@ -48,7 +50,9 @@ const Game = {
         this.state.matchEndReason = null;
         this.state.scoreCooldown = 0;
         this.state.resetTimer = 0;
+        this.state.resetDuration = 0.8;
         this.state.isResetting = false;
+        this.state.lastPointWinner = null;
         this.state.isServing = true;
         this.state.servingPlayer = 'player';
         this.state.serveMovementLock = 0;
@@ -284,9 +288,10 @@ const Game = {
         // Set cooldown to prevent multiple scores
         this.state.scoreCooldown = 0.5; // 0.5 seconds cooldown
         
-        // Start reset timer (0.5s delay before reset)
+        // Start reset timer (delay before reset)
         this.state.isResetting = true;
-        this.state.resetTimer = 0.5;
+        this.state.resetTimer = this.state.resetDuration;
+        this.state.lastPointWinner = winner;
         
         this.updateScoreDisplay();
         this.checkWinConditions();

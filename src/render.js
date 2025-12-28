@@ -627,6 +627,40 @@ const Render = {
             ctx.textAlign = 'left';
             ctx.fillText(`Serving: ${Game.state.isServing}, Charging: ${Game.state.isChargingServe}, Charge: ${Game.state.serveChargeTimer.toFixed(2)}s`, 10, 20);
         }
+        
+        // Score splash overlay
+        if (Game.state.isResetting && !Game.state.matchOver) {
+            this.drawScoreSplash();
+        }
+    },
+    
+    drawScoreSplash() {
+        const ctx = this.ctx;
+        const duration = Game.state.resetDuration || 0.8;
+        const t = duration > 0 ? Math.max(0, Math.min(1, Game.state.resetTimer / duration)) : 0;
+        const alpha = 0.35 + 0.45 * t; // fade out as timer approaches 0
+        
+        // Dim background
+        ctx.save();
+        ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
+        ctx.fillRect(0, 0, this.width, this.height);
+        
+        // Text
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = 'bold 72px sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.fillText('SCORED!', this.width / 2, this.height / 2);
+        
+        // Optional smaller subtext (who scored)
+        if (Game.state.lastPointWinner) {
+            const who = Game.state.lastPointWinner === 'player' ? 'PLAYER' : 'AI';
+            ctx.font = 'bold 20px sans-serif';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+            ctx.fillText(`${who} SCORED`, this.width / 2, this.height / 2 + 60);
+        }
+        
+        ctx.restore();
     },
     
     // Draw serve charge indicator (simple bar)

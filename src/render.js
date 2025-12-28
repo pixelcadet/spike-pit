@@ -112,38 +112,40 @@ const Render = {
                 const backLeft = this.project(worldX, worldY + 1, 0);
                 const backRight = this.project(worldX + 1, worldY + 1, 0);
                 
-                // Tile visuals (destructible tiles with HP + holes)
-                const isEven = (tx + ty) % 2 === 0;
-                const baseA = '#5a8c69';
-                const baseB = '#4a7c59';
+                // Tile visuals (flat colors + HP-based opacity)
+                const destructibleColor = '#4f865d';   // one green for all destructible tiles
+                const indestructibleColor = '#3f5f8a'; // one blue for all indestructible tiles (net-adjacent columns)
+                const holeColor = '#120f14';
                 
-                let fill = isEven ? baseA : baseB;
+                let fill = destructibleColor;
+                let fillAlpha = 1.0;
                 const tileState = Game?.getTileState ? Game.getTileState(tx, ty) : null;
                 if (tileState) {
                     if (tileState.indestructible) {
                         // Net-adjacent columns (tx=3 and tx=4): indestructible + visually distinct
-                        fill = isEven ? '#4b6a9b' : '#3f5f8a';
+                        fill = indestructibleColor;
+                        fillAlpha = 1.0;
                     } else if (tileState.destroyed) {
                         // Hole
-                        fill = '#120f14';
+                        fill = holeColor;
+                        fillAlpha = 1.0;
                     } else {
-                        // Damage shading by HP
+                        // Brittleness visualization: fade opacity as HP drops.
+                        // 4hp → 1.0, 3hp → 0.75, 2hp → 0.5, 1hp → 0.25
                         const hp = tileState.hp ?? 0;
                         const ratio = tileState.maxHp > 0 ? (hp / tileState.maxHp) : 0;
-                        if (ratio >= 0.76) {
-                            fill = isEven ? baseA : baseB;
-                        } else if (ratio >= 0.51) {
-                            fill = isEven ? '#4e7f5d' : '#416f52';
-                        } else if (ratio >= 0.26) {
-                            fill = isEven ? '#6b6a4a' : '#5a5a3f';
-                        } else {
-                            fill = isEven ? '#5b3f3f' : '#4b3434';
-                        }
+                        fill = destructibleColor;
+                        fillAlpha = Math.max(0.15, Math.min(1.0, ratio)); // keep a tiny minimum so 1hp is still visible
                     }
+                } else {
+                    fill = destructibleColor;
+                    fillAlpha = 1.0;
                 }
                 ctx.fillStyle = fill;
                 
                 // Draw trapezoid tile (wider at front, narrower at back)
+                ctx.save();
+                ctx.globalAlpha = fillAlpha;
                 ctx.beginPath();
                 ctx.moveTo(frontLeft.x, frontLeft.y);
                 ctx.lineTo(frontRight.x, frontRight.y);
@@ -151,10 +153,11 @@ const Render = {
                 ctx.lineTo(backLeft.x, backLeft.y);
                 ctx.closePath();
                 ctx.fill();
+                ctx.restore();
                 
                 // Draw tile border
-                // Make holes pop a little more
-                ctx.strokeStyle = (tileState && tileState.destroyed) ? '#2a2230' : '#3a6c49';
+                // Thin outline around each tile
+                ctx.strokeStyle = (tileState && tileState.destroyed) ? 'rgba(60, 50, 70, 0.9)' : 'rgba(0, 0, 0, 0.18)';
                 ctx.lineWidth = 1;
                 ctx.stroke();
             }

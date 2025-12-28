@@ -1268,11 +1268,13 @@ const Physics = {
                     
                     // If tile is already destroyed (hole), ball falls through and counts as out-of-bounds.
                     if (tile && !tile.indestructible && tile.destroyed) {
-                        if (!b.hasScored && b.lastTouchedBy) {
-                            // Opponent of last toucher scores
-                            if (b.lastTouchedBy === 'player') {
+                        // Hole scoring: treat as "ball hit the ground on that side" (encourages destroying opponent floor).
+                        if (!b.hasScored) {
+                            if (tx < this.NET_X) {
+                                // Hole on player's side → AI scores
                                 Game.scorePoint('ai');
                             } else {
+                                // Hole on AI's side → Player scores
                                 Game.scorePoint('player');
                             }
                             b.hasScored = true;

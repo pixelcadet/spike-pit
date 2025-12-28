@@ -686,36 +686,58 @@ const Game = {
             targetY = minY + Math.random() * (maxY - minY);
         }
         
-        // Calculate direction to target
-        const dirX = targetX - Physics.ball.x;
-        const dirY = targetY - Physics.ball.y;
-        const dirLength = Math.sqrt(dirX * dirX + dirY * dirY);
-        
         // Use default slider values for AI
         const horizontalMultiplier = this.serveHorizontalMultiplier;
         const verticalMultiplier = this.serveVerticalMultiplier;
         
-        let vx, vy;
-        if (dirLength < 0.01) {
-            // If ball is already at target, serve straight forward
-            if (this.state.servingPlayer === 'player') {
-                vx = horizontalMultiplier * Physics.ballMovementSpeed;
-            } else {
-                vx = -horizontalMultiplier * Physics.ballMovementSpeed;
-            }
-            vy = 0;
-        } else {
-            // Normalize horizontal direction
-            const normDirX = dirX / dirLength;
-            const normDirY = dirY / dirLength;
-            
-            // Apply serve velocity with arching trajectory
-            vx = normDirX * horizontalMultiplier * Physics.ballMovementSpeed;
-            vy = normDirY * horizontalMultiplier * Physics.ballMovementSpeed;
-        }
-        
         // Upward component for arching trajectory
         const vz = verticalMultiplier * Physics.ballMovementSpeed;
+        
+        let vx, vy;
+        if (this.state.servingPlayer === 'ai') {
+            // IMPORTANT: For AI serves we want consistent landing in a specific lane.
+            // The old approach (fixed speed toward target) doesn't guarantee landing at targetX/targetY.
+            // Estimate airtime and set vx/vy so the ball lands near the intended target.
+            const b = Physics.ball;
+            const gEff = Physics.GRAVITY * Physics.ballMovementSpeed;
+            const z0 = Math.max(0.001, b.z - b.groundLevel);
+            // Solve z(t)=0 for upward launch: 0 = z0 + vz*t - 0.5*g*t^2
+            const disc = vz * vz + 2 * gEff * z0;
+            const flightFrames = disc > 0 ? (vz + Math.sqrt(disc)) / gEff : 18;
+            const tFrames = Math.max(10, flightFrames);
+            
+            vx = (targetX - b.x) / tFrames;
+            vy = (targetY - b.y) / tFrames;
+            
+            // Clamp to something "normal serve" feeling (still respects serve power slider).
+            const maxH = horizontalMultiplier * Physics.ballMovementSpeed * 1.2;
+            const hMag = Math.sqrt(vx * vx + vy * vy);
+            if (hMag > maxH && hMag > 0.0001) {
+                const s = maxH / hMag;
+                vx *= s;
+                vy *= s;
+            }
+        } else {
+            // Player (legacy) serve behavior
+            // Calculate direction to target
+            const dirX = targetX - Physics.ball.x;
+            const dirY = targetY - Physics.ball.y;
+            const dirLength = Math.sqrt(dirX * dirX + dirY * dirY);
+            
+            if (dirLength < 0.01) {
+                // If ball is already at target, serve straight forward
+                vx = horizontalMultiplier * Physics.ballMovementSpeed;
+                vy = 0;
+            } else {
+                // Normalize horizontal direction
+                const normDirX = dirX / dirLength;
+                const normDirY = dirY / dirLength;
+                
+                // Apply serve velocity with arching trajectory
+                vx = normDirX * horizontalMultiplier * Physics.ballMovementSpeed;
+                vy = normDirY * horizontalMultiplier * Physics.ballMovementSpeed;
+            }
+        }
         
         // Set velocities
         Physics.ball.vx = vx;

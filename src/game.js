@@ -704,7 +704,7 @@ const Game = {
         const verticalMultiplier = this.serveVerticalMultiplier;
         
         // Upward component for arching trajectory
-        const vz = verticalMultiplier * Physics.ballMovementSpeed;
+        let vz = verticalMultiplier * Physics.ballMovementSpeed;
         
         let vx, vy;
         if (this.state.servingPlayer === 'ai') {

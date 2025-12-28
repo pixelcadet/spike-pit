@@ -168,6 +168,12 @@ const Game = {
         Physics.player.onGround = true;
         Physics.player.hasSpiked = false;
         Physics.player.hasReceived = false;
+        // CRITICAL: scoring reset must override falling/respawn mechanics
+        Physics.player.isFalling = false;
+        Physics.player.fallTimer = 0;
+        Physics.player.fallEdge = null;
+        Physics.player.isBlinking = false;
+        Physics.player.blinkTimer = 0;
         
         Physics.ai.x = 7.0; // Further from net (closer to right edge)
         Physics.ai.y = 2.0; // Middle depth
@@ -178,6 +184,22 @@ const Game = {
         Physics.ai.onGround = true;
         Physics.ai.hasSpiked = false;
         Physics.ai.hasReceived = false;
+        // CRITICAL: scoring reset must override falling/respawn mechanics
+        Physics.ai.isFalling = false;
+        Physics.ai.fallTimer = 0;
+        Physics.ai.fallEdge = null;
+        Physics.ai.isBlinking = false;
+        Physics.ai.blinkTimer = 0;
+        
+        // Reset transient serve state (in case a point happens mid-charge or mid-spike-serve jump)
+        this.state.serveMovementLock = 0;
+        this.state.isChargingServe = false;
+        this.state.serveChargeTimer = 0;
+        this.state.spikeServePending = false;
+        this.state.spikeServePower = null;
+        this.state.spikeServeTarget = null;
+        this.state.isOverchargedSpikeServe = false;
+        this.state.blockHitUntilIRelease = false;
         
         // Set up serve for the winner
         // Alternate serve based on total points
@@ -200,6 +222,8 @@ const Game = {
         Physics.ball.vz = 0;
         Physics.ball.lastTouchedBy = null;
         Physics.ball.hasScored = false;
+        Physics.ball.justServed = false;
+        Physics.ball.serveTimer = 0;
     },
     
     // Serve with charge power (called on release or max charge)

@@ -3,6 +3,7 @@
 
 const Input = {
     keys: {},
+    previousKeys: {}, // Track previous frame's key states
     
     init() {
         window.addEventListener('keydown', (e) => {
@@ -11,7 +12,27 @@ const Input = {
         
         window.addEventListener('keyup', (e) => {
             this.keys[e.key.toLowerCase()] = false;
+            
+            // Handle serve release (I key released during serving)
+            if (e.key.toLowerCase() === 'i' && Game.state.isServing && Game.state.servingPlayer === 'player' && Game.state.isChargingServe) {
+                console.log('I key released, charge time:', Game.state.serveChargeTimer);
+                // Check minimum charge time - if too short, don't serve
+                if (Game.state.serveChargeTimer >= Game.state.minChargeTime) {
+                    const isEarlyRelease = Game.state.serveChargeTimer < Game.state.earlyReleaseThreshold;
+                    console.log('Serving with charge', isEarlyRelease ? '(EARLY RELEASE - punishment)' : '(normal)');
+                    Game.serveBallWithCharge();
+                } else {
+                    console.log('Charge time too short, not serving');
+                }
+                Game.state.isChargingServe = false;
+                Game.state.serveChargeTimer = 0;
+            }
         });
+    },
+    
+    update() {
+        // Store current keys for next frame comparison
+        this.previousKeys = {...this.keys};
     },
     
     isPressed(key) {

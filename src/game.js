@@ -9,7 +9,12 @@ const Game = {
         isResetting: false,
         isServing: true, // Game starts with serving state
         servingPlayer: 'player', // Who is currently serving ('player' or 'ai')
-        serveMovementLock: 0 // Timer to lock movement briefly after serving (prevents W/S from moving character)
+        serveMovementLock: 0, // Timer to lock movement briefly after serving (prevents W/S from moving character)
+        isChargingServe: false, // True when I key is held down during serving
+        serveChargeTimer: 0, // How long I has been held (0.0 to maxChargeTime)
+        maxChargeTime: 0.5, // Maximum charge time (beyond this = out of bounds)
+        minChargeTime: 0.1, // Minimum charge time to allow serve (prevents accidental taps)
+        earlyReleaseThreshold: 0.2 // Releases before this time get "too close" power (punishment)
     },
     
     // Serve multipliers (set by sliders)
@@ -25,6 +30,11 @@ const Game = {
         this.state.isServing = true;
         this.state.servingPlayer = 'player';
         this.state.serveMovementLock = 0;
+        this.state.isChargingServe = false;
+        this.state.serveChargeTimer = 0;
+        this.state.maxChargeTime = 0.5;
+        this.state.minChargeTime = 0.1;
+        this.state.earlyReleaseThreshold = 0.2;
         // Don't reset serve multipliers here - they're controlled by sliders
         // Only set defaults if they haven't been set yet (first initialization)
         if (this.serveHorizontalMultiplier === undefined) {
@@ -61,6 +71,19 @@ const Game = {
             this.state.serveMovementLock -= deltaTime;
             if (this.state.serveMovementLock < 0) {
                 this.state.serveMovementLock = 0;
+            }
+        }
+        
+        // Update serve charge timer
+        if (this.state.isChargingServe && this.state.isServing && this.state.servingPlayer === 'player') {
+            this.state.serveChargeTimer += deltaTime;
+            
+            // Auto-serve at max charge (ball will go out of bounds)
+            if (this.state.serveChargeTimer >= this.state.maxChargeTime) {
+                console.log('Auto-serving at max charge');
+                this.state.serveChargeTimer = this.state.maxChargeTime;
+                this.serveBallWithCharge();
+                // serveBallWithCharge will reset isChargingServe and serveChargeTimer
             }
         }
     },
@@ -133,30 +156,52 @@ const Game = {
         Physics.ball.hasScored = false;
     },
     
-    serveBall() {
-        // Only allow serve if in serving state
-        if (!this.state.isServing) {
+    // Serve with charge power (called on release or max charge)
+    serveBallWithCharge() {
+        // Only allow serve if in serving state and charging
+        if (!this.state.isServing || !this.state.isChargingServe) {
             return false;
         }
         
         const servingChar = this.state.servingPlayer === 'player' ? Physics.player : Physics.ai;
         
-        // Check for directional input (W/S keys) and distance input (A/D keys) when serving
+        // Check for directional input (W/S keys) when serving
         // Only check for player serves (AI serves straight)
         let serveDirection = 0; // 0 = forward (middle), -1 = left (up from camera), 1 = right (down from camera)
-        let serveDistance = 0; // 0 = middle, -1 = short (A), 1 = long (D)
         if (this.state.servingPlayer === 'player') {
             if (Input.isPressed('w')) {
-                serveDirection = -1; // W: ball goes left (up from camera view, lower y)
+                serveDirection = -1; // W: ball goes left (up from camera view)
             } else if (Input.isPressed('s')) {
-                serveDirection = 1; // S: ball goes right (down from camera view, higher y)
+                serveDirection = 1; // S: ball goes right (down from camera view)
             }
+        }
+        
+        // Map charge time to power
+        // Charge mapping:
+        // - 0.0s to minChargeTime (0.1s): No serve allowed
+        // - minChargeTime (0.1s) to earlyReleaseThreshold (0.2s): "Too close" power (punishment for early release)
+        // - earlyReleaseThreshold (0.2s) to maxChargeTime (0.5s): Normal scaling from too close to too far
+        // Power range: too close (H=0.1711, V=0.1756) to too far (H=0.2644, V=0.2822)
+        const minHorizontalPower = 0.1711; // Too close (slider 3) - might not cross net
+        const maxHorizontalPower = 0.2644; // Too far (slider 9) - goes out of bounds
+        const minVerticalPower = 0.1756;   // Too close (slider 3)
+        const maxVerticalPower = 0.2822;   // Too far (slider 9)
+        
+        let horizontalMultiplier, verticalMultiplier;
+        
+        if (this.state.serveChargeTimer < this.state.earlyReleaseThreshold) {
+            // Early release: use "too close" power (punishment)
+            horizontalMultiplier = minHorizontalPower;
+            verticalMultiplier = minVerticalPower;
+        } else {
+            // Normal charge: scale from too close to too far
+            // Map charge time from earlyReleaseThreshold to maxChargeTime
+            const effectiveChargeTime = this.state.serveChargeTimer - this.state.earlyReleaseThreshold;
+            const effectiveMaxChargeTime = this.state.maxChargeTime - this.state.earlyReleaseThreshold;
+            const chargeRatio = Math.min(effectiveChargeTime / effectiveMaxChargeTime, 1.0);
             
-            if (Input.isPressed('a')) {
-                serveDistance = -1; // A: short serve (front of net)
-            } else if (Input.isPressed('d')) {
-                serveDistance = 1; // D: long serve (back of court)
-            }
+            horizontalMultiplier = minHorizontalPower + (maxHorizontalPower - minHorizontalPower) * chargeRatio;
+            verticalMultiplier = minVerticalPower + (maxVerticalPower - minVerticalPower) * chargeRatio;
         }
         
         // Determine target (opponent's side)
@@ -186,25 +231,7 @@ const Game = {
         const dirY = targetY - Physics.ball.y;
         const dirLength = Math.sqrt(dirX * dirX + dirY * dirY);
         
-        // Calculate velocities - create a nice arcing trajectory
-        // Use sliders to control horizontal and vertical multipliers independently
-        // Higher vertical relative to horizontal = steeper arc (higher peak, same/slightly less horizontal distance)
-        // Override with A/D keys if pressed (short/long serve)
-        let horizontalMultiplier, verticalMultiplier;
-        if (serveDistance === -1) {
-            // A: short serve (front of net) - h power 1, v power 8
-            horizontalMultiplier = 0.14 + (0.28 - 0.14) * ((1 - 1) / 9); // Slider 1 = 0.14
-            verticalMultiplier = 0.14 + (0.3 - 0.14) * ((8 - 1) / 9); // Slider 8 = 0.2778
-        } else if (serveDistance === 1) {
-            // D: long serve (back of court) - h power 8, v power 7
-            horizontalMultiplier = 0.14 + (0.28 - 0.14) * ((8 - 1) / 9); // Slider 8 = 0.2489
-            verticalMultiplier = 0.14 + (0.3 - 0.14) * ((7 - 1) / 9); // Slider 7 = 0.2467
-        } else {
-            // I alone: medium serve (middle) - use slider values (default h power 5, v power 5)
-            horizontalMultiplier = this.serveHorizontalMultiplier;
-            verticalMultiplier = this.serveVerticalMultiplier;
-        }
-        
+        // Use charge-based multipliers (already calculated above)
         let vx, vy;
         if (dirLength < 0.01) {
             // If ball is already at target, serve straight forward
@@ -220,12 +247,12 @@ const Game = {
             const normDirY = dirY / dirLength;
             
             // Apply serve velocity with arching trajectory
-            // Scale by ballMovementSpeed and servePower to maintain physics consistency
+            // Scale by ballMovementSpeed to maintain physics consistency
             vx = normDirX * horizontalMultiplier * Physics.ballMovementSpeed;
             vy = normDirY * horizontalMultiplier * Physics.ballMovementSpeed;
         }
         
-        // Upward component for arching trajectory - needs to be significant for visible arc
+        // Upward component for arching trajectory
         const vz = verticalMultiplier * Physics.ballMovementSpeed;
         
         // IMPORTANT: Set velocities BEFORE exiting serving state
@@ -250,18 +277,93 @@ const Game = {
         // This ensures directional input only affects serve direction, not character movement
         this.state.serveMovementLock = 0.1;
         
-        // Debug log to verify serve
+        // Debug log to verify serve (capture charge time before resetting)
+        const chargeTimeUsed = this.state.serveChargeTimer;
         console.log('Serve executed:', {
             servingPlayer: this.state.servingPlayer,
+            chargeTime: chargeTimeUsed.toFixed(3),
             ballPos: { x: Physics.ball.x.toFixed(2), y: Physics.ball.y.toFixed(2), z: Physics.ball.z.toFixed(2) },
             target: { x: targetX.toFixed(2), y: targetY.toFixed(2) },
             velocities: { vx: vx.toFixed(4), vy: vy.toFixed(4), vz: vz.toFixed(4) },
             multipliers: { 
-                horizontal: this.serveHorizontalMultiplier.toFixed(2), 
-                vertical: this.serveVerticalMultiplier.toFixed(2) 
+                horizontal: horizontalMultiplier.toFixed(4), 
+                vertical: verticalMultiplier.toFixed(4) 
             },
             ballMovementSpeed: Physics.ballMovementSpeed.toFixed(4)
         });
+        
+        // Reset charging state (after logging)
+        this.state.isChargingServe = false;
+        this.state.serveChargeTimer = 0;
+        
+        return true;
+    },
+    
+    // Legacy serveBall function (kept for AI, but player uses serveBallWithCharge)
+    serveBall() {
+        // AI always uses this (no charging, uses default slider values)
+        if (!this.state.isServing) {
+            return false;
+        }
+        
+        const servingChar = this.state.servingPlayer === 'player' ? Physics.player : Physics.ai;
+        
+        // Determine target (opponent's side)
+        let targetX, targetY;
+        if (this.state.servingPlayer === 'player') {
+            targetX = Physics.COURT_WIDTH * 0.75;
+            targetY = Physics.COURT_LENGTH * 0.5;
+        } else {
+            targetX = Physics.COURT_WIDTH * 0.25;
+            targetY = Physics.COURT_LENGTH * 0.5;
+        }
+        
+        // Calculate direction to target
+        const dirX = targetX - Physics.ball.x;
+        const dirY = targetY - Physics.ball.y;
+        const dirLength = Math.sqrt(dirX * dirX + dirY * dirY);
+        
+        // Use default slider values for AI
+        const horizontalMultiplier = this.serveHorizontalMultiplier;
+        const verticalMultiplier = this.serveVerticalMultiplier;
+        
+        let vx, vy;
+        if (dirLength < 0.01) {
+            // If ball is already at target, serve straight forward
+            if (this.state.servingPlayer === 'player') {
+                vx = horizontalMultiplier * Physics.ballMovementSpeed;
+            } else {
+                vx = -horizontalMultiplier * Physics.ballMovementSpeed;
+            }
+            vy = 0;
+        } else {
+            // Normalize horizontal direction
+            const normDirX = dirX / dirLength;
+            const normDirY = dirY / dirLength;
+            
+            // Apply serve velocity with arching trajectory
+            vx = normDirX * horizontalMultiplier * Physics.ballMovementSpeed;
+            vy = normDirY * horizontalMultiplier * Physics.ballMovementSpeed;
+        }
+        
+        // Upward component for arching trajectory
+        const vz = verticalMultiplier * Physics.ballMovementSpeed;
+        
+        // Set velocities
+        Physics.ball.vx = vx;
+        Physics.ball.vy = vy;
+        Physics.ball.vz = vz;
+        
+        // Mark ball as just served
+        Physics.ball.justServed = true;
+        Physics.ball.serveTimer = 0.2;
+        
+        // Track who served
+        Physics.ball.lastTouchedBy = this.state.servingPlayer;
+        Physics.ball.hasScored = false;
+        
+        // Exit serving state
+        this.state.isServing = false;
         
         return true;
     },
@@ -279,7 +381,12 @@ const Game = {
         }
         if (this.state.isServing) {
             if (this.state.servingPlayer === 'player') {
-                return 'Press I to serve';
+                // Only show charging status after 0.1s has elapsed (prevents blinky effect on quick taps)
+                if (this.state.isChargingServe && this.state.serveChargeTimer >= this.state.minChargeTime) {
+                    const chargePercent = Math.min((this.state.serveChargeTimer / this.state.maxChargeTime) * 100, 100);
+                    return `Charging serve... ${chargePercent.toFixed(0)}% (Release I to serve, W/S for direction)`;
+                }
+                return 'Hold I to charge serve (W/S for direction)';
             } else {
                 return 'AI is serving...';
             }

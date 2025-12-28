@@ -29,25 +29,39 @@ function gameLoop(currentTime) {
     AI.update();
     const aiInput = AI.getInput();
     
-    // Check for player actions (I key pressed)
-    if (Input.isHitPressed()) {
-        // If serving, handle serve
-        if (Game.state.isServing && Game.state.servingPlayer === 'player') {
-            Game.serveBall();
+    // Check for player actions (I key)
+    // Handle serve charging (hold and release) - only for player serves
+    if (Game.state.isServing && Game.state.servingPlayer === 'player') {
+        // Check if I key is being held (keydown) - start charging
+        if (Input.isPressed('i')) {
+            if (!Game.state.isChargingServe) {
+                // Start charging serve
+                console.log('Starting charge serve', {
+                    isServing: Game.state.isServing,
+                    servingPlayer: Game.state.servingPlayer,
+                    isChargingServe: Game.state.isChargingServe
+                });
+                Game.state.isChargingServe = true;
+                Game.state.serveChargeTimer = 0;
+            }
         } else {
-            // Normal gameplay: spike/receive
-            if (!Physics.player.onGround) {
-                // Mid-air: check which zone the ball is in
-                // Try spike first (if ball in spike zone), then receive (if ball in receiving zone)
-                const spikeAttempted = Physics.attemptSpike(Physics.player);
-                if (!spikeAttempted) {
-                    // If spike didn't work (ball not in spike zone), try receive
-                    Physics.attemptReceive(Physics.player);
-                }
-            } else {
-                // On ground: attempt receive
+            // If I key is not pressed but we were charging, don't reset here
+            // (keyup handler will handle the release)
+        }
+        // Keyup is handled in Input.init() keyup event listener
+    } else if (Input.isHitPressed()) {
+        // Normal gameplay: spike/receive
+        if (!Physics.player.onGround) {
+            // Mid-air: check which zone the ball is in
+            // Try spike first (if ball in spike zone), then receive (if ball in receiving zone)
+            const spikeAttempted = Physics.attemptSpike(Physics.player);
+            if (!spikeAttempted) {
+                // If spike didn't work (ball not in spike zone), try receive
                 Physics.attemptReceive(Physics.player);
             }
+        } else {
+            // On ground: attempt receive
+            Physics.attemptReceive(Physics.player);
         }
     }
     

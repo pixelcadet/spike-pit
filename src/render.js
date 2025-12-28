@@ -581,6 +581,53 @@ const Render = {
         
         // Draw hitboxes for debugging
         this.drawHitboxes();
+        
+        // Draw serve charge indicator if charging (only after 0.1s has elapsed)
+        if (Game.state.isServing && Game.state.servingPlayer === 'player' && Game.state.isChargingServe && Game.state.serveChargeTimer >= Game.state.minChargeTime) {
+            this.drawServeChargeIndicator();
+        }
+        
+        // Debug: Show game state in corner (temporary)
+        if (Game.state.isServing && Game.state.servingPlayer === 'player') {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.font = '12px monospace';
+            ctx.textAlign = 'left';
+            ctx.fillText(`Serving: ${Game.state.isServing}, Charging: ${Game.state.isChargingServe}, Charge: ${Game.state.serveChargeTimer.toFixed(2)}s`, 10, 20);
+        }
+    },
+    
+    // Draw serve charge indicator (simple bar)
+    drawServeChargeIndicator() {
+        const ctx = this.ctx;
+        const chargeRatio = Math.min(Game.state.serveChargeTimer / Game.state.maxChargeTime, 1.0);
+        
+        // Position at bottom center of screen
+        const barWidth = 200;
+        const barHeight = 20;
+        const barX = (this.width - barWidth) / 2;
+        const barY = this.height - 60;
+        
+        // Draw background (dark)
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.fillRect(barX, barY, barWidth, barHeight);
+        
+        // Draw charge bar (green to red as it approaches max)
+        const chargeWidth = barWidth * chargeRatio;
+        const r = Math.min(chargeRatio * 2, 1.0) * 255;
+        const g = (1.0 - Math.min(chargeRatio * 2, 1.0)) * 255;
+        ctx.fillStyle = `rgb(${r}, ${g}, 0)`;
+        ctx.fillRect(barX, barY, chargeWidth, barHeight);
+        
+        // Draw border
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(barX, barY, barWidth, barHeight);
+        
+        // Draw text
+        ctx.fillStyle = '#fff';
+        ctx.font = '14px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText('Hold I to charge serve', this.width / 2, barY - 5);
     },
     
     // Draw hitboxes for debugging

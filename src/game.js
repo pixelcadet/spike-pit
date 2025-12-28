@@ -620,7 +620,7 @@ const Game = {
         }
         
         // Upward component for arching trajectory
-        const vz = verticalMultiplier * Physics.ballMovementSpeed;
+        let vz = verticalMultiplier * Physics.ballMovementSpeed;
         
         // IMPORTANT: Set velocities BEFORE exiting serving state
         // This ensures the velocities are set before Physics.update() processes the ball
@@ -708,6 +708,10 @@ const Game = {
         
         let vx, vy;
         if (this.state.servingPlayer === 'ai') {
+            // Make AI serve arc higher (more vertical).
+            // Since AI serve is target-driven, a higher vz increases airtime -> naturally lowers horizontal speed.
+            vz *= 1.7;
+
             // AI serve should ALWAYS cross the net and land on the intended tile, regardless of AI position.
             // So we compute vx/vy from an estimated flight time (target-driven), instead of scaling by ballMovementSpeed.
             const gEff = Physics.GRAVITY * Physics.ballMovementSpeed;

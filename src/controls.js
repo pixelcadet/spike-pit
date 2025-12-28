@@ -114,12 +114,13 @@ const Controls = {
             AI.isActive = e.target.checked;
         });
         
-        // Initialize with default values (5 on 1-10 scale)
+        // Initialize with default values
         this.updateMovementSpeed(5);
         this.updateJumpPower(5);
         this.updateGravity(5);
         this.updateAirTime(5);
-        this.updateBallMovementSpeed(5);
+        // Ball speed default: 2 (slower, easier to read)
+        this.updateBallMovementSpeed(2);
         this.updateReceiveZoneSize(5);
         this.updateSpikeZoneSize(5);
         this.updateServeHorizontal(5);

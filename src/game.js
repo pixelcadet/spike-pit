@@ -15,7 +15,7 @@ const Game = {
         lastPointWinner: null, // 'player' | 'ai' (for UI feedback)
         
         // AI serve pacing (when it's AI turn to serve)
-        aiServeDelay: 1.6,
+        aiServeDelay: 1.0,
         aiServeTimer: 0,
         isServing: true, // Game starts with serving state
         servingPlayer: 'player', // Who is currently serving ('player' or 'ai')
@@ -57,7 +57,7 @@ const Game = {
         this.state.resetDuration = 2.0;
         this.state.isResetting = false;
         this.state.lastPointWinner = null;
-        this.state.aiServeDelay = 1.6;
+        this.state.aiServeDelay = 1.0;
         this.state.aiServeTimer = 0;
         this.state.isServing = true;
         this.state.servingPlayer = 'player';

@@ -11,7 +11,9 @@ const AI = {
         lastBallX: 0,
         lastBallY: 0,
         // Imperfection: AI won't spike every time it can.
-        spikeCooldown: 0
+        spikeCooldown: 0,
+        // Prevent AI from immediately chasing/jumping right after it serves (looks like a pre-serve jump).
+        postServeFreezeTimer: 0
     },
     
     // AI parameters
@@ -30,6 +32,7 @@ const AI = {
         this.state.lastBallX = 0;
         this.state.lastBallY = 0;
         this.state.spikeCooldown = 0;
+        this.state.postServeFreezeTimer = 0;
         this.isActive = true; // Default: AI is active
     },
     
@@ -58,9 +61,27 @@ const AI = {
         const ball = Physics.ball;
         const netX = Physics.NET_X;
         this.state.spikeCooldown = Math.max(0, this.state.spikeCooldown - deltaTime);
+        this.state.postServeFreezeTimer = Math.max(0, (this.state.postServeFreezeTimer ?? 0) - deltaTime);
         
         // Score splash / reset window: freeze AI completely (prevents weird pre-serve jumps).
         if (Game?.state?.isResetting || Game?.state?.matchOver) {
+            this.state.targetX = 0;
+            this.state.targetY = 0;
+            this.state.shouldJump = false;
+            this.state.shouldSpike = false;
+            this.state.shouldReceive = false;
+            return;
+        }
+        
+        // Right after AI serves, freeze briefly so it doesn't instantly jump/chase the ball it just launched.
+        // This makes the serve read as "standing serve" rather than a jumpy action.
+        if (ball.justServed && ball.lastTouchedBy === 'ai' && ball.lastHitType === 'serve') {
+            // Arm the freeze window on the first frame we notice a fresh serve.
+            if ((this.state.postServeFreezeTimer ?? 0) <= 0.001) {
+                this.state.postServeFreezeTimer = 0.6;
+            }
+        }
+        if ((this.state.postServeFreezeTimer ?? 0) > 0) {
             this.state.targetX = 0;
             this.state.targetY = 0;
             this.state.shouldJump = false;

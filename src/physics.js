@@ -85,6 +85,8 @@ const Physics = {
         bounceDamping: 0.7,  // Energy loss on bounce (0.7 = 70% of velocity retained)
         friction: 0.9,       // Ground friction (0.9 = 90% of velocity retained)
         lastTouchedBy: null, // Track who last touched the ball ('player' or 'ai')
+        lastHitType: null,   // 'spike' | 'lob' | 'receive' | 'toss' | 'serve' | 'spikeServe' | 'body' | null
+        tileDamageBounces: 0, // Count of ground impacts since last touch (first impact = big dmg, later = 0.2)
         hasScored: false,    // Flag to prevent multiple scores from same bounce/fall
         justServed: false,   // Flag to prevent immediate collision after serve
         serveTimer: 0         // Timer for serve grace period
@@ -104,6 +106,8 @@ const Physics = {
         this.ball.vy = 0;
         this.ball.vz = 0;
         this.ball.lastTouchedBy = null;
+        this.ball.lastHitType = null;
+        this.ball.tileDamageBounces = 0;
         this.ball.hasScored = false;
         this.ball.justServed = false;
         this.ball.serveTimer = 0;
@@ -216,9 +220,109 @@ const Physics = {
         const edgeC_Threshold = 0.1; // Bottom side (front of court) - falls quickly
         
         // Character can stand if all edges are below their thresholds
-        return percentages.edgeA < edgeA_Threshold && 
-               percentages.edgeB < edgeB_Threshold && 
-               percentages.edgeC < edgeC_Threshold;
+        const onCourtEdges = percentages.edgeA < edgeA_Threshold && 
+                             percentages.edgeB < edgeB_Threshold && 
+                             percentages.edgeC < edgeC_Threshold;
+        if (!onCourtEdges) return false;
+        
+        // Hole rule: if footprint overlaps a destroyed tile by >= 70%, they fall (same threshold feel as edges A/B).
+        const maxHoleOverlap = this.getFootprintHoleOverlapMax(character);
+        return maxHoleOverlap < 0.7;
+    },
+    
+    // Returns 0..1 indicating the maximum fraction of the character footprint that lies over any single destroyed tile.
+    // Approximated via sampling points across the footprint rectangle.
+    getFootprintHoleOverlapMax(character) {
+        if (!Game?.getTileState) return 0;
+        
+        const footprintWidth = character.radius * 1.2;
+        const footprintDepth = character.radius * 0.5;
+        
+        const left = character.x - footprintWidth * 0.5;
+        const right = character.x + footprintWidth * 0.5;
+        const front = character.y - footprintDepth * 0.5;
+        const back = character.y + footprintDepth * 0.5;
+        
+        const samplesX = 5;
+        const samplesY = 3;
+        const counts = new Map(); // key "tx,ty" -> count
+        let totalInBounds = 0;
+        
+        for (let iy = 0; iy < samplesY; iy++) {
+            const fy = samplesY === 1 ? 0.5 : iy / (samplesY - 1);
+            const sy = front + (back - front) * fy;
+            for (let ix = 0; ix < samplesX; ix++) {
+                const fx = samplesX === 1 ? 0.5 : ix / (samplesX - 1);
+                const sx = left + (right - left) * fx;
+                
+                const tx = Math.floor(sx);
+                const ty = Math.floor(sy);
+                if (tx < 0 || tx >= this.COURT_WIDTH || ty < 0 || ty >= this.COURT_LENGTH) continue;
+                totalInBounds++;
+                const key = `${tx},${ty}`;
+                counts.set(key, (counts.get(key) ?? 0) + 1);
+            }
+        }
+        
+        if (totalInBounds === 0) return 0;
+        
+        let maxOverlap = 0;
+        for (const [key, count] of counts.entries()) {
+            const [txStr, tyStr] = key.split(',');
+            const tx = Number(txStr);
+            const ty = Number(tyStr);
+            const tile = Game.getTileState(tx, ty);
+            if (!tile || tile.indestructible || !tile.destroyed) continue;
+            const ratio = count / totalInBounds;
+            if (ratio > maxOverlap) maxOverlap = ratio;
+        }
+        return maxOverlap;
+    },
+    
+    // Determine which tile the ball "landed on" by sampling points around the ball's footprint circle.
+    // Returns { tx, ty } (always a single tile), or null if no in-bounds samples.
+    getBallLandingTile() {
+        const b = this.ball;
+        const r = b.radius;
+        const samples = [
+            [0, 0],
+            [r, 0],
+            [-r, 0],
+            [0, r],
+            [0, -r],
+            [r * 0.707, r * 0.707],
+            [r * 0.707, -r * 0.707],
+            [-r * 0.707, r * 0.707],
+            [-r * 0.707, -r * 0.707]
+        ];
+        
+        const counts = new Map();
+        for (const [dx, dy] of samples) {
+            const sx = b.x + dx;
+            const sy = b.y + dy;
+            const tx = Math.floor(sx);
+            const ty = Math.floor(sy);
+            if (tx < 0 || tx >= this.COURT_WIDTH || ty < 0 || ty >= this.COURT_LENGTH) continue;
+            const key = `${tx},${ty}`;
+            counts.set(key, (counts.get(key) ?? 0) + 1);
+        }
+        
+        if (counts.size === 0) {
+            const tx = Math.floor(Math.max(0, Math.min(this.COURT_WIDTH - 0.001, b.x)));
+            const ty = Math.floor(Math.max(0, Math.min(this.COURT_LENGTH - 0.001, b.y)));
+            return { tx, ty };
+        }
+        
+        let bestKey = null;
+        let bestCount = -1;
+        for (const [key, count] of counts.entries()) {
+            if (count > bestCount) {
+                bestCount = count;
+                bestKey = key;
+            }
+        }
+        const [txStr, tyStr] = bestKey.split(',');
+        return { tx: Number(txStr), ty: Number(tyStr) };
     },
     
     // Check if ball is on the court (accounting for ball radius)
@@ -684,6 +788,8 @@ const Physics = {
             
             // Track who last touched the ball
             b.lastTouchedBy = (character === this.player) ? 'player' : 'ai';
+            b.lastHitType = 'body';
+            b.tileDamageBounces = 0;
             b.hasScored = false; // Reset score flag on new touch
             
             return true;
@@ -765,6 +871,9 @@ const Physics = {
             // Add character's velocity influence (slight)
             b.vx += character.vx * 0.1;
             b.vy += character.vy * 0.1;
+            
+            b.lastHitType = 'lob';
+            b.tileDamageBounces = 0;
         } else {
             // SPIKE: Strong trajectory with steep downward angle (similar to spike serve)
             // Calculate target based on ball's distance from net
@@ -835,6 +944,9 @@ const Physics = {
             // Add character's velocity influence (slight)
             b.vx += character.vx * 0.05;
             b.vy += character.vy * 0.05;
+            
+            b.lastHitType = 'spike';
+            b.tileDamageBounces = 0;
         }
         
         character.hasSpiked = true;
@@ -916,6 +1028,8 @@ const Physics = {
             // Keep it short (clamped distance) but allow aiming with buffered WASD (supports diagonals).
             const vz0 = this.RECEIVE_ARCH_HEIGHT * 0.7 * this.ballMovementSpeed; // Reduced upward toss (70% of normal)
             b.vz = vz0;
+            b.lastHitType = 'toss';
+            b.tileDamageBounces = 0;
             
             const aim = Input.getAim2D?.() ?? { x: 0, y: 0 };
             // Disallow "back toss" (away from the net) so ground receives stay simple and forward-oriented.
@@ -1007,6 +1121,9 @@ const Physics = {
             // Add slight character velocity influence (reduced for lob)
             b.vx += character.vx * 0.1;
             b.vy += character.vy * 0.1;
+            
+            b.lastHitType = 'receive';
+            b.tileDamageBounces = 0;
         }
         
         // Mark character as having received (prevent spamming)
@@ -1143,6 +1260,44 @@ const Physics = {
         if (b.z <= b.groundLevel) {
             // Only bounce if ball is on court - if off court, let it fall through
             if (this.isBallOnCourt()) {
+                // Tile system: determine impacted tile (single tile) and apply damage / holes.
+                const landing = this.getBallLandingTile();
+                if (landing && Game?.getTileState) {
+                    const { tx, ty } = landing;
+                    const tile = Game.getTileState(tx, ty);
+                    
+                    // If tile is already destroyed (hole), ball falls through and counts as out-of-bounds.
+                    if (tile && !tile.indestructible && tile.destroyed) {
+                        if (!b.hasScored && b.lastTouchedBy) {
+                            // Opponent of last toucher scores
+                            if (b.lastTouchedBy === 'player') {
+                                Game.scorePoint('ai');
+                            } else {
+                                Game.scorePoint('player');
+                            }
+                            b.hasScored = true;
+                        }
+                        // Fall through: don't clamp or bounce
+                        b.z = b.groundLevel - 0.05;
+                        if (b.vz > -0.05 * this.ballMovementSpeed) {
+                            b.vz = -0.05 * this.ballMovementSpeed;
+                        }
+                        return;
+                    }
+                    
+                    // Apply tile damage on ground contact (tile HP persists across points).
+                    // First ground impact since last touch uses big damage; subsequent bounces use chip damage (0.2).
+                    if (tile && !tile.indestructible) {
+                        const spikeLike = b.lastHitType === 'spike' || b.lastHitType === 'spikeServe';
+                        const damage = (b.tileDamageBounces > 0) ? 0.2 : (spikeLike ? 3 : 1);
+                        Game.damageTile(tx, ty, damage);
+                        b.tileDamageBounces = (b.tileDamageBounces ?? 0) + 1;
+                    } else if (tile) {
+                        // Still count the bounce so later bounces (before next touch) are treated as "repeated".
+                        b.tileDamageBounces = (b.tileDamageBounces ?? 0) + 1;
+                    }
+                }
+                
                 // Check for scoring: ball bounces on court ground
                 // Score goes to opponent of the side where ball lands
                 if (!b.hasScored) {
@@ -1208,46 +1363,35 @@ const Physics = {
         // Ball can move freely (no clamping)
     },
     
-    // Respawn character at the edge they fell from (fixed spots slightly inward from each edge)
+    // Respawn character near the edge they fell from, but snap to nearest intact tile on their side.
     respawnCharacter(character) {
-        // Respawn at fixed position based on which edge they fell from
+        const side = (character === this.player) ? 'player' : 'ai';
+        
+        let preferredTx, preferredTy;
         if (character.fallEdge === 'A') {
-            // EDGE A: back of court - respawn at back edge, slightly inward
-            character.y = this.COURT_LENGTH - 0.3; // Slightly inward from back edge
-            // Center horizontally on their side
-            if (character === this.player) {
-                character.x = this.NET_X * 0.5; // Center of player's side
-            } else {
-                character.x = this.NET_X + (this.COURT_WIDTH - this.NET_X) * 0.5; // Center of AI's side
-            }
+            // Back row
+            preferredTy = this.COURT_LENGTH - 1;
+            preferredTx = side === 'player' ? 1 : 6;
         } else if (character.fallEdge === 'B') {
-            // EDGE B: left/right side - respawn at side edge, slightly inward
-            if (character === this.player) {
-                character.x = 0.3; // Slightly inward from left edge
-            } else {
-                character.x = this.COURT_WIDTH - 0.3; // Slightly inward from right edge
-            }
-            // Center depth-wise
-            character.y = this.COURT_LENGTH * 0.5; // Center depth
+            // Side edge
+            preferredTy = Math.floor(this.COURT_LENGTH * 0.5);
+            preferredTx = side === 'player' ? 0 : (this.COURT_WIDTH - 1);
         } else if (character.fallEdge === 'C') {
-            // EDGE C: front of court - respawn at front edge, slightly inward
-            character.y = 0.3; // Slightly inward from front edge
-            // Center horizontally on their side
-            if (character === this.player) {
-                character.x = this.NET_X * 0.5; // Center of player's side
-            } else {
-                character.x = this.NET_X + (this.COURT_WIDTH - this.NET_X) * 0.5; // Center of AI's side
-            }
+            // Front row
+            preferredTy = 0;
+            preferredTx = side === 'player' ? 1 : 6;
         } else {
-            // Fallback: if fallEdge is unknown, respawn at center
-            if (character === this.player) {
-                character.x = this.NET_X * 0.5;
-                character.y = this.COURT_LENGTH * 0.5;
-            } else {
-                character.x = this.NET_X + (this.COURT_WIDTH - this.NET_X) * 0.5;
-                character.y = this.COURT_LENGTH * 0.5;
-            }
+            // Center-ish
+            preferredTy = Math.floor(this.COURT_LENGTH * 0.5);
+            preferredTx = side === 'player' ? 2 : 5;
         }
+        
+        const spawn = Game?.findNearestIntactTileCenter
+            ? Game.findNearestIntactTileCenter(preferredTx, preferredTy, side)
+            : { x: side === 'player' ? this.NET_X * 0.5 : this.NET_X + (this.COURT_WIDTH - this.NET_X) * 0.5, y: this.COURT_LENGTH * 0.5 };
+        
+        character.x = spawn.x;
+        character.y = spawn.y;
         
         // Reset position and velocity
         character.z = 0;

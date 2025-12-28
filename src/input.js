@@ -9,6 +9,9 @@ const Input = {
     // (e.g., tap W/S shortly before/after holding I) to still count as aiming.
     _aimDepthDir: 0, // -1 = backward (S), +1 = forward (W)
     _aimDepthTimeMs: -Infinity,
+    // Buffered x-axis aim (A/D) for toss aiming.
+    _aimXDir: 0, // -1 = left (A), +1 = right (D)
+    _aimXTimeMs: -Infinity,
     aimBufferMs: 150,
     
     init() {
@@ -24,6 +27,12 @@ const Input = {
             } else if (key === 's') {
                 this._aimDepthDir = -1;
                 this._aimDepthTimeMs = performance.now();
+            } else if (key === 'a') {
+                this._aimXDir = -1;
+                this._aimXTimeMs = performance.now();
+            } else if (key === 'd') {
+                this._aimXDir = 1;
+                this._aimXTimeMs = performance.now();
             }
         });
         
@@ -78,6 +87,27 @@ const Input = {
             return this._aimDepthDir;
         }
         return 0;
+    },
+    
+    // Returns -1/0/+1 indicating buffered aim direction along x axis (A/D).
+    // Accepts sequential inputs within aimBufferMs so players don't need perfect timing.
+    getAimXDirection(bufferMs = this.aimBufferMs) {
+        if (this.isPressed('d')) return 1;
+        if (this.isPressed('a')) return -1;
+        
+        const now = performance.now();
+        if (now - this._aimXTimeMs <= bufferMs) {
+            return this._aimXDir;
+        }
+        return 0;
+    },
+    
+    // Returns a buffered 2D aim vector from WASD, supporting diagonals and sequential presses.
+    // Output: { x: -1..1, y: -1..1 } (not normalized).
+    getAim2D(bufferMs = this.aimBufferMs) {
+        const x = this.getAimXDirection(bufferMs);
+        const y = this.getAimDepthDirection(bufferMs);
+        return { x, y };
     },
     
     // Movement inputs (disabled when character is falling or serving)

@@ -112,9 +112,36 @@ const Render = {
                 const backLeft = this.project(worldX, worldY + 1, 0);
                 const backRight = this.project(worldX + 1, worldY + 1, 0);
                 
-                // Alternate tile colors for grid effect
+                // Tile visuals (destructible tiles with HP + holes)
                 const isEven = (tx + ty) % 2 === 0;
-                ctx.fillStyle = isEven ? '#5a8c69' : '#4a7c59';
+                const baseA = '#5a8c69';
+                const baseB = '#4a7c59';
+                
+                let fill = isEven ? baseA : baseB;
+                const tileState = Game?.getTileState ? Game.getTileState(tx, ty) : null;
+                if (tileState) {
+                    if (tileState.indestructible) {
+                        // Net-adjacent columns (tx=3 and tx=4): indestructible + visually distinct
+                        fill = isEven ? '#4b6a9b' : '#3f5f8a';
+                    } else if (tileState.destroyed) {
+                        // Hole
+                        fill = '#120f14';
+                    } else {
+                        // Damage shading by HP
+                        const hp = tileState.hp ?? 0;
+                        const ratio = tileState.maxHp > 0 ? (hp / tileState.maxHp) : 0;
+                        if (ratio >= 0.76) {
+                            fill = isEven ? baseA : baseB;
+                        } else if (ratio >= 0.51) {
+                            fill = isEven ? '#4e7f5d' : '#416f52';
+                        } else if (ratio >= 0.26) {
+                            fill = isEven ? '#6b6a4a' : '#5a5a3f';
+                        } else {
+                            fill = isEven ? '#5b3f3f' : '#4b3434';
+                        }
+                    }
+                }
+                ctx.fillStyle = fill;
                 
                 // Draw trapezoid tile (wider at front, narrower at back)
                 ctx.beginPath();
@@ -126,7 +153,8 @@ const Render = {
                 ctx.fill();
                 
                 // Draw tile border
-                ctx.strokeStyle = '#3a6c49';
+                // Make holes pop a little more
+                ctx.strokeStyle = (tileState && tileState.destroyed) ? '#2a2230' : '#3a6c49';
                 ctx.lineWidth = 1;
                 ctx.stroke();
             }

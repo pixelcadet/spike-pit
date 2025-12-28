@@ -4,6 +4,10 @@ const Game = {
     state: {
         playerScore: 0,
         aiScore: 0,
+        pointsToWin: 7,
+        matchOver: false,
+        matchWinner: null, // 'player' | 'ai'
+        matchEndReason: null,
         scoreCooldown: 0, // Prevent multiple scores from same bounce/fall
         resetTimer: 0, // Timer for reset after scoring
         isResetting: false,
@@ -23,7 +27,12 @@ const Game = {
         // Prevent holding 'I' after a serve/spike-serve from being treated as a normal gameplay hit.
         // Without this, main.js will call Physics.attemptSpike()/attemptReceive() on the next frame and
         // overwrite the serve velocities (this is exactly the vx/vz jump you saw).
-        blockHitUntilIRelease: false
+        blockHitUntilIRelease: false,
+        
+        // Court tiles (8x4). Destructible tiles start at 4 HP; destroyed tiles are holes.
+        // Net-adjacent columns (tx=3 and tx=4) are indestructible (stored as null).
+        tileMaxHp: 4,
+        tileHp: [] // flat array length = Physics.COURT_WIDTH * Physics.COURT_LENGTH
     },
     
     // Serve multipliers (set by sliders)
@@ -33,6 +42,10 @@ const Game = {
     init() {
         this.state.playerScore = 0;
         this.state.aiScore = 0;
+        this.state.pointsToWin = 7;
+        this.state.matchOver = false;
+        this.state.matchWinner = null;
+        this.state.matchEndReason = null;
         this.state.scoreCooldown = 0;
         this.state.resetTimer = 0;
         this.state.isResetting = false;
@@ -49,6 +62,7 @@ const Game = {
         this.state.spikeServeTarget = null;
         this.state.isOverchargedSpikeServe = false;
         this.state.blockHitUntilIRelease = false;
+        this.initCourtTiles();
         // Don't reset serve multipliers here - they're controlled by sliders
         // Only set defaults if they haven't been set yet (first initialization)
         if (this.serveHorizontalMultiplier === undefined) {
@@ -59,6 +73,125 @@ const Game = {
         }
         this.updateScoreDisplay();
         this.setupServe();
+    },
+    
+    // --- Court tiles / match rules ---
+    isTileIndestructible(tx) {
+        return tx === 3 || tx === 4;
+    },
+    
+    tileIndex(tx, ty) {
+        return ty * Physics.COURT_WIDTH + tx;
+    },
+    
+    initCourtTiles() {
+        const total = Physics.COURT_WIDTH * Physics.COURT_LENGTH;
+        this.state.tileHp = new Array(total);
+        for (let ty = 0; ty < Physics.COURT_LENGTH; ty++) {
+            for (let tx = 0; tx < Physics.COURT_WIDTH; tx++) {
+                const idx = this.tileIndex(tx, ty);
+                this.state.tileHp[idx] = this.isTileIndestructible(tx) ? null : this.state.tileMaxHp;
+            }
+        }
+    },
+    
+    getTileState(tx, ty) {
+        const idx = this.tileIndex(tx, ty);
+        const hp = this.state.tileHp[idx];
+        const indestructible = hp === null;
+        const destroyed = !indestructible && hp <= 0;
+        return { hp, indestructible, destroyed, maxHp: this.state.tileMaxHp };
+    },
+    
+    isTileDestroyed(tx, ty) {
+        const { destroyed } = this.getTileState(tx, ty);
+        return destroyed;
+    },
+    
+    isTileIntactForStanding(tx, ty) {
+        const { indestructible, hp } = this.getTileState(tx, ty);
+        return indestructible || (hp !== null && hp > 0);
+    },
+    
+    isTileOnSide(tx, side) {
+        if (side === 'player') return tx >= 0 && tx < Physics.NET_X;
+        return tx >= Physics.NET_X && tx < Physics.COURT_WIDTH;
+    },
+    
+    damageTile(tx, ty, amount) {
+        const idx = this.tileIndex(tx, ty);
+        const hp = this.state.tileHp[idx];
+        if (hp === null) return null; // indestructible
+        if (hp <= 0) return hp; // already destroyed
+        
+        const newHp = Math.max(0, hp - amount);
+        this.state.tileHp[idx] = newHp;
+        this.checkWinConditions();
+        return newHp;
+    },
+    
+    areAllDestructibleTilesDestroyed(side) {
+        for (let ty = 0; ty < Physics.COURT_LENGTH; ty++) {
+            for (let tx = 0; tx < Physics.COURT_WIDTH; tx++) {
+                if (!this.isTileOnSide(tx, side)) continue;
+                if (this.isTileIndestructible(tx)) continue;
+                const { hp } = this.getTileState(tx, ty);
+                if (hp > 0) return false;
+            }
+        }
+        return true;
+    },
+    
+    checkWinConditions() {
+        if (this.state.matchOver) return;
+        
+        if (this.state.playerScore >= this.state.pointsToWin) {
+            this.endMatch('player', 'points');
+            return;
+        }
+        if (this.state.aiScore >= this.state.pointsToWin) {
+            this.endMatch('ai', 'points');
+            return;
+        }
+        
+        // Tile win: destroy all opponent destructible tiles
+        if (this.areAllDestructibleTilesDestroyed('player')) {
+            this.endMatch('ai', 'tiles');
+            return;
+        }
+        if (this.areAllDestructibleTilesDestroyed('ai')) {
+            this.endMatch('player', 'tiles');
+        }
+    },
+    
+    endMatch(winner, reason) {
+        this.state.matchOver = true;
+        this.state.matchWinner = winner;
+        this.state.matchEndReason = reason;
+        this.state.isResetting = false;
+        this.state.resetTimer = 0;
+    },
+    
+    // Find nearest intact tile center on a side, starting from a preferred tile coord.
+    findNearestIntactTileCenter(preferredTx, preferredTy, side) {
+        const maxR = Physics.COURT_WIDTH + Physics.COURT_LENGTH;
+        for (let r = 0; r <= maxR; r++) {
+            for (let dy = -r; dy <= r; dy++) {
+                for (let dx = -r; dx <= r; dx++) {
+                    if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // perimeter only
+                    const tx = preferredTx + dx;
+                    const ty = preferredTy + dy;
+                    if (tx < 0 || tx >= Physics.COURT_WIDTH || ty < 0 || ty >= Physics.COURT_LENGTH) continue;
+                    if (!this.isTileOnSide(tx, side)) continue;
+                    if (!this.isTileIntactForStanding(tx, ty)) continue;
+                    return { x: tx + 0.5, y: ty + 0.5, tx, ty };
+                }
+            }
+        }
+        // Fallback: center of side (net-adjacent tile should always exist and be intact)
+        const txFallback = side === 'player' ? 3 : 4;
+        const tyFallback = 1;
+        return { x: txFallback + 0.5, y: tyFallback + 0.5, tx: txFallback, ty: tyFallback };
     },
     
     update(input, deltaTime) {
@@ -135,6 +268,7 @@ const Game = {
     },
     
     scorePoint(winner) {
+        if (this.state.matchOver) return;
         // Prevent multiple scores from same bounce/fall
         if (this.state.scoreCooldown > 0) {
             return;
@@ -155,12 +289,15 @@ const Game = {
         this.state.resetTimer = 0.5;
         
         this.updateScoreDisplay();
+        this.checkWinConditions();
     },
     
     resetAfterScore() {
+        if (this.state.matchOver) return;
         // Reset character positions - serve position: further from net
-        Physics.player.x = 1.0; // Further from net (closer to left edge)
-        Physics.player.y = 2.0; // Middle depth
+        const pSpawn = this.findNearestIntactTileCenter(1, 2, 'player');
+        Physics.player.x = pSpawn.x;
+        Physics.player.y = pSpawn.y;
         Physics.player.z = 0;
         Physics.player.vx = 0;
         Physics.player.vy = 0;
@@ -175,8 +312,9 @@ const Game = {
         Physics.player.isBlinking = false;
         Physics.player.blinkTimer = 0;
         
-        Physics.ai.x = 7.0; // Further from net (closer to right edge)
-        Physics.ai.y = 2.0; // Middle depth
+        const aiSpawn = this.findNearestIntactTileCenter(7, 2, 'ai');
+        Physics.ai.x = aiSpawn.x;
+        Physics.ai.y = aiSpawn.y;
         Physics.ai.z = 0;
         Physics.ai.vx = 0;
         Physics.ai.vy = 0;
@@ -221,6 +359,8 @@ const Game = {
         Physics.ball.vy = 0;
         Physics.ball.vz = 0;
         Physics.ball.lastTouchedBy = null;
+        Physics.ball.lastHitType = null;
+        Physics.ball.tileDamageBounces = 0;
         Physics.ball.hasScored = false;
         Physics.ball.justServed = false;
         Physics.ball.serveTimer = 0;
@@ -461,6 +601,8 @@ const Game = {
         
         // Track who served
         Physics.ball.lastTouchedBy = this.state.servingPlayer;
+        Physics.ball.lastHitType = 'serve';
+        Physics.ball.tileDamageBounces = 0;
         Physics.ball.hasScored = false;
         
         // Exit serving state LAST, after everything is set up
@@ -557,6 +699,8 @@ const Game = {
         
         // Track who served
         Physics.ball.lastTouchedBy = this.state.servingPlayer;
+        Physics.ball.lastHitType = 'serve';
+        Physics.ball.tileDamageBounces = 0;
         Physics.ball.hasScored = false;
         
         // Exit serving state
@@ -630,6 +774,8 @@ const Game = {
         
         // Track who served
         Physics.ball.lastTouchedBy = this.state.servingPlayer;
+        Physics.ball.lastHitType = 'spikeServe';
+        Physics.ball.tileDamageBounces = 0;
         Physics.ball.hasScored = false;
         
         // Exit serving state (isServing already set to false at the beginning of this function)
@@ -652,6 +798,11 @@ const Game = {
     },
     
     getStatusText() {
+        if (this.state.matchOver) {
+            const who = this.state.matchWinner === 'player' ? 'Player wins!' : 'AI wins!';
+            const why = this.state.matchEndReason === 'tiles' ? ' (All tiles destroyed)' : ' (First to 7)';
+            return `Match over — ${who}${why} Press P to reset.`;
+        }
         if (this.state.isResetting) {
             return 'Point scored! Resetting...';
         }

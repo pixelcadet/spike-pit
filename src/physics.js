@@ -1304,7 +1304,8 @@ const Physics = {
                             // Camera shake: only for spike-like hits that directly impact the tile (first ground impact).
                             // Includes spike serves and normal spikes.
                             if (spikeLike && typeof Render !== 'undefined' && Render?.startShake) {
-                                Render.startShake(5, 0.12);
+                                // Slight but noticeable (especially when score splash appears right after).
+                                Render.startShake(9, 0.18);
                             }
                         }
                         b.tileDamageBounces = (b.tileDamageBounces ?? 0) + 1;

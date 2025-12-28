@@ -222,10 +222,10 @@ const Game = {
         // Map charge time to power
         // Charge mapping:
         // - 0.0s to minChargeTime (0.05s = 10%): No serve allowed
-        // - minChargeTime (0.05s = 10%) to 75%: Normal arching serve scaling from too close to furthest (highest x before out of bounds)
+        // - minChargeTime (0.05s = 10%) to 65%: Normal arching serve scaling from too close to furthest (highest x before out of bounds)
         //   - At 10%: Uses "too close" power (might not cross net)
-        //   - At 75%: Uses "furthest normal" power (high x, still within court)
-        // - >75% to 85%: Spike serve (jump, lands inside court near edge)
+        //   - At 65%: Uses "furthest normal" power (high x, still within court)
+        // - >65% to 85%: Spike serve (jump, lands inside court near edge)
         // - >85% to 100%: Overcharged spike serve (jump, lands out of court)
         // Power range: too close (H=0.1711, V=0.1756) to too far (H=0.2644, V=0.2822)
         const minHorizontalPower = 0.1711; // Too close (slider 3) - might not cross net
@@ -240,10 +240,10 @@ const Game = {
         // Calculate charge percentage (0-100%)
         const chargePercent = (this.state.serveChargeTimer / this.state.maxChargeTime) * 100;
         // Zone definitions:
-        // - 0% to 75%: Normal serve zone (possibility of not crossing net if too early)
-        // - >75% to 85%: Sweet spot zone (spike serve, lands inside court near edge)
+        // - 0% to 65%: Normal serve zone (possibility of not crossing net if too early)
+        // - >65% to 85%: Sweet spot zone (spike serve, lands inside court near edge)
         // - >85% to 100%: Overcharged spike serve (lands out of court)
-        const isSpikeServe = chargePercent > 75 && chargePercent <= 85; // Sweet spot: >75% to 85% (exclusive of 75%, inclusive of 85%)
+        const isSpikeServe = chargePercent > 65 && chargePercent <= 85; // Sweet spot: >65% to 85% (exclusive of 65%, inclusive of 85%)
         const isOverchargedSpikeServe = chargePercent > 85; // Overcharged: >85% to 100% (exclusive of 85%)
         
         console.log('=== CHARGE CALCULATION ===', {
@@ -397,16 +397,16 @@ const Game = {
             // Don't serve yet - wait for jump peak
             return false;
         } else {
-            // Normal charge (10% to 75%): scale from too close to furthest normal serve
-            // Map charge time from minChargeTime (10%) to 75% of maxChargeTime
-            const sweetSpotStartTime = this.state.maxChargeTime * 0.75; // 75% = start of sweet spot
+            // Normal charge (10% to 65%): scale from too close to furthest normal serve
+            // Map charge time from minChargeTime (10%) to 65% of maxChargeTime
+            const sweetSpotStartTime = this.state.maxChargeTime * 0.65; // 65% = start of sweet spot
             const effectiveChargeTime = this.state.serveChargeTimer - this.state.minChargeTime; // Start from 10%
-            const effectiveMaxChargeTime = sweetSpotStartTime - this.state.minChargeTime; // Range: 10% to 75%
+            const effectiveMaxChargeTime = sweetSpotStartTime - this.state.minChargeTime; // Range: 10% to 65%
             const chargeRatio = Math.min(effectiveChargeTime / effectiveMaxChargeTime, 1.0);
             
-            // Scale from too close (at 10%) to furthest normal serve (at 75%)
+            // Scale from too close (at 10%) to furthest normal serve (at 65%)
             // At 10%: chargeRatio = 0, uses minHorizontalPower (too close, might not cross net)
-            // At 75%: chargeRatio = 1, uses furthestNormalHorizontalPower (high x, still within court)
+            // At 65%: chargeRatio = 1, uses furthestNormalHorizontalPower (high x, still within court)
             horizontalMultiplier = minHorizontalPower + (furthestNormalHorizontalPower - minHorizontalPower) * chargeRatio;
             verticalMultiplier = minVerticalPower + (furthestNormalVerticalPower - minVerticalPower) * chargeRatio;
         }
@@ -414,13 +414,13 @@ const Game = {
         // Determine target (opponent's side)
         let targetX, targetY;
         if (this.state.servingPlayer === 'player') {
-            // For normal serves (before 75%): target highest x before out of bounds
-            // For spike serves (>75% to 100%): target is already set in spike serve logic above
+            // For normal serves (before 65%): target highest x before out of bounds
+            // For spike serves (>65% to 100%): target is already set in spike serve logic above
             if (isSpikeServe || isOverchargedSpikeServe) {
                 // Spike serve target was already calculated above, skip here
                 // (targetX and targetY are set in the spike serve block)
             } else {
-                // Normal serve (before 75%): target highest x before out of bounds
+                // Normal serve (before 65%): target highest x before out of bounds
                 targetX = Physics.COURT_WIDTH * 0.95; // 95% = 7.6 (highest x before out of bounds, COURT_WIDTH = 8)
                 
                 // Adjust targetY based on serve direction

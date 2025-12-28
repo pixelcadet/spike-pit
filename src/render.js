@@ -628,11 +628,11 @@ const Render = {
         const arcThickness = 8;
         
         // Zone definitions (must match game.js logic):
-        // - 0% to 75%: Normal serve zone (white)
-        // - >75% to 85%: Sweet spot zone (blue)
+        // - 0% to 65%: Normal serve zone (white)
+        // - >65% to 85%: Sweet spot zone (blue)
         // - >85% to 100%: Overcharged zone (white, but will go out of bounds)
-        const normalZoneEnd = 0.75;    // 75% - end of normal zone
-        const sweetSpotStart = 0.75;    // 75% - start of sweet spot (visual starts here, but code excludes exactly 75%)
+        const normalZoneEnd = 0.65;    // 65% - end of normal zone
+        const sweetSpotStart = 0.65;    // 65% - start of sweet spot (visual starts here, but code excludes exactly 65%)
         const sweetSpotEnd = 0.85;      // 85% - end of sweet spot (inclusive)
         const overchargedStart = 0.85;  // 85% - start of overcharged (visual starts here, but code excludes exactly 85%)
         
@@ -651,10 +651,10 @@ const Render = {
         ctx.arc(gaugeCenterX, gaugeCenterY, gaugeRadius, startAngle, startAngle + totalAngle, true); // Full 100 degree arc
         ctx.stroke();
         
-        // Draw blue sweet spot (>75% to 85%)
+        // Draw blue sweet spot (>65% to 85%)
         ctx.strokeStyle = 'rgba(46, 134, 171, 0.9)'; // Blue with 90% opacity
         ctx.lineWidth = arcThickness;
-        ctx.lineCap = 'round';
+        ctx.lineCap = 'butt'; // Square ends (not rounded) for sweet spot zone
         ctx.beginPath();
         ctx.arc(gaugeCenterX, gaugeCenterY, gaugeRadius, sweetSpotStartAngle, sweetSpotEndAngle, true); // true = counter-clockwise
         ctx.stroke();
@@ -674,15 +674,30 @@ const Render = {
             ctx.arc(gaugeCenterX, gaugeCenterY, gaugeRadius, startAngle, chargeAngle, true); // true = counter-clockwise
             ctx.stroke();
             
-            // Draw pointer circle at the end of the filling bar (dark blue, solid)
+            // Draw thin line indicator at the end of the filling bar
+            // Line should be perpendicular to the circumference (along the radius direction)
             const pointerX = gaugeCenterX + Math.cos(chargeAngle) * gaugeRadius;
             const pointerY = gaugeCenterY + Math.sin(chargeAngle) * gaugeRadius;
             
-            // Draw a circle at the end of the progress arc for better visibility
-            ctx.fillStyle = '#1a4d6b'; // Dark blue solid color
+            // Check if needle is in sweet spot zone (>65% to 85%)
+            const isInSweetSpot = chargeRatio > 0.65 && chargeRatio <= 0.85;
+            
+            // Draw a thin line along the radius direction (perpendicular to the circumference)
+            const lineLength = 12; // Fixed length
+            // Extend the line outward from the arc point along the radius
+            const lineStartX = pointerX - Math.cos(chargeAngle) * (lineLength / 2);
+            const lineStartY = pointerY - Math.sin(chargeAngle) * (lineLength / 2);
+            const lineEndX = pointerX + Math.cos(chargeAngle) * (lineLength / 2);
+            const lineEndY = pointerY + Math.sin(chargeAngle) * (lineLength / 2);
+            
+            // Change color based on sweet spot (size and thickness stay the same)
+            ctx.strokeStyle = isInSweetSpot ? '#00FF00' : '#1a4d6b'; // Green in sweet spot, dark blue otherwise
+            ctx.lineWidth = 2; // Fixed thin line
+            ctx.lineCap = 'round';
             ctx.beginPath();
-            ctx.arc(pointerX, pointerY, 4, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.moveTo(lineStartX, lineStartY);
+            ctx.lineTo(lineEndX, lineEndY);
+            ctx.stroke();
         }
     },
     

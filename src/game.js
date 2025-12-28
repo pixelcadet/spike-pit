@@ -697,43 +697,48 @@ const Game = {
             targetY = minY + Math.random() * (maxY - minY);
         }
         
-        // Calculate direction to target
-        const dirX = targetX - Physics.ball.x;
-        const dirY = targetY - Physics.ball.y;
-        const dirLength = Math.sqrt(dirX * dirX + dirY * dirY);
+        const b = Physics.ball;
         
-        // Use default slider values for AI
+        // Use default slider values for serves
         const horizontalMultiplier = this.serveHorizontalMultiplier;
         const verticalMultiplier = this.serveVerticalMultiplier;
         
-        let vx, vy;
-        if (dirLength < 0.01) {
-            // If ball is already at target, serve straight forward
-            if (this.state.servingPlayer === 'player') {
-                vx = horizontalMultiplier * Physics.ballMovementSpeed;
-            } else {
-                vx = -horizontalMultiplier * Physics.ballMovementSpeed;
-            }
-            vy = 0;
-        } else {
-            // Normalize horizontal direction
-            const normDirX = dirX / dirLength;
-            const normDirY = dirY / dirLength;
-            
-            // Apply serve velocity with arching trajectory
-            vx = normDirX * horizontalMultiplier * Physics.ballMovementSpeed;
-            vy = normDirY * horizontalMultiplier * Physics.ballMovementSpeed;
-            
-            // Safety check for AI serves: ensure ball always crosses the net (x=4)
-            // Target is always on player side (x < 4), so vx should be negative (leftward)
-            if (this.state.servingPlayer === 'ai' && vx >= 0) {
-                // Force negative vx to ensure ball crosses net toward player side
-                vx = -Math.abs(vx);
-            }
-        }
-        
         // Upward component for arching trajectory
         const vz = verticalMultiplier * Physics.ballMovementSpeed;
+        
+        let vx, vy;
+        if (this.state.servingPlayer === 'ai') {
+            // AI serve should ALWAYS cross the net and land on the intended tile, regardless of AI position.
+            // So we compute vx/vy from an estimated flight time (target-driven), instead of scaling by ballMovementSpeed.
+            const gEff = Physics.GRAVITY * Physics.ballMovementSpeed;
+            const z0 = Math.max(0.001, b.z - b.groundLevel);
+            const disc = (vz * vz) + 2 * gEff * z0;
+            const t = gEff > 1e-6 ? (vz + Math.sqrt(Math.max(0, disc))) / gEff : 60; // frames
+            
+            vx = (targetX - b.x) / t;
+            vy = (targetY - b.y) / t;
+            
+            // Safety: if serving from AI side toward player side, vx must be negative to cross the net.
+            if (b.x > Physics.NET_X && targetX < Physics.NET_X && vx >= 0) {
+                vx = -Math.abs(vx || 0.01);
+            }
+        } else {
+            // Player legacy serve (mostly unused now; player uses serveBallWithCharge)
+            // Calculate direction to target
+            const dirX = targetX - b.x;
+            const dirY = targetY - b.y;
+            const dirLength = Math.sqrt(dirX * dirX + dirY * dirY);
+            
+            if (dirLength < 0.01) {
+                vx = horizontalMultiplier * Physics.ballMovementSpeed;
+                vy = 0;
+            } else {
+                const normDirX = dirX / dirLength;
+                const normDirY = dirY / dirLength;
+                vx = normDirX * horizontalMultiplier * Physics.ballMovementSpeed;
+                vy = normDirY * horizontalMultiplier * Physics.ballMovementSpeed;
+            }
+        }
         
         // Set velocities
         Physics.ball.vx = vx;

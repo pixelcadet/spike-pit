@@ -73,9 +73,9 @@ const Game = {
     },
     
     resetAfterScore() {
-        // Reset character positions (middle of their sides)
-        Physics.player.x = Physics.COURT_WIDTH * 0.25; // Middle of player side
-        Physics.player.y = Physics.COURT_LENGTH * 0.5; // Middle depth
+        // Reset character positions - serve position: further from net
+        Physics.player.x = 1.0; // Further from net (closer to left edge)
+        Physics.player.y = 2.0; // Middle depth
         Physics.player.z = 0;
         Physics.player.vx = 0;
         Physics.player.vy = 0;
@@ -84,8 +84,8 @@ const Game = {
         Physics.player.hasSpiked = false;
         Physics.player.hasReceived = false;
         
-        Physics.ai.x = Physics.COURT_WIDTH * 0.75; // Middle of AI side
-        Physics.ai.y = Physics.COURT_LENGTH * 0.5; // Middle depth
+        Physics.ai.x = 7.0; // Further from net (closer to right edge)
+        Physics.ai.y = 2.0; // Middle depth
         Physics.ai.z = 0;
         Physics.ai.vx = 0;
         Physics.ai.vy = 0;

@@ -30,8 +30,8 @@ const Physics = {
     
     // Player character
     player: {
-        x: 2.0,          // Start on left side (4 cells available)
-        y: 2.0,           // Start in middle depth (4 cells deep, middle = 2.0)
+        x: 1.0,          // Serve position: further from net (closer to left edge)
+        y: 2.0,           // Middle depth
         z: 0,            // On ground
         vx: 0,
         vy: 0,
@@ -52,8 +52,8 @@ const Physics = {
     
     // AI character
     ai: {
-        x: 6.0,          // Start on right side (4 cells available)
-        y: 2.0,           // Start in middle depth (4 cells deep, middle = 2.0)
+        x: 7.0,          // Serve position: further from net (closer to right edge)
+        y: 2.0,           // Middle depth
         z: 0,
         vx: 0,
         vy: 0,
@@ -110,9 +110,9 @@ const Physics = {
     },
     
     reset() {
-        // Reset player to middle of their side (matching starting state)
-        this.player.x = this.COURT_WIDTH * 0.25; // Middle of player side
-        this.player.y = this.COURT_LENGTH * 0.5; // Middle depth
+        // Reset player to serve position: further from net
+        this.player.x = 1.0; // Further from net (closer to left edge)
+        this.player.y = 2.0; // Middle depth
         this.player.z = 0;
         this.player.vx = 0;
         this.player.vy = 0;
@@ -126,9 +126,9 @@ const Physics = {
         this.player.isBlinking = false;
         this.player.blinkTimer = 0;
         
-        // Reset AI to middle of their side (matching starting state)
-        this.ai.x = this.COURT_WIDTH * 0.75; // Middle of AI side
-        this.ai.y = this.COURT_LENGTH * 0.5; // Middle depth
+        // Reset AI to serve position: further from net
+        this.ai.x = 7.0; // Further from net (closer to right edge)
+        this.ai.y = 2.0; // Middle depth
         this.ai.z = 0;
         this.ai.vx = 0;
         this.ai.vy = 0;

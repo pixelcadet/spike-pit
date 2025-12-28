@@ -53,10 +53,10 @@ When referring to in-game entities, sprites, or movement, use "character" or "pl
 - Characters farther away appear smaller
 
 **Depth illusion is created by:**
-- Sprite scaling
-- Vertical compression
-- Draw order
-- Ground shadows
+  - Sprite scaling
+  - Vertical compression
+  - Draw order
+  - Ground shadows
 
 **Note:** Reference images are used only for camera perspective and court look. They do not imply grid-based or lane-based movement.
 

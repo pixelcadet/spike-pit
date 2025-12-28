@@ -59,6 +59,32 @@ const AI = {
         const netX = Physics.NET_X;
         this.state.spikeCooldown = Math.max(0, this.state.spikeCooldown - deltaTime);
         
+        // Serving state: AI should NOT try to chase/jump/hit the held ball.
+        // When AI is serving, it should stand still until main.js triggers Game.serveBall().
+        if (Game?.state?.isServing) {
+            if (Game.state.servingPlayer === 'ai') {
+                this.state.targetX = 0;
+                this.state.targetY = 0;
+            } else {
+                // Player is serving: AI can idle toward a safe center spot, but never jump/hit.
+                const center = this.snapIfOnHoleAISide(6.0, Physics.COURT_LENGTH / 2);
+                const dx = center.x - ai.x;
+                const dy = center.y - ai.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist > 0.2) {
+                    this.state.targetX = dx / dist;
+                    this.state.targetY = dy / dist;
+                } else {
+                    this.state.targetX = 0;
+                    this.state.targetY = 0;
+                }
+            }
+            this.state.shouldJump = false;
+            this.state.shouldSpike = false;
+            this.state.shouldReceive = false;
+            return;
+        }
+        
         // If AI is inactive, just stand in the middle and don't do anything
         if (!this.isActive) {
             const center = this.snapIfOnHoleAISide(6.0, Physics.COURT_LENGTH / 2);

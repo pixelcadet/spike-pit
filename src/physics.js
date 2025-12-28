@@ -741,7 +741,11 @@ const Physics = {
             if (character === this.player) {
                 // Player hits toward AI side (right side, x > NET_X)
                 targetX = this.COURT_WIDTH * 0.75; // 75% across court (AI side)
-                targetY = this.COURT_LENGTH * 0.5;  // Middle depth
+                // Allow aiming with buffered W/S input (doesn't require perfect simultaneous press)
+                const aimDir = Input.getAimDepthDirection?.() ?? 0;
+                const aimOffset = this.COURT_LENGTH * 0.22; // lane offset (~top/bottom)
+                targetY = this.COURT_LENGTH * 0.5 + aimDir * aimOffset;
+                targetY = Math.max(0.3, Math.min(this.COURT_LENGTH - 0.3, targetY));
             } else {
                 // AI hits toward player side (left side, x < NET_X)
                 targetX = this.COURT_WIDTH * 0.25; // 25% across court (player side)
@@ -765,63 +769,72 @@ const Physics = {
             // SPIKE: Strong trajectory with steep downward angle (similar to spike serve)
             // Calculate target based on ball's distance from net
             let targetX, targetY;
+            let spikeDistanceRatio = 0.5; // 0=at net, 1=far back (used to shape steepness)
             
             if (character === this.player) {
                 // Player spikes toward AI side (x > NET_X)
-                // Calculate how far ball is from net (0 = at net, 4 = far from net)
-                const distanceFromNet = this.NET_X - b.x; // Distance from net (0 to NET_X)
-                const normalizedDistance = Math.max(0, Math.min(1, distanceFromNet / this.NET_X)); // 0 = at net, 1 = far from net
-                
-                // Far from net (normalizedDistance close to 1) → target closer to net (lower x on AI side)
-                // Close to net (normalizedDistance close to 0) → target further from net (higher x on AI side)
-                // Map: 0 (at net) → high x (7.5), 1 (far) → low x (4.5)
-                targetX = this.NET_X + (this.COURT_WIDTH - this.NET_X) * (0.2 + normalizedDistance * 0.6); // Range: 4.8 to 7.2
-                targetY = this.COURT_LENGTH * 0.5; // Middle depth
+                // Determine spike depth based on spiker distance to the net:
+                // - near net → short / steep (front of opponent court, close to net)
+                // - mid court → deepest-in (furthest point from net while still in)
+                // - far from net → mid court (safer, more central landing)
+                const t = Math.max(0, Math.min(1, (this.NET_X - character.x) / this.NET_X)); // 0=at net, 1=far back
+                spikeDistanceRatio = t;
+                const span = (this.COURT_WIDTH - this.NET_X);
+                const xFront = this.NET_X + span * 0.15;
+                const xDeep = this.NET_X + span * 0.90;
+                const xMid = this.NET_X + span * 0.55;
+                if (t <= 0.5) {
+                    targetX = xFront + (xDeep - xFront) * (t / 0.5);
+                } else {
+                    targetX = xDeep + (xMid - xDeep) * ((t - 0.5) / 0.5);
+                }
+                targetX = Math.max(this.NET_X + 0.4, Math.min(this.COURT_WIDTH - 0.4, targetX));
+                // Allow aiming with buffered W/S input (doesn't require perfect simultaneous press)
+                const aimDir = Input.getAimDepthDirection?.() ?? 0;
+                const aimOffset = this.COURT_LENGTH * 0.22; // lane offset (~top/bottom)
+                targetY = this.COURT_LENGTH * 0.5 + aimDir * aimOffset;
+                targetY = Math.max(0.3, Math.min(this.COURT_LENGTH - 0.3, targetY));
             } else {
                 // AI spikes toward player side (x < NET_X)
-                // Calculate how far ball is from net (0 = at net, 4 = far from net)
-                const distanceFromNet = b.x - this.NET_X; // Distance from net (0 to COURT_WIDTH - NET_X)
-                const normalizedDistance = Math.max(0, Math.min(1, distanceFromNet / (this.COURT_WIDTH - this.NET_X))); // 0 = at net, 1 = far from net
-                
-                // Far from net (normalizedDistance close to 1) → target closer to net (higher x on player side)
-                // Close to net (normalizedDistance close to 0) → target further from net (lower x on player side)
-                // Map: 0 (at net) → low x (0.5), 1 (far) → high x (3.5)
-                targetX = this.NET_X * (0.125 + normalizedDistance * 0.75); // Range: 0.5 to 3.0
+                // Mirror the same depth-by-distance behavior for AI (toward player side):
+                // near net → short (close to net on player side), mid → deepest, far → mid court
+                const t = Math.max(0, Math.min(1, (character.x - this.NET_X) / (this.COURT_WIDTH - this.NET_X))); // 0=at net, 1=far back
+                spikeDistanceRatio = t;
+                const span = this.NET_X;
+                const xFront = this.NET_X - span * 0.15;
+                const xDeep = this.NET_X - span * 0.90;
+                const xMid = this.NET_X - span * 0.55;
+                if (t <= 0.5) {
+                    targetX = xFront + (xDeep - xFront) * (t / 0.5);
+                } else {
+                    targetX = xDeep + (xMid - xDeep) * ((t - 0.5) / 0.5);
+                }
+                targetX = Math.max(0.4, Math.min(this.NET_X - 0.4, targetX));
                 targetY = this.COURT_LENGTH * 0.5; // Middle depth
             }
             
-            // Use spike serve power values
-            const horizontalPower = 0.2644 * 2.5; // Same as spike serve (0.661)
-            const verticalPower = 0.12; // Same as spike serve
-            const downwardMultiplier = 2.0; // Increased from 1.5 for steeper angle (ball lands inside court)
+            // IMPORTANT: previously we set a fixed horizontal speed, which means the ball doesn't actually land
+            // at (targetX,targetY) — it can overshoot and go out of bounds. Instead, estimate airtime and
+            // set vx/vy so the ball lands near the chosen target.
+            const verticalPower = 0.12; // base downward speed scale (same family as spike serve)
+            const downwardMultiplier = 3.2 - 1.2 * spikeDistanceRatio; // near net=steeper (3.2), far=less steep (2.0)
+            const vz0 = -verticalPower * this.ballMovementSpeed * downwardMultiplier;
             
-            // Calculate direction to target
-            const dirX = targetX - b.x;
-            const dirY = targetY - b.y;
-            const dirLength = Math.sqrt(dirX * dirX + dirY * dirY);
+            // Estimate flight time (in frames) until ground contact using a simple ballistic model.
+            // Physics.updateBall() uses: vz -= GRAVITY*ballMovementSpeed; z += vz; (dt=1 "frame")
+            const gEff = this.GRAVITY * this.ballMovementSpeed;
+            const z0 = Math.max(0.001, b.z - b.groundLevel);
+            const disc = vz0 * vz0 + 2 * gEff * z0;
+            const flightFrames = disc > 0 ? (vz0 + Math.sqrt(disc)) / gEff : 8;
+            const tFrames = Math.max(3, flightFrames); // prevent crazy speeds for extremely short flights
             
-            // Apply horizontal velocities
-            if (dirLength < 0.01) {
-                // If ball is already at target, serve straight forward
-                if (character === this.player) {
-                    b.vx = horizontalPower * this.ballMovementSpeed; // Right (toward AI)
-                } else {
-                    b.vx = -horizontalPower * this.ballMovementSpeed; // Left (toward player)
-                }
-                b.vy = 0;
-            } else {
-                const normDirX = dirX / dirLength;
-                const normDirY = dirY / dirLength;
-                b.vx = normDirX * horizontalPower * this.ballMovementSpeed;
-                b.vy = normDirY * horizontalPower * this.ballMovementSpeed;
-            }
-            
-            // Apply downward velocity (steep angle, same as spike serve)
-            b.vz = -verticalPower * this.ballMovementSpeed * downwardMultiplier; // -0.18 (steep downward)
+            b.vx = (targetX - b.x) / tFrames;
+            b.vy = (targetY - b.y) / tFrames;
+            b.vz = vz0;
             
             // Add character's velocity influence (slight)
-            b.vx += character.vx * 0.1;
-            b.vy += character.vy * 0.1;
+            b.vx += character.vx * 0.05;
+            b.vy += character.vy * 0.05;
         }
         
         character.hasSpiked = true;
@@ -912,7 +925,11 @@ const Physics = {
             if (character === this.player) {
                 // Player receives toward AI side (right side, x > NET_X)
                 targetX = this.COURT_WIDTH * 0.75; // 75% across court (AI side)
-                targetY = this.COURT_LENGTH * 0.5;  // Middle depth
+                // Allow aiming with buffered W/S input (doesn't require perfect simultaneous press)
+                const aimDir = Input.getAimDepthDirection?.() ?? 0;
+                const aimOffset = this.COURT_LENGTH * 0.18; // smaller offset than spikes for control
+                targetY = this.COURT_LENGTH * 0.5 + aimDir * aimOffset;
+                targetY = Math.max(0.3, Math.min(this.COURT_LENGTH - 0.3, targetY));
             } else {
                 // AI receives toward player side (left side, x < NET_X)
                 targetX = this.COURT_WIDTH * 0.25; // 25% across court (player side)

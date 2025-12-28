@@ -5,9 +5,26 @@ const Input = {
     keys: {},
     previousKeys: {}, // Track previous frame's key states
     
+    // Aim buffering: allow "almost simultaneous" direction + hit inputs
+    // (e.g., tap W/S shortly before/after holding I) to still count as aiming.
+    _aimDepthDir: 0, // -1 = backward (S), +1 = forward (W)
+    _aimDepthTimeMs: -Infinity,
+    aimBufferMs: 150,
+    
     init() {
         window.addEventListener('keydown', (e) => {
-            this.keys[e.key.toLowerCase()] = true;
+            const key = e.key.toLowerCase();
+            this.keys[key] = true;
+            
+            // Track most recent depth-direction intent for buffered aiming.
+            // We use W/S because serve aiming already uses W/S and it maps cleanly to y-axis.
+            if (key === 'w') {
+                this._aimDepthDir = 1;
+                this._aimDepthTimeMs = performance.now();
+            } else if (key === 's') {
+                this._aimDepthDir = -1;
+                this._aimDepthTimeMs = performance.now();
+            }
         });
         
         window.addEventListener('keyup', (e) => {
@@ -46,6 +63,21 @@ const Input = {
     
     isPressed(key) {
         return this.keys[key.toLowerCase()] === true;
+    },
+    
+    // Returns -1/0/+1 indicating aim direction along depth (y axis).
+    // Accepts sequential inputs within aimBufferMs so players don't need perfect timing.
+    getAimDepthDirection(bufferMs = this.aimBufferMs) {
+        // If actively held, prefer the live state.
+        if (this.isPressed('w')) return 1;
+        if (this.isPressed('s')) return -1;
+        
+        // Otherwise, accept the most recent tap within buffer window.
+        const now = performance.now();
+        if (now - this._aimDepthTimeMs <= bufferMs) {
+            return this._aimDepthDir;
+        }
+        return 0;
     },
     
     // Movement inputs (disabled when character is falling or serving)

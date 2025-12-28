@@ -35,9 +35,9 @@ const Game = {
         // overwrite the serve velocities (this is exactly the vx/vz jump you saw).
         blockHitUntilIRelease: false,
         
-        // Court tiles (8x4). Destructible tiles start at 4 HP; destroyed tiles are holes.
+        // Court tiles (8x4). Destructible tiles start at 3 HP; destroyed tiles are holes.
         // Net-adjacent columns (tx=3 and tx=4) are indestructible (stored as null).
-        tileMaxHp: 4,
+        tileMaxHp: 3,
         tileHp: [] // flat array length = Physics.COURT_WIDTH * Physics.COURT_LENGTH
     },
     

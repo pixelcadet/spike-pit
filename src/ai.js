@@ -17,6 +17,7 @@ const AI = {
     jumpDistance: 0.5,      // Distance at which AI will jump to hit ball
     hitDistance: 0.4,       // Distance at which AI can hit the ball
     predictionTime: 0.3,    // How far ahead to predict ball position
+    isActive: true,         // Whether AI should chase ball (true) or stand still (false)
     
     init() {
         // AI starts on right side
@@ -25,12 +26,36 @@ const AI = {
         this.state.targetY = 0;
         this.state.lastBallX = 0;
         this.state.lastBallY = 0;
+        this.isActive = true; // Default: AI is active
     },
     
     update() {
         const ai = Physics.ai;
         const ball = Physics.ball;
         const netX = Physics.NET_X;
+        
+        // If AI is inactive, just stand in the middle and don't do anything
+        if (!this.isActive) {
+            const centerX = 6.0;  // Middle of AI side
+            const centerY = Physics.COURT_LENGTH / 2;  // Middle depth
+            
+            const dx = centerX - ai.x;
+            const dy = centerY - ai.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist > 0.2) {
+                this.state.targetX = dx / dist;
+                this.state.targetY = dy / dist;
+            } else {
+                this.state.targetX = 0;
+                this.state.targetY = 0;
+            }
+            
+            this.state.shouldJump = false;
+            this.state.shouldSpike = false;
+            this.state.shouldReceive = false;
+            return; // Exit early, don't process ball tracking
+        }
         
         // Check if ball is on AI's side of the court (x > NET_X)
         const ballOnAISide = ball.x > netX;

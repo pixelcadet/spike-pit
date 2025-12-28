@@ -18,9 +18,10 @@ const Input = {
         return this.keys[key.toLowerCase()] === true;
     },
     
-    // Movement inputs (disabled when character is falling)
+    // Movement inputs (disabled when character is falling or serving)
     getHorizontal() {
         if (Physics.player.isFalling) return 0;
+        if (Game.state.isServing && Game.state.servingPlayer === 'player') return 0; // Lock movement when serving
         let dir = 0;
         if (this.isPressed('a')) dir -= 1;
         if (this.isPressed('d')) dir += 1;
@@ -29,6 +30,7 @@ const Input = {
     
     getDepth() {
         if (Physics.player.isFalling) return 0;
+        if (Game.state.isServing && Game.state.servingPlayer === 'player') return 0; // Lock movement when serving
         let dir = 0;
         if (this.isPressed('w')) dir += 1;  // W moves forward (increase y)
         if (this.isPressed('s')) dir -= 1;  // S moves backward (decrease y)
@@ -37,6 +39,7 @@ const Input = {
     
     isJumpPressed() {
         if (Physics.player.isFalling) return false;
+        if (Game.state.isServing && Game.state.servingPlayer === 'player') return false; // Lock jump when serving
         return this.isPressed('j');
     },
     

@@ -14,7 +14,7 @@ const Physics = {
     peakVelocityThreshold: 0.02, // When |vz| < this, character is considered "at peak" (tighter window for hang effect)
     
     // Spike zone parameters
-    SPIKE_ZONE_RADIUS: 0.84,     // Radius of spike zone sphere (scaled 20% with character size: 0.7 * 1.2)
+    SPIKE_ZONE_RADIUS: 0.96,     // Radius of spike zone sphere (default: slider 5)
     SPIKE_ZONE_HEAD_OFFSET: 0.6, // Height above character center for spike zone
     SPIKE_ZONE_FORWARD_OFFSET: 0.3, // Forward offset (toward net) so can't hit balls behind character
     SPIKE_ZONE_UPWARD_OFFSET: 0.2, // Upward offset above character center mass
@@ -83,7 +83,11 @@ const Physics = {
         radius: 0.3036, // Ball size (15% bigger: 0.264 * 1.15)
         groundLevel: 0,
         bounceDamping: 0.7,  // Energy loss on bounce (0.7 = 70% of velocity retained)
-        friction: 0.9        // Ground friction (0.9 = 90% of velocity retained)
+        friction: 0.9,       // Ground friction (0.9 = 90% of velocity retained)
+        lastTouchedBy: null, // Track who last touched the ball ('player' or 'ai')
+        hasScored: false,    // Flag to prevent multiple scores from same bounce/fall
+        justServed: false,   // Flag to prevent immediate collision after serve
+        serveTimer: 0         // Timer for serve grace period
     },
     
     init() {
@@ -99,12 +103,16 @@ const Physics = {
         this.ball.vx = 0;
         this.ball.vy = 0;
         this.ball.vz = 0;
+        this.ball.lastTouchedBy = null;
+        this.ball.hasScored = false;
+        this.ball.justServed = false;
+        this.ball.serveTimer = 0;
     },
     
     reset() {
-        // Reset player to middle of their side
-        this.player.x = 2.0;  // Middle of left side
-        this.player.y = 2.0;  // Middle depth
+        // Reset player to middle of their side (matching starting state)
+        this.player.x = this.COURT_WIDTH * 0.25; // Middle of player side
+        this.player.y = this.COURT_LENGTH * 0.5; // Middle depth
         this.player.z = 0;
         this.player.vx = 0;
         this.player.vy = 0;
@@ -112,10 +120,15 @@ const Physics = {
         this.player.onGround = true;
         this.player.hasSpiked = false;
         this.player.hasReceived = false;
+        this.player.isFalling = false;
+        this.player.fallTimer = 0;
+        this.player.fallEdge = null;
+        this.player.isBlinking = false;
+        this.player.blinkTimer = 0;
         
-        // Reset AI to middle of their side
-        this.ai.x = 6.0;  // Middle of right side
-        this.ai.y = 2.0;  // Middle depth
+        // Reset AI to middle of their side (matching starting state)
+        this.ai.x = this.COURT_WIDTH * 0.75; // Middle of AI side
+        this.ai.y = this.COURT_LENGTH * 0.5; // Middle depth
         this.ai.z = 0;
         this.ai.vx = 0;
         this.ai.vy = 0;
@@ -123,9 +136,14 @@ const Physics = {
         this.ai.onGround = true;
         this.ai.hasSpiked = false;
         this.ai.hasReceived = false;
+        this.ai.isFalling = false;
+        this.ai.fallTimer = 0;
+        this.ai.fallEdge = null;
+        this.ai.isBlinking = false;
+        this.ai.blinkTimer = 0;
         
-        // Reset ball above player
-        this.resetBall();
+        // Reset game state to starting state (scores, serving)
+        Game.init();
     },
     
     // Calculate what percentage of the footprint is outside each court edge
@@ -305,36 +323,46 @@ const Physics = {
             }
         }
         
-        // Apply blinking penalty: half speed and jump power while blinking
-        const speedMultiplier = p.isBlinking ? 0.5 : 1.0;
-        const jumpMultiplier = p.isBlinking ? 0.5 : 1.0;
-        
-        // Horizontal movement (x-axis)
-        const hDir = input.getHorizontal();
-        // If receiving, don't override automatic movement (it's already set by attemptReceive)
-        if (!isReceiving) {
-            p.vx = hDir * p.speed * speedMultiplier;
+        // Lock movement and jump when serving
+        if (Game.state.isServing && Game.state.servingPlayer === 'player') {
+            // Character cannot move or jump while serving
+            p.vx = 0;
+            p.vy = 0;
+            if (p.onGround) {
+                p.vz = 0;
+            }
         } else {
-            // Combine automatic movement with manual input (manual adds to automatic)
-            const manualVx = hDir * p.speed * speedMultiplier;
-            p.vx += manualVx * 0.3; // Manual input adds 30% influence
-        }
-        
-        // Depth movement (y-axis)
-        const dDir = input.getDepth();
-        // If receiving, don't override automatic movement
-        if (!isReceiving) {
-            p.vy = dDir * p.speed * speedMultiplier;
-        } else {
-            // Combine automatic movement with manual input
-            const manualVy = dDir * p.speed * speedMultiplier;
-            p.vy += manualVy * 0.3; // Manual input adds 30% influence
-        }
-        
-        // Jump
-        if (input.isJumpPressed() && p.onGround) {
-            p.vz = p.jumpPower * jumpMultiplier;
-            p.onGround = false;
+            // Apply blinking penalty: half speed and jump power while blinking
+            const speedMultiplier = p.isBlinking ? 0.5 : 1.0;
+            const jumpMultiplier = p.isBlinking ? 0.5 : 1.0;
+            
+            // Horizontal movement (x-axis)
+            const hDir = input.getHorizontal();
+            // If receiving, don't override automatic movement (it's already set by attemptReceive)
+            if (!isReceiving) {
+                p.vx = hDir * p.speed * speedMultiplier;
+            } else {
+                // Combine automatic movement with manual input (manual adds to automatic)
+                const manualVx = hDir * p.speed * speedMultiplier;
+                p.vx += manualVx * 0.3; // Manual input adds 30% influence
+            }
+            
+            // Depth movement (y-axis)
+            const dDir = input.getDepth();
+            // If receiving, don't override automatic movement
+            if (!isReceiving) {
+                p.vy = dDir * p.speed * speedMultiplier;
+            } else {
+                // Combine automatic movement with manual input
+                const manualVy = dDir * p.speed * speedMultiplier;
+                p.vy += manualVy * 0.3; // Manual input adds 30% influence
+            }
+            
+            // Jump
+            if (input.isJumpPressed() && p.onGround) {
+                p.vz = p.jumpPower * jumpMultiplier;
+                p.onGround = false;
+            }
         }
         
         // Apply gravity (reduced when very close to peak for hang time)
@@ -483,18 +511,28 @@ const Physics = {
             }
         }
         
-        // Apply blinking penalty: half speed and jump power while blinking
-        const speedMultiplier = ai.isBlinking ? 0.5 : 1.0;
-        const jumpMultiplier = ai.isBlinking ? 0.5 : 1.0;
-        
-        // AI movement (set by AI system)
-        ai.vx = (aiInput.vx || 0) * speedMultiplier;
-        ai.vy = (aiInput.vy || 0) * speedMultiplier;
-        
-        // AI jump
-        if (aiInput.jump && ai.onGround) {
-            ai.vz = ai.jumpPower * jumpMultiplier;
-            ai.onGround = false;
+        // Lock movement and jump when serving
+        if (Game.state.isServing && Game.state.servingPlayer === 'ai') {
+            // AI cannot move or jump while serving
+            ai.vx = 0;
+            ai.vy = 0;
+            if (ai.onGround) {
+                ai.vz = 0;
+            }
+        } else {
+            // Apply blinking penalty: half speed and jump power while blinking
+            const speedMultiplier = ai.isBlinking ? 0.5 : 1.0;
+            const jumpMultiplier = ai.isBlinking ? 0.5 : 1.0;
+            
+            // AI movement (set by AI system)
+            ai.vx = (aiInput.vx || 0) * speedMultiplier;
+            ai.vy = (aiInput.vy || 0) * speedMultiplier;
+            
+            // AI jump
+            if (aiInput.jump && ai.onGround) {
+                ai.vz = ai.jumpPower * jumpMultiplier;
+                ai.onGround = false;
+            }
         }
         
         // Apply gravity (reduced when very close to peak for hang time)
@@ -596,6 +634,11 @@ const Physics = {
             return false;
         }
         
+        // Skip collision if ball was just served (prevents immediate collision with serving character)
+        if (this.ball.justServed) {
+            return false;
+        }
+        
         const b = this.ball;
         const dx = b.x - character.x;
         const dy = b.y - character.y;
@@ -637,6 +680,10 @@ const Physics = {
             b.vx *= b.bounceDamping;
             b.vy *= b.bounceDamping;
             b.vz *= b.bounceDamping;
+            
+            // Track who last touched the ball
+            b.lastTouchedBy = (character === this.player) ? 'player' : 'ai';
+            b.hasScored = false; // Reset score flag on new touch
             
             return true;
         }
@@ -732,6 +779,11 @@ const Physics = {
         
         character.hasSpiked = true;
         character.justAttemptedAction = true; // Flag to prevent collision bounce this frame
+        
+        // Track who last touched the ball
+        b.lastTouchedBy = (character === this.player) ? 'player' : 'ai';
+        b.hasScored = false; // Reset score flag on new touch
+        
         return true;
     },
     
@@ -743,6 +795,11 @@ const Physics = {
         }
         
         const b = this.ball;
+        
+        // Can't receive if ball was just served (prevents receive from interfering with serve)
+        if (b.justServed) {
+            return false;
+        }
         
         // Can't receive ball that is on the ground (only mid-air balls)
         if (b.z <= b.groundLevel) {
@@ -839,6 +896,11 @@ const Physics = {
         // Mark character as having received (prevent spamming)
         character.hasReceived = true;
         character.justAttemptedAction = true; // Flag to prevent collision bounce this frame
+        
+        // Track who last touched the ball
+        b.lastTouchedBy = (character === this.player) ? 'player' : 'ai';
+        b.hasScored = false; // Reset score flag on new touch
+        
         return true;
     },
     
@@ -919,12 +981,24 @@ const Physics = {
         return false;
     },
     
-    updateBall() {
+    updateBall(deltaTime = 1/60) {
         const b = this.ball;
         
+        // Update serve timer
+        if (b.justServed) {
+            b.serveTimer -= deltaTime;
+            if (b.serveTimer <= 0) {
+                b.justServed = false;
+                b.serveTimer = 0;
+            }
+        }
+        
         // Check collisions with characters first (before updating position)
-        this.checkBallCharacterCollision(this.player);
-        this.checkBallCharacterCollision(this.ai);
+        // Skip collision check if ball was just served (prevents immediate collision with serving character)
+        if (!b.justServed) {
+            this.checkBallCharacterCollision(this.player);
+            this.checkBallCharacterCollision(this.ai);
+        }
         
         // Apply gravity (same as characters - uses Physics.GRAVITY which is controlled by slider)
         // Scale gravity by ballMovementSpeed to act as time-scale factor
@@ -947,6 +1021,20 @@ const Physics = {
         if (b.z <= b.groundLevel) {
             // Only bounce if ball is on court - if off court, let it fall through
             if (this.isBallOnCourt()) {
+                // Check for scoring: ball bounces on court ground
+                // Score goes to opponent of the side where ball lands
+                if (!b.hasScored) {
+                    // Determine which side the ball is on
+                    if (b.x < this.NET_X) {
+                        // Ball landed on player's side (left) → AI scores
+                        Game.scorePoint('ai');
+                    } else {
+                        // Ball landed on AI's side (right) → Player scores
+                        Game.scorePoint('player');
+                    }
+                    b.hasScored = true; // Prevent multiple scores from same bounce
+                }
+                
                 b.z = b.groundLevel;
                 
                 // Bounce off ground (reverse vertical velocity with damping)
@@ -964,8 +1052,35 @@ const Physics = {
                 if (Math.abs(b.vx) < 0.001) b.vx = 0;
                 if (Math.abs(b.vy) < 0.001) b.vy = 0;
                 if (Math.abs(b.vz) < 0.001) b.vz = 0;
+            } else {
+                // Ball is off court and falling - check for out-of-bounds score
+                if (!b.hasScored && b.lastTouchedBy) {
+                    // Ball went out of bounds - opponent of last toucher scores
+                    if (b.lastTouchedBy === 'player') {
+                        // Player hit it out → AI scores
+                        Game.scorePoint('ai');
+                    } else {
+                        // AI hit it out → Player scores
+                        Game.scorePoint('player');
+                    }
+                    b.hasScored = true; // Prevent multiple scores from same fall
+                }
             }
             // If ball is off court, don't clamp z or reset velocities - let it fall through
+        }
+        
+        // Check for out-of-bounds score when ball falls off court (even if z > groundLevel)
+        // This handles cases where ball goes out of bounds while still in the air
+        if (!b.hasScored && !this.isBallOnCourt() && b.z < 0 && b.lastTouchedBy) {
+            // Ball went out of bounds - opponent of last toucher scores
+            if (b.lastTouchedBy === 'player') {
+                // Player hit it out → AI scores
+                Game.scorePoint('ai');
+            } else {
+                // AI hit it out → Player scores
+                Game.scorePoint('player');
+            }
+            b.hasScored = true; // Prevent multiple scores from same fall
         }
         
         // Ball can move freely (no clamping)
@@ -1058,8 +1173,22 @@ const Physics = {
         this.updatePlayer(input);
         this.updateAI(aiInput);
         
-        // Update ball after character movement (so collisions work correctly)
-        this.updateBall();
+        // If serving, keep ball "held" by serving character
+        // Do this AFTER character movement so ball follows character if they move
+        if (Game.state.isServing) {
+            const servingChar = Game.state.servingPlayer === 'player' ? this.player : this.ai;
+            // Keep ball at character position (held)
+            this.ball.x = servingChar.x;
+            this.ball.y = servingChar.y;
+            this.ball.z = servingChar.radius * 1.5; // Slightly above character
+            this.ball.vx = 0;
+            this.ball.vy = 0;
+            this.ball.vz = 0;
+        } else {
+            // Update ball after character movement (so collisions work correctly)
+            // Only update ball physics if not serving
+            this.updateBall();
+        }
     }
 };
 

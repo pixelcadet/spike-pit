@@ -87,14 +87,45 @@ const Controls = {
             this.updateSpikeZoneSize(value);
         });
         
-        // Initialize with default values (5 on 1-10 scale, except spike zone = 3)
+        // Set up serve horizontal power slider
+        const serveHorizontalSlider = document.getElementById('serve-horizontal');
+        const serveHorizontalValue = document.getElementById('serve-horizontal-value');
+        
+        serveHorizontalSlider.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value);
+            serveHorizontalValue.textContent = value;
+            this.updateServeHorizontal(value);
+        });
+        
+        // Set up serve vertical power slider
+        const serveVerticalSlider = document.getElementById('serve-vertical');
+        const serveVerticalValue = document.getElementById('serve-vertical-value');
+        
+        serveVerticalSlider.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value);
+            serveVerticalValue.textContent = value;
+            this.updateServeVertical(value);
+        });
+        
+        // Set up AI active toggle
+        const aiActiveToggle = document.getElementById('ai-active');
+        
+        aiActiveToggle.addEventListener('change', (e) => {
+            AI.isActive = e.target.checked;
+        });
+        
+        // Initialize with default values (5 on 1-10 scale)
         this.updateMovementSpeed(5);
         this.updateJumpPower(5);
         this.updateGravity(5);
         this.updateAirTime(5);
         this.updateBallMovementSpeed(5);
         this.updateReceiveZoneSize(5);
-        this.updateSpikeZoneSize(3);
+        this.updateSpikeZoneSize(5);
+        this.updateServeHorizontal(5);
+        this.updateServeVertical(5);
+        // AI active is already checked by default in HTML
+        AI.isActive = aiActiveToggle.checked;
     },
     
     // Convert 1-10 scale to movement speed (0.025 to 0.075, with 5 = 0.05)
@@ -192,23 +223,53 @@ const Controls = {
         Physics.RECEIVING_ZONE_RADIUS = radius;
     },
     
-    // Convert 1-10 scale to spike zone radius (0.42 to 1.26, with 3 = 0.84)
-    // Recalibrated: slider 3 = 0.84 (new standard/default)
+    // Convert 1-10 scale to spike zone radius (0.42 to 1.26, with 5 = 0.96)
+    // Recalibrated: slider 5 = 0.96 (new standard/default)
     updateSpikeZoneSize(scale) {
-        // Map scale 1-10 to radius range, with scale 3 = 0.84
-        // We want: scale 1 = 0.42, scale 3 = 0.84, scale 10 = 1.26
-        // Using piecewise linear mapping to ensure scale 3 = 0.84
+        // Map scale 1-10 to radius range, with scale 5 = 0.96
+        // We want: scale 1 = 0.42, scale 5 = 0.96, scale 10 = 1.26
+        // Using piecewise linear mapping to ensure scale 5 = 0.96
         let radius;
-        if (scale <= 3) {
-            // Map 1-3 to 0.42-0.84
-            radius = 0.42 + (0.84 - 0.42) * ((scale - 1) / (3 - 1));
+        if (scale <= 5) {
+            // Map 1-5 to 0.42-0.96
+            radius = 0.42 + (0.96 - 0.42) * ((scale - 1) / (5 - 1));
         } else {
-            // Map 3-10 to 0.84-1.26
-            radius = 0.84 + (1.26 - 0.84) * ((scale - 3) / (10 - 3));
+            // Map 5-10 to 0.96-1.26
+            radius = 0.96 + (1.26 - 0.96) * ((scale - 5) / (10 - 5));
         }
         
         // Apply to physics system
         Physics.SPIKE_ZONE_RADIUS = radius;
+    },
+    
+    // Convert 1-10 scale to serve horizontal multiplier (0.14 to 0.28)
+    // Controls horizontal distance of serve
+    updateServeHorizontal(scale) {
+        // Linear interpolation: min + (max - min) * ((scale - 1) / 9)
+        // Slider 1 = 0.14 (minimum)
+        // Slider 5 = 0.2022 (default)
+        // Slider 10 = 0.28 (maximum)
+        const minPower = 0.14;
+        const maxPower = 0.28;
+        const power = minPower + (maxPower - minPower) * ((scale - 1) / 9);
+        
+        // Apply to game system
+        Game.serveHorizontalMultiplier = power;
+    },
+    
+    // Convert 1-10 scale to serve vertical multiplier (0.14 to 0.3)
+    // Controls arc height (peak height) of serve
+    updateServeVertical(scale) {
+        // Linear interpolation: min + (max - min) * ((scale - 1) / 9)
+        // Slider 1 = 0.14 (minimum)
+        // Slider 5 = 0.2111 (default)
+        // Slider 10 = 0.3 (maximum)
+        const minPower = 0.14;
+        const maxPower = 0.3;
+        const power = minPower + (maxPower - minPower) * ((scale - 1) / 9);
+        
+        // Apply to game system
+        Game.serveVerticalMultiplier = power;
     }
 };
 

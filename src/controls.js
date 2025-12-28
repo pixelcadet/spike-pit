@@ -119,8 +119,8 @@ const Controls = {
         this.updateJumpPower(5);
         this.updateGravity(5);
         this.updateAirTime(5);
-        // Ball speed default: 2 (slower, easier to read)
-        this.updateBallMovementSpeed(2);
+        // Ball speed default: 5 (recalibrated so 5 is slower than before)
+        this.updateBallMovementSpeed(5);
         this.updateReceiveZoneSize(5);
         this.updateSpikeZoneSize(5);
         this.updateServeHorizontal(5);
@@ -193,16 +193,19 @@ const Controls = {
         Physics.peakHangMultiplier = multiplier;
     },
     
-    // Convert 1-10 scale to ball movement speed multiplier (0.2 to 0.6, with 5 = 0.378)
-    // Recalibrated: old slider 3 → new slider 5 (comfortable default)
-    // Lower value = slower ball movement (easier to follow visually)
+    // Convert 1-10 scale to ball movement speed multiplier.
+    // Recalibrated so:
+    // - new slider 5 == old slider 2 (slower default)
+    // - new slider 1 is much slower than before
+    // - new slider 10 is not too fast
     updateBallMovementSpeed(scale) {
         // Linear interpolation: min + (max - min) * ((scale - 1) / 9)
-        // Slider 1 = 0.2 (20% speed = very slow, easy to follow)
-        // Slider 5 = 0.378 (37.8% speed = comfortable default, was old slider 3)
-        // Slider 10 = 0.6 (60% speed = faster)
-        const minSpeed = 0.2;
-        const maxSpeed = 0.6;
+        // Calibrated values:
+        // - Slider 1  = 0.10 (much slower than old min 0.20)
+        // - Slider 5  = ~0.244 (matches old slider 2 on the previous 0.2..0.6 mapping)
+        // - Slider 10 = ~0.425 (faster but not too fast)
+        const minSpeed = 0.10;
+        const maxSpeed = 0.425;
         const speed = minSpeed + (maxSpeed - minSpeed) * ((scale - 1) / 9);
         
         // Apply to physics system

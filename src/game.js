@@ -678,7 +678,9 @@ const Game = {
             // AI normal serve only (no spike serve), but with some variation:
             // - X: always middle of player's side (center of x-axis on player court)
             // - Y: randomized (front/back)
-            targetX = Physics.NET_X * 0.5; // middle of player side (NET_X=4 => x=2)
+            // Aim at the 3rd lane from the net on the player side:
+            // Lane 1 (adjacent to net) is indestructible (tx=3), lane 2 is tx=2, lane 3 is tx=1.
+            targetX = 1.5; // center of tx=1 tile
             const minY = Physics.COURT_LENGTH * 0.2;
             const maxY = Physics.COURT_LENGTH * 0.8;
             targetY = minY + Math.random() * (maxY - minY);

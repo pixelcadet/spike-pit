@@ -656,19 +656,20 @@ const Render = {
             { type: 'ball', y: Physics.ball.y, x: Physics.ball.x }
         ];
         
-        // Split entities: behind court (off EDGE A: y > COURT_LENGTH, or off EDGE B: x < 0 for player, x > COURT_WIDTH for AI,
-        // or falling from EDGE A/B) vs on/in front of court.
+        // Split entities: behind court (off EDGE A or EDGE B, or falling from EDGE A/B) vs on/in front of court.
         // NOTE: We do NOT push "falling into hole" behind the whole court anymore. Instead, we render a targeted
         // tile-mask overlay (same row and closer-to-camera rows on that half-court) above the falling entity.
+        // IMPORTANT: Use the same footprint-based edge thresholds as physics, not raw x/y bounds.
+        // This prevents a character from being rendered "behind the floor" before physics considers them off-court.
         const entitiesBehindCourt = entities.filter(e => {
             if (e.type === 'character') {
                 const char = e.data;
-                // EDGE A: back of court (y > COURT_LENGTH)
-                const offEdgeA = char.y > Physics.COURT_LENGTH;
-                // EDGE B: left side (opposite from net)
-                // Player side: x < 0, AI side: x > COURT_WIDTH
-                const isPlayer = char === Physics.player;
-                const offEdgeB = isPlayer ? char.x < 0 : char.x > Physics.COURT_WIDTH;
+                const pct = Physics.getFootprintOutsidePercentages
+                    ? Physics.getFootprintOutsidePercentages(char)
+                    : { edgeA: (char.y > Physics.COURT_LENGTH ? 1 : 0), edgeB: 0, edgeC: 0 };
+                // Match `Physics.isFootprintOnCourt()` edge thresholds (holes are handled separately)
+                const offEdgeA = pct.edgeA >= 0.7;
+                const offEdgeB = pct.edgeB >= 0.5;
                 // Falling from EDGE A or B: z < 0 AND (off EDGE A OR off EDGE B)
                 // This ensures falling from EDGE C doesn't render behind court
                 const isFallingFromEdgeAB = char.z < 0 && (offEdgeA || offEdgeB);
@@ -686,9 +687,11 @@ const Render = {
             if (e.type === 'character') {
                 const char = e.data;
                 // On court if not off EDGE A, not off EDGE B, and not falling from EDGE A/B
-                const offEdgeA = char.y > Physics.COURT_LENGTH;
-                const isPlayer = char === Physics.player;
-                const offEdgeB = isPlayer ? char.x < 0 : char.x > Physics.COURT_WIDTH;
+                const pct = Physics.getFootprintOutsidePercentages
+                    ? Physics.getFootprintOutsidePercentages(char)
+                    : { edgeA: (char.y > Physics.COURT_LENGTH ? 1 : 0), edgeB: 0, edgeC: 0 };
+                const offEdgeA = pct.edgeA >= 0.7;
+                const offEdgeB = pct.edgeB >= 0.5;
                 const isFallingFromEdgeAB = char.z < 0 && (offEdgeA || offEdgeB);
                 return !offEdgeA && !offEdgeB && !isFallingFromEdgeAB;
             } else {

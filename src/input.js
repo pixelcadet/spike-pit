@@ -13,6 +13,10 @@ const Input = {
     _aimXDir: 0, // -1 = left (A), +1 = right (D)
     _aimXTimeMs: -Infinity,
     aimBufferMs: 150,
+
+    // Hit latching: allow holding I to "wait" for timing, but only fire ONE action per hold.
+    // Prevents accidental double-actions (e.g., spike then immediate ground receive) that can overwrite ball velocity.
+    _hitUsedThisHold: false,
     
     init() {
         window.addEventListener('keydown', (e) => {
@@ -33,6 +37,9 @@ const Input = {
             } else if (key === 'd') {
                 this._aimXDir = 1;
                 this._aimXTimeMs = performance.now();
+            } else if (key === 'i') {
+                // New hold: allow one action during this hold.
+                this._hitUsedThisHold = false;
             }
         });
         
@@ -42,6 +49,8 @@ const Input = {
             // Always unblock hit after 'I' is released
             if (e.key.toLowerCase() === 'i') {
                 Game.state.blockHitUntilIRelease = false;
+                // Release resets per-hold latch.
+                this._hitUsedThisHold = false;
             }
             
             // Handle serve release (I key released during serving)
@@ -141,6 +150,16 @@ const Input = {
         if (Physics.player.isFalling) return false;
         if (Game.state.blockHitUntilIRelease) return false;
         return this.isPressed('i');
+    },
+
+    // For rally actions: "I is held and not yet used this hold".
+    // This still allows holding I to time the hit, but prevents repeated actions while held.
+    shouldAttemptHit() {
+        return this.isHitPressed() && !this._hitUsedThisHold;
+    },
+
+    consumeHit() {
+        this._hitUsedThisHold = true;
     },
     
     isResetPressed() {

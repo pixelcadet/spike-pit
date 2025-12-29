@@ -56,7 +56,7 @@ function gameLoop(currentTime) {
             }
         }
         // Keyup is handled in Input.init() keyup event listener
-    } else if (Input.isHitPressed()) {
+    } else if (Input.shouldAttemptHit()) {
         // Normal gameplay: spike/receive
         if (!Physics.player.onGround) {
             // Mid-air: check which zone the ball is in
@@ -69,6 +69,12 @@ function gameLoop(currentTime) {
         } else {
             // On ground: attempt receive
             Physics.attemptReceive(Physics.player);
+        }
+
+        // If an actual action happened (spike/receive/toss), consume the hold so we don't fire again
+        // until the player releases I.
+        if (Physics.player.justAttemptedAction) {
+            Input.consumeHit();
         }
     }
     
@@ -94,6 +100,9 @@ function gameLoop(currentTime) {
     
     // Update visual highlights
     Render.updateHighlights(Input, aiInput);
+
+    // Update render-side animations (camera shake, etc.)
+    Render.update(deltaTime / 1000);
     
     // Render
     Render.render();

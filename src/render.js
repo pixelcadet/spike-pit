@@ -483,10 +483,10 @@ const Render = {
         const shadowY = groundProj.y + (rectHeight / 2) * scaleRatio;
         
         const centerX = groundProj.x;
-        const centerY = shadowY + radius; // top of arc touches the bottom of the sprite
+        // Pull the bar up closer to the character. Keep it slightly below the feet so it reads as a ground UI element.
+        const centerY = shadowY + Math.max(2, lineWidth * 0.6);
         
-        // Semicircle flipped vertically (a "frown" ∩ under the character).
-        // Draw the TOP half of the circle, centered below the feet.
+        // Semicircle under the character (a "smile" ∪), centered just below the feet.
         const startAngle = Math.PI; // left
         const endAngle = 0;         // right
 

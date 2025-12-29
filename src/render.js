@@ -124,7 +124,18 @@ const Render = {
     },
     
     drawCourt() {
+        return this.drawCourtWithOptions();
+    },
+
+    // Draw court tiles (and optionally the net) with filtering options. This lets us draw a "mask" subset
+    // of tiles above a falling-into-hole entity without double-drawing the whole court.
+    drawCourtWithOptions(options = {}) {
         const ctx = this.ctx;
+        const {
+            onlyPredicate = null, // (tx, ty) => boolean
+            skipPredicate = null, // (tx, ty) => boolean
+            drawNet = true
+        } = options;
         
         // Draw tiles with forced perspective
         // 8 cells wide (tx: 0-7, net at tx=4)
@@ -134,6 +145,9 @@ const Render = {
         
         for (let ty = 0; ty < tilesLong; ty++) {
             for (let tx = 0; tx < tilesWide; tx++) {
+                if (onlyPredicate && !onlyPredicate(tx, ty)) continue;
+                if (skipPredicate && skipPredicate(tx, ty)) continue;
+
                 const worldX = tx;
                 const worldY = ty;
                 
@@ -233,7 +247,7 @@ const Render = {
         }
         
         // Draw net
-        this.drawNet();
+        if (drawNet) this.drawNet();
     },
     
     drawNet() {
@@ -567,13 +581,6 @@ const Render = {
         ctx.save();
         ctx.translate(this.shakeOffsetX, this.shakeOffsetY);
         
-        // Separate entities into those behind the court (off EDGE A or EDGE B) and those on/in front of the court
-        const entities = [
-            { type: 'character', data: Physics.player, color: '#4a9eff', y: Physics.player.y },
-            { type: 'character', data: Physics.ai, color: '#ff4a4a', y: Physics.ai.y },
-            { type: 'ball', y: Physics.ball.y, x: Physics.ball.x }
-        ];
-        
         // Helper: is an (x,y) position over a destroyed tile (hole)?
         const isOverHole = (x, y) => {
             if (!Game?.getTileState) return false;
@@ -584,8 +591,17 @@ const Render = {
             return !!(tile && !tile.indestructible && tile.destroyed);
         };
 
+        // Separate entities into those behind the court (off EDGE A or EDGE B) and those on/in front of the court
+        const entities = [
+            { type: 'character', data: Physics.player, color: '#4a9eff', y: Physics.player.y },
+            { type: 'character', data: Physics.ai, color: '#ff4a4a', y: Physics.ai.y },
+            { type: 'ball', y: Physics.ball.y, x: Physics.ball.x }
+        ];
+        
         // Split entities: behind court (off EDGE A: y > COURT_LENGTH, or off EDGE B: x < 0 for player, x > COURT_WIDTH for AI,
-        // or falling from EDGE A/B, or falling into a hole) vs on/in front of court
+        // or falling from EDGE A/B) vs on/in front of court.
+        // NOTE: We do NOT push "falling into hole" behind the whole court anymore. Instead, we render a targeted
+        // tile-mask overlay (same row and closer-to-camera rows on that half-court) above the falling entity.
         const entitiesBehindCourt = entities.filter(e => {
             if (e.type === 'character') {
                 const char = e.data;
@@ -598,16 +614,13 @@ const Render = {
                 // Falling from EDGE A or B: z < 0 AND (off EDGE A OR off EDGE B)
                 // This ensures falling from EDGE C doesn't render behind court
                 const isFallingFromEdgeAB = char.z < 0 && (offEdgeA || offEdgeB);
-                // Falling into a destroyed tile (hole) should render behind the court so the hole occludes them.
-                const isFallingIntoHole = char.z < 0 && isOverHole(char.x, char.y);
-                return offEdgeA || offEdgeB || isFallingFromEdgeAB || isFallingIntoHole;
+                return offEdgeA || offEdgeB || isFallingFromEdgeAB;
             } else {
                 // Ball: check both edges and falling from EDGE A or B
                 const offEdgeA = e.y > Physics.COURT_LENGTH;
                 const offEdgeB = e.x < 0 || e.x > Physics.COURT_WIDTH;
                 const isFallingFromEdgeAB = Physics.ball.z < 0 && (offEdgeA || offEdgeB);
-                const isFallingIntoHole = Physics.ball.z < 0 && isOverHole(Physics.ball.x, Physics.ball.y);
-                return offEdgeA || offEdgeB || isFallingFromEdgeAB || isFallingIntoHole;
+                return offEdgeA || offEdgeB || isFallingFromEdgeAB;
             }
         });
         
@@ -619,15 +632,13 @@ const Render = {
                 const isPlayer = char === Physics.player;
                 const offEdgeB = isPlayer ? char.x < 0 : char.x > Physics.COURT_WIDTH;
                 const isFallingFromEdgeAB = char.z < 0 && (offEdgeA || offEdgeB);
-                const isFallingIntoHole = char.z < 0 && isOverHole(char.x, char.y);
-                return !offEdgeA && !offEdgeB && !isFallingFromEdgeAB && !isFallingIntoHole;
+                return !offEdgeA && !offEdgeB && !isFallingFromEdgeAB;
             } else {
                 // Ball: on court if not off EDGE A, not off EDGE B, and not falling from EDGE A/B
                 const offEdgeA = e.y > Physics.COURT_LENGTH;
                 const offEdgeB = e.x < 0 || e.x > Physics.COURT_WIDTH;
                 const isFallingFromEdgeAB = Physics.ball.z < 0 && (offEdgeA || offEdgeB);
-                const isFallingIntoHole = Physics.ball.z < 0 && isOverHole(Physics.ball.x, Physics.ball.y);
-                return !offEdgeA && !offEdgeB && !isFallingFromEdgeAB && !isFallingIntoHole;
+                return !offEdgeA && !offEdgeB && !isFallingFromEdgeAB;
             }
         });
         
@@ -661,8 +672,51 @@ const Render = {
             }
         });
         
-        // Draw court (green tiles and net, on top of entities behind it)
-        this.drawCourt();
+        // Determine whether any entity is currently falling into a hole (z < 0 over destroyed tile).
+        // If so, we'll render a targeted "mask" of tiles (same row and closer-to-camera rows on that half-court)
+        // above the falling entity, without clipping the opponent or the whole scene.
+        const fallingIntoHole = [];
+        if (Physics.player.z < 0 && isOverHole(Physics.player.x, Physics.player.y)) {
+            fallingIntoHole.push({ type: 'character', data: Physics.player, color: '#4a9eff' });
+        }
+        if (Physics.ai.z < 0 && isOverHole(Physics.ai.x, Physics.ai.y)) {
+            fallingIntoHole.push({ type: 'character', data: Physics.ai, color: '#ff4a4a' });
+        }
+        if (Physics.ball.z < 0 && isOverHole(Physics.ball.x, Physics.ball.y)) {
+            fallingIntoHole.push({ type: 'ball' });
+        }
+
+        // Build per-side mask rows: for each side that has a falling entity, we draw all intact tiles
+        // on that half-court with ty <= holeTy (same row and "below"/closer-to-camera rows).
+        const maskBySide = {
+            player: null,
+            ai: null
+        };
+        for (const fe of fallingIntoHole) {
+            const x = fe.type === 'ball' ? Physics.ball.x : fe.data.x;
+            const y = fe.type === 'ball' ? Physics.ball.y : fe.data.y;
+            const ty = Math.max(0, Math.min(Physics.COURT_LENGTH - 1, Math.floor(y)));
+            const side = x < Physics.NET_X ? 'player' : 'ai';
+            maskBySide[side] = maskBySide[side] == null ? ty : Math.max(maskBySide[side], ty);
+        }
+
+        const isMaskTile = (tx, ty) => {
+            const tile = Game?.getTileState ? Game.getTileState(tx, ty) : null;
+            if (!tile || tile.destroyed) return false; // "remaining tiles" only
+            if (tx < Physics.NET_X) {
+                return maskBySide.player != null && ty <= maskBySide.player;
+            }
+            return maskBySide.ai != null && ty <= maskBySide.ai;
+        };
+
+        // Draw court tiles (and net) on top of entities behind it.
+        // If masking is active, skip mask tiles here so we can draw them once later above the falling entity.
+        const anyMaskActive = maskBySide.player != null || maskBySide.ai != null;
+        if (anyMaskActive) {
+            this.drawCourtWithOptions({ skipPredicate: isMaskTile, drawNet: true });
+        } else {
+            this.drawCourtWithOptions({ drawNet: true });
+        }
         
         // Draw edge labels for debugging (hidden)
         // this.drawEdgeLabels();
@@ -689,9 +743,32 @@ const Render = {
                 this.drawBallShadow();
             }
         });
-        
-        // Draw entities on/in front of the court (on top of court layer)
-        entitiesOnCourt.forEach(entity => {
+
+        // Draw falling-into-hole entities first (so we can draw mask tiles above them).
+        // Non-falling entities are drawn after the mask so they don't get clipped.
+        const isFallingEntity = (entity) => {
+            if (entity.type === 'character') return entity.data.z < 0 && isOverHole(entity.data.x, entity.data.y);
+            if (entity.type === 'ball') return Physics.ball.z < 0 && isOverHole(Physics.ball.x, Physics.ball.y);
+            return false;
+        };
+        const fallingEntitiesOnCourt = entitiesOnCourt.filter(isFallingEntity);
+        const normalEntitiesOnCourt = entitiesOnCourt.filter(e => !isFallingEntity(e));
+
+        fallingEntitiesOnCourt.forEach(entity => {
+            if (entity.type === 'character') {
+                this.drawCharacterBody(entity.data, entity.color);
+            } else if (entity.type === 'ball') {
+                this.drawBallBody();
+            }
+        });
+
+        // Draw mask tiles above the falling entity (same row and closer-to-camera rows), only on that half-court.
+        if (anyMaskActive) {
+            this.drawCourtWithOptions({ onlyPredicate: isMaskTile, drawNet: false });
+        }
+
+        // Draw normal entities on/in front of the court (on top of court layer)
+        normalEntitiesOnCourt.forEach(entity => {
             if (entity.type === 'character') {
                 this.drawCharacterBody(entity.data, entity.color);
             } else if (entity.type === 'ball') {

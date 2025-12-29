@@ -702,9 +702,10 @@ const Render = {
 
         const isMaskTile = (tx, ty) => {
             const tile = Game?.getTileState ? Game.getTileState(tx, ty) : null;
-            // "Remaining tiles" only, and never mask with indestructible (net-adjacent) tiles.
-            // Indestructible columns sit at the net line (tx=3/4) and drawing them in the mask pass can clip the net.
-            if (!tile || tile.destroyed || tile.indestructible) return false;
+            // "Remaining tiles" only (holes don't mask).
+            // Note: we DO allow indestructible (net-adjacent) tiles here, but we will redraw the net after the mask
+            // so those tiles never visually clip the net.
+            if (!tile || tile.destroyed) return false;
             if (tx < Physics.NET_X) {
                 return maskBySide.player != null && ty <= maskBySide.player;
             }
@@ -767,6 +768,9 @@ const Render = {
         // Draw mask tiles above the falling entity (same row and closer-to-camera rows), only on that half-court.
         if (anyMaskActive) {
             this.drawCourtWithOptions({ onlyPredicate: isMaskTile, drawNet: false });
+            // Ensure the net is always on top of the mask tiles (prevents masking from clipping the net).
+            // Do this BEFORE drawing normal entities so behavior remains the same (entities can still appear above the net).
+            this.drawNet();
         }
 
         // Draw normal entities on/in front of the court (on top of court layer)

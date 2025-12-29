@@ -136,6 +136,15 @@ const AI = {
                 } else {
                     this.state.targetX = 0;
                     this.state.targetY = 0;
+
+                    // Snap to the exact (safe) target to avoid sub-tile drifting that can look blurry in the renderer.
+                    // This only happens while waiting for the player's serve.
+                    if (dist > 0.001 && dist <= 0.2) {
+                        ai.x = desiredX;
+                        ai.y = desiredY;
+                        ai.vx = 0;
+                        ai.vy = 0;
+                    }
                 }
             }
             this.state.shouldJump = false;

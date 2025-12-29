@@ -158,8 +158,9 @@ const Render = {
                         fill = indestructibleColor;
                         fillAlpha = 1.0;
                     } else if (tileState.destroyed) {
-                        // Hole tiles are drawn in a separate overlay pass (so they can occlude falling characters/ball).
-                        continue;
+                        // Hole
+                        fill = holeColor;
+                        fillAlpha = 1.0;
                     } else {
                         // Brittleness visualization: fade opacity as HP drops.
                         const hp = tileState.hp ?? 0;
@@ -191,7 +192,7 @@ const Render = {
                 
                 // Draw tile border
                 // Thin outline around each tile
-                ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
+                ctx.strokeStyle = (tileState && tileState.destroyed) ? 'rgba(60, 50, 70, 0.9)' : 'rgba(0, 0, 0, 0.18)';
                 ctx.lineWidth = 1;
                 ctx.stroke();
             }
@@ -539,7 +540,18 @@ const Render = {
             { type: 'ball', y: Physics.ball.y, x: Physics.ball.x }
         ];
         
-        // Split entities: behind court (off EDGE A: y > COURT_LENGTH, or off EDGE B: x < 0 for player, x > COURT_WIDTH for AI, or falling from EDGE A/B: z < 0 AND (off EDGE A OR off EDGE B)) vs on/in front of court
+        // Helper: is an (x,y) position over a destroyed tile (hole)?
+        const isOverHole = (x, y) => {
+            if (!Game?.getTileState) return false;
+            const tx = Math.floor(x);
+            const ty = Math.floor(y);
+            if (tx < 0 || tx >= Physics.COURT_WIDTH || ty < 0 || ty >= Physics.COURT_LENGTH) return false;
+            const tile = Game.getTileState(tx, ty);
+            return !!(tile && !tile.indestructible && tile.destroyed);
+        };
+
+        // Split entities: behind court (off EDGE A: y > COURT_LENGTH, or off EDGE B: x < 0 for player, x > COURT_WIDTH for AI,
+        // or falling from EDGE A/B, or falling into a hole) vs on/in front of court
         const entitiesBehindCourt = entities.filter(e => {
             if (e.type === 'character') {
                 const char = e.data;
@@ -552,13 +564,16 @@ const Render = {
                 // Falling from EDGE A or B: z < 0 AND (off EDGE A OR off EDGE B)
                 // This ensures falling from EDGE C doesn't render behind court
                 const isFallingFromEdgeAB = char.z < 0 && (offEdgeA || offEdgeB);
-                return offEdgeA || offEdgeB || isFallingFromEdgeAB;
+                // Falling into a destroyed tile (hole) should render behind the court so the hole occludes them.
+                const isFallingIntoHole = char.z < 0 && isOverHole(char.x, char.y);
+                return offEdgeA || offEdgeB || isFallingFromEdgeAB || isFallingIntoHole;
             } else {
                 // Ball: check both edges and falling from EDGE A or B
                 const offEdgeA = e.y > Physics.COURT_LENGTH;
                 const offEdgeB = e.x < 0 || e.x > Physics.COURT_WIDTH;
                 const isFallingFromEdgeAB = Physics.ball.z < 0 && (offEdgeA || offEdgeB);
-                return offEdgeA || offEdgeB || isFallingFromEdgeAB;
+                const isFallingIntoHole = Physics.ball.z < 0 && isOverHole(Physics.ball.x, Physics.ball.y);
+                return offEdgeA || offEdgeB || isFallingFromEdgeAB || isFallingIntoHole;
             }
         });
         
@@ -570,13 +585,15 @@ const Render = {
                 const isPlayer = char === Physics.player;
                 const offEdgeB = isPlayer ? char.x < 0 : char.x > Physics.COURT_WIDTH;
                 const isFallingFromEdgeAB = char.z < 0 && (offEdgeA || offEdgeB);
-                return !offEdgeA && !offEdgeB && !isFallingFromEdgeAB;
+                const isFallingIntoHole = char.z < 0 && isOverHole(char.x, char.y);
+                return !offEdgeA && !offEdgeB && !isFallingFromEdgeAB && !isFallingIntoHole;
             } else {
                 // Ball: on court if not off EDGE A, not off EDGE B, and not falling from EDGE A/B
                 const offEdgeA = e.y > Physics.COURT_LENGTH;
                 const offEdgeB = e.x < 0 || e.x > Physics.COURT_WIDTH;
                 const isFallingFromEdgeAB = Physics.ball.z < 0 && (offEdgeA || offEdgeB);
-                return !offEdgeA && !offEdgeB && !isFallingFromEdgeAB;
+                const isFallingIntoHole = Physics.ball.z < 0 && isOverHole(Physics.ball.x, Physics.ball.y);
+                return !offEdgeA && !offEdgeB && !isFallingFromEdgeAB && !isFallingIntoHole;
             }
         });
         
@@ -648,9 +665,6 @@ const Render = {
             }
         });
 
-        // Draw hole tiles last (occluder overlay) so falling into holes reads correctly.
-        this.drawHolesOverlay();
-        
         // Draw hitboxes for debugging
         this.drawHitboxes();
 
@@ -1255,43 +1269,5 @@ const Render = {
         ctx.restore();
     },
 
-    // Draw destroyed tiles (holes) on top of entities as an occluder.
-    // This makes characters/ball look like they fall "into" the hole instead of in front of it.
-    drawHolesOverlay() {
-        const ctx = this.ctx;
-        const tilesWide = Physics.COURT_WIDTH;
-        const tilesLong = Physics.COURT_LENGTH;
-
-        const holeColor = 'rgba(20, 16, 28, 1.0)';
-
-        for (let ty = 0; ty < tilesLong; ty++) {
-            for (let tx = 0; tx < tilesWide; tx++) {
-                const tileState = Game?.getTileState ? Game.getTileState(tx, ty) : null;
-                if (!tileState || tileState.indestructible || !tileState.destroyed) continue;
-
-                const worldX = tx;
-                const worldY = ty;
-
-                const frontLeft = this.project(worldX, worldY, 0);
-                const frontRight = this.project(worldX + 1, worldY, 0);
-                const backLeft = this.project(worldX, worldY + 1, 0);
-                const backRight = this.project(worldX + 1, worldY + 1, 0);
-
-                ctx.beginPath();
-                ctx.moveTo(frontLeft.x, frontLeft.y);
-                ctx.lineTo(frontRight.x, frontRight.y);
-                ctx.lineTo(backRight.x, backRight.y);
-                ctx.lineTo(backLeft.x, backLeft.y);
-                ctx.closePath();
-                ctx.fillStyle = holeColor;
-                ctx.fill();
-
-                // Slightly stronger outline for hole rim to sell depth.
-                ctx.strokeStyle = 'rgba(60, 50, 70, 0.9)';
-                ctx.lineWidth = 1;
-                ctx.stroke();
-            }
-        }
-    },
 };
 

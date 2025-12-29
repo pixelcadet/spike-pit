@@ -8,6 +8,26 @@ Game.init();
 RenderBehind.init();
 Controls.init();
 
+// Sandbox mode for behind-camera iteration:
+// - no serving (so the ball isn't "held" above heads)
+// - no scoring / resets / splash
+Game.state.disableScoring = true;
+Game.state.isServing = false;
+Game.state.isResetting = false;
+Game.state.spikeServePending = false;
+Game.state.isChargingServe = false;
+Physics.ball.justServed = false;
+Physics.ball.serveTimer = 0;
+Physics.ball.fallingThroughHole = false;
+
+// Start the ball in-play near the net for easy testing.
+Physics.ball.x = Physics.NET_X - 0.6;
+Physics.ball.y = Physics.COURT_LENGTH * 0.5;
+Physics.ball.z = 1.2;
+Physics.ball.vx = 0.02;
+Physics.ball.vy = 0.0;
+Physics.ball.vz = 0.10;
+
 // Update UI
 function updateUIBehind() {
     const el = document.getElementById('game-status');
@@ -43,19 +63,8 @@ function gameLoopBehind(currentTime) {
     AI.update(deltaTime / 1000);
     const aiInput = AI.getInput();
 
-    // Player actions (I key): same logic as main.js, but still read raw Input for press/hold
-    if (Game.state.isServing && Game.state.servingPlayer === 'player') {
-        if (Game.state.spikeServePending) {
-            // ignore I while pending
-        } else {
-            if (Input.isPressed('i')) {
-                if (!Game.state.isChargingServe) {
-                    Game.state.isChargingServe = true;
-                    Game.state.serveChargeTimer = 0;
-                }
-            }
-        }
-    } else if (Input.shouldAttemptHit()) {
+    // Player actions (I key): sandbox mode has no serving; always treat I as spike/receive.
+    if (Input.shouldAttemptHit()) {
         if (!Physics.player.onGround) {
             const spikeAttempted = Physics.attemptSpike(Physics.player);
             if (!spikeAttempted) {
@@ -69,15 +78,9 @@ function gameLoopBehind(currentTime) {
         }
     }
 
-    // AI actions
-    if (Game.state.isServing && Game.state.servingPlayer === 'ai') {
-        if (Game.state.aiServeTimer <= 0) {
-            Game.serveBall();
-        }
-    } else {
-        if (aiInput.spike) Physics.attemptSpike(Physics.ai);
-        if (aiInput.receive) Physics.attemptReceive(Physics.ai);
-    }
+    // AI actions (no serving in sandbox)
+    if (aiInput.spike) Physics.attemptSpike(Physics.ai);
+    if (aiInput.receive) Physics.attemptReceive(Physics.ai);
 
     Physics.update(InputBehind, aiInput, deltaTime / 1000);
     Game.update(Input, deltaTime / 1000);
@@ -86,6 +89,25 @@ function gameLoopBehind(currentTime) {
     RenderBehind.update(deltaTime / 1000);
     RenderBehind.render();
     updateUIBehind();
+
+    // If the ball goes way out / falls too deep, respawn it near the net (sandbox convenience).
+    const b = Physics.ball;
+    const tooFar =
+        b.x < -2 || b.x > Physics.COURT_WIDTH + 2 ||
+        b.y < -2 || b.y > Physics.COURT_LENGTH + 2 ||
+        b.z < -6;
+    if (tooFar) {
+        b.x = Physics.NET_X - 0.6;
+        b.y = Physics.COURT_LENGTH * 0.5;
+        b.z = 1.2;
+        b.vx = 0.02;
+        b.vy = 0.0;
+        b.vz = 0.10;
+        b.justServed = false;
+        b.serveTimer = 0;
+        b.fallingThroughHole = false;
+        b.hasScored = false;
+    }
 
     requestAnimationFrame(gameLoopBehind);
 }

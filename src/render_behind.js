@@ -413,11 +413,11 @@ const RenderBehind = {
         drawReceiveZone(Physics.ai, '#ff4a4a', this.aiReceivingHighlight);
     },
 
-    drawCharacter(char, color) {
+    drawCharacterShadow(char) {
         const ctx = this.ctx;
-        const p = this.project(char.x, char.y, char.z);
         const g = this.project(char.x, char.y, 0);
-        const scale = (p.halfW / this.nearHalfWidth) * 1.2 * this.characterScaleMul;
+        const pg = this.project(char.x, char.y, 0);
+        const scale = (pg.halfW / this.nearHalfWidth) * 1.2 * this.characterScaleMul;
 
         // Shadow
         const shadowR = 18 * scale * (char.isFalling ? 0.6 : 1.0);
@@ -428,6 +428,12 @@ const RenderBehind = {
         ctx.ellipse(g.x, g.y + 6, shadowR * 1.2, shadowR * 0.55, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
+    },
+
+    drawCharacterBody(char, color) {
+        const ctx = this.ctx;
+        const p = this.project(char.x, char.y, char.z);
+        const scale = (p.halfW / this.nearHalfWidth) * 1.2 * this.characterScaleMul;
 
         // Body (simple: rectangle + head circle)
         const bodyW = 26 * scale;
@@ -458,12 +464,12 @@ const RenderBehind = {
         ctx.restore();
     },
 
-    drawBall() {
+    drawBallShadow() {
         const ctx = this.ctx;
         const b = Physics.ball;
-        const p = this.project(b.x, b.y, b.z);
         const g = this.project(b.x, b.y, 0);
-        const scale = (p.halfW / this.nearHalfWidth) * 1.2 * this.ballScaleMul;
+        const p0 = this.project(b.x, b.y, Math.max(0, b.z));
+        const scale = (p0.halfW / this.nearHalfWidth) * 1.2 * this.ballScaleMul;
 
         // Shadow
         ctx.save();
@@ -473,6 +479,13 @@ const RenderBehind = {
         ctx.ellipse(g.x, g.y + 4, sr * 1.1, sr * 0.55, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
+    },
+
+    drawBallBody() {
+        const ctx = this.ctx;
+        const b = Physics.ball;
+        const p = this.project(b.x, b.y, b.z);
+        const scale = (p.halfW / this.nearHalfWidth) * 1.2 * this.ballScaleMul;
 
         // Ball
         const r = 10 * scale;
@@ -559,28 +572,41 @@ const RenderBehind = {
     render() {
         this.clear();
         this.drawCourtTiles();
-        this.drawNet();
         this.drawZones();
 
-        // Entities (depth-sort by x so farther (higher x) draws first)
-        const ents = [
-            { type: 'char', ref: Physics.player, color: '#4a9eff', x: Physics.player.x, z: Physics.player.z },
-            { type: 'char', ref: Physics.ai, color: '#ff4a4a', x: Physics.ai.x, z: Physics.ai.z },
-            { type: 'ball', x: Physics.ball.x, z: Physics.ball.z }
-        ];
-        ents.sort((a, b) => (b.x - a.x) || (a.z - b.z));
-        for (const e of ents) {
-            if (e.type === 'char') this.drawCharacter(e.ref, e.color);
-            else this.drawBall();
-        }
+        // Layering:
+        // - far side entities behind the net
+        // - net
+        // - near side entities in front of the net
+        // Draw shadows first to avoid shadows appearing on top of other entities.
+        const isFar = (x) => x >= Physics.NET_X;
+
+        // FAR shadows
+        if (isFar(Physics.player.x)) this.drawCharacterShadow(Physics.player);
+        if (isFar(Physics.ai.x)) this.drawCharacterShadow(Physics.ai);
+        if (isFar(Physics.ball.x)) this.drawBallShadow();
+
+        // FAR bodies
+        if (isFar(Physics.player.x)) this.drawCharacterBody(Physics.player, '#4a9eff');
+        if (isFar(Physics.ai.x)) this.drawCharacterBody(Physics.ai, '#ff4a4a');
+        if (isFar(Physics.ball.x)) this.drawBallBody();
+
+        // NET
+        this.drawNet();
+
+        // NEAR shadows
+        if (!isFar(Physics.player.x)) this.drawCharacterShadow(Physics.player);
+        if (!isFar(Physics.ai.x)) this.drawCharacterShadow(Physics.ai);
+        if (!isFar(Physics.ball.x)) this.drawBallShadow();
+
+        // NEAR bodies
+        if (!isFar(Physics.player.x)) this.drawCharacterBody(Physics.player, '#4a9eff');
+        if (!isFar(Physics.ai.x)) this.drawCharacterBody(Physics.ai, '#ff4a4a');
+        if (!isFar(Physics.ball.x)) this.drawBallBody();
 
         this.drawDebugHitboxes();
 
-        if (Game.state.isResetting && !Game.state.matchOver) {
-            const delay = Game.state.scoreSplashDelay ?? 0;
-            const elapsed = (Game.state.resetDuration ?? 0) - (Game.state.resetTimer ?? 0);
-            if (elapsed >= delay) this.drawScoreSplash();
-        }
+        // NOTE: Behind-camera sandbox mode disables scoring/splash/reset, so we don't render the splash here.
     }
 };
 

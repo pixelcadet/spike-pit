@@ -64,6 +64,8 @@ const Game = {
         this.state.aiScore = 0;
         this.state.pointsToWin = 7;
         this.state.freePlay = false;
+        // Sandbox: disable scoring/serve/reset; used by behind-camera mode while we tune physics/render layers.
+        this.state.disableScoring = false;
         this.state.matchOver = false;
         this.state.matchWinner = null;
         this.state.matchEndReason = null;
@@ -362,6 +364,8 @@ const Game = {
     },
     
     scorePoint(winner) {
+        // Sandbox mode: allow physics/interaction iteration without any scoring/serving/reset logic.
+        if (this.state.disableScoring) return;
         if (this.state.matchOver) return;
         // If we're already showing the score splash / resetting, ignore any additional scoring triggers.
         if (this.state.isResetting) return;

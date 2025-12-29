@@ -485,9 +485,10 @@ const Render = {
         const centerX = groundProj.x;
         const centerY = shadowY + radius; // top of arc touches the bottom of the sprite
         
-        // Semicircle above this (so the visible arc "hugs" the ground under the character)
-        const startAngle = Math.PI;      // left
-        const endAngle = Math.PI * 2.0;  // right
+        // Semicircle flipped vertically (a "frown" ∩ under the character).
+        // Draw the TOP half of the circle, centered below the feet.
+        const startAngle = Math.PI; // left
+        const endAngle = 0;         // right
 
         ctx.save();
         ctx.lineWidth = lineWidth;
@@ -496,7 +497,7 @@ const Render = {
         // Background track
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
         ctx.beginPath();
-        ctx.arc(centerX, centerY, radius, startAngle, endAngle, false);
+        ctx.arc(centerX, centerY, radius, startAngle, endAngle, true);
         ctx.stroke();
 
         // Filled portion
@@ -504,7 +505,7 @@ const Render = {
             const filledEnd = startAngle + (endAngle - startAngle) * ratio; // interpolate along semicircle
             ctx.strokeStyle = this.colorWithAlpha(color, 0.9);
             ctx.beginPath();
-            ctx.arc(centerX, centerY, radius, startAngle, filledEnd, false);
+            ctx.arc(centerX, centerY, radius, startAngle, filledEnd, true);
             ctx.stroke();
         }
 

@@ -723,9 +723,13 @@ const Render = {
             ctx.fillText(`Serving: ${Game.state.isServing}, Charging: ${Game.state.isChargingServe}, Charge: ${Game.state.serveChargeTimer.toFixed(2)}s`, 10, 20);
         }
         
-        // Score splash overlay
+        // Score splash overlay (visual-only delay so hits/camera shake/tile blink are readable)
         if (Game.state.isResetting && !Game.state.matchOver) {
-            this.drawScoreSplash();
+            const delay = Game.state.scoreSplashDelay ?? 0;
+            const elapsed = (Game.state.resetDuration ?? 0) - (Game.state.resetTimer ?? 0);
+            if (elapsed >= delay) {
+                this.drawScoreSplash();
+            }
         }
     },
     

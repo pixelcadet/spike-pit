@@ -13,6 +13,7 @@ const Game = {
         resetDuration: 2.0, // Delay between point scored and next rally
         isResetting: false,
         lastPointWinner: null, // 'player' | 'ai' (for UI feedback)
+        scoreSplashDelay: 0.4, // Visual-only delay before showing "SCORED!" overlay (seconds)
         
         // AI serve pacing (when it's AI turn to serve)
         aiServeDelay: 1.0,
@@ -63,6 +64,7 @@ const Game = {
         this.state.resetDuration = 2.0;
         this.state.isResetting = false;
         this.state.lastPointWinner = null;
+        this.state.scoreSplashDelay = 0.4;
         this.state.aiServeDelay = 1.0;
         this.state.aiServeTimer = 0;
         this.state.isServing = true;

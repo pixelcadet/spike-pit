@@ -1305,7 +1305,27 @@ const Physics = {
                 // - Otherwise, keep straight-up toss.
                 const pct = this.getFootprintOutsidePercentages(character);
                 const edgeLean = Math.max(pct.edgeA, pct.edgeB, pct.edgeC);
-                if (edgeLean > 0.001) {
+                
+                // Also treat "near edge but still inside" as an edge situation.
+                // Compute distance from the footprint box to each court boundary (in world units).
+                const footprintWidth = character.radius * 1.2;
+                const footprintDepth = character.radius * 0.5;
+                const footprintLeft = character.x - footprintWidth * 0.5;
+                const footprintRight = character.x + footprintWidth * 0.5;
+                const footprintFront = character.y - footprintDepth * 0.5;
+                const footprintBack = character.y + footprintDepth * 0.5;
+                
+                const distToEdgeC = footprintFront; // y=0
+                const distToEdgeA = this.COURT_LENGTH - footprintBack; // y=COURT_LENGTH
+                const distToEdgeB = (character === this.player)
+                    ? footprintLeft // x=0 (player side outer edge)
+                    : (this.COURT_WIDTH - footprintRight); // x=COURT_WIDTH (ai side outer edge)
+                
+                // "Slightly inside" margin (in world units). Tuned to feel like you're at the ledge without being out.
+                const nearEdgeMargin = 0.22;
+                const nearEdge = Math.min(distToEdgeA, distToEdgeB, distToEdgeC) <= nearEdgeMargin;
+                
+                if (edgeLean > 0.001 || nearEdge) {
                     const isPlayer = character === this.player;
                     const targetX = isPlayer ? (this.NET_X * 0.5) : (this.NET_X + (this.COURT_WIDTH - this.NET_X) * 0.5);
                     const targetY = this.COURT_LENGTH * 0.5;

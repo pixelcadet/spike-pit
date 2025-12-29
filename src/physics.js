@@ -1274,7 +1274,8 @@ const Physics = {
             b.tileDamageBounces = 0;
             b.fallingThroughHole = false;
             
-            const aim = Input.getAim2D?.() ?? { x: 0, y: 0 };
+            // Only the player can aim tosses. AI toss aiming should not be affected by player key state.
+            const aim = (character === this.player) ? (Input.getAim2D?.() ?? { x: 0, y: 0 }) : { x: 0, y: 0 };
             // Disallow "back toss" (away from the net) so ground receives stay simple and forward-oriented.
             // If a back component is present, cancel ALL aiming (including diagonal back aims) → straight up.
             // Player (left side): back = negative x (A). AI (right side): back = positive x.
@@ -1298,9 +1299,30 @@ const Physics = {
             const aimLen = Math.sqrt(ax * ax + ay * ay);
             
             if (aimLen < 0.01) {
-                // No aim input → straight up (current behavior)
-                b.vx = 0;
-                b.vy = 0;
+                // No aim input:
+                // - If character is leaning over any court edge (A/B/C), auto-toss toward the center of their OWN side.
+                //   This prevents "straight up" tosses that can feel bad near edges.
+                // - Otherwise, keep straight-up toss.
+                const pct = this.getFootprintOutsidePercentages(character);
+                const edgeLean = Math.max(pct.edgeA, pct.edgeB, pct.edgeC);
+                if (edgeLean > 0.001) {
+                    const isPlayer = character === this.player;
+                    const targetX = isPlayer ? (this.NET_X * 0.5) : (this.NET_X + (this.COURT_WIDTH - this.NET_X) * 0.5);
+                    const targetY = this.COURT_LENGTH * 0.5;
+                    
+                    const gEff = this.GRAVITY * this.ballMovementSpeed;
+                    const z0 = Math.max(0.001, b.z - b.groundLevel);
+                    const disc = vz0 * vz0 + 2 * gEff * z0;
+                    const flightFrames = disc > 0 ? (vz0 + Math.sqrt(disc)) / gEff : 18;
+                    const tFrames = Math.max(8, flightFrames);
+                    
+                    b.vx = (targetX - b.x) / tFrames;
+                    b.vy = (targetY - b.y) / tFrames;
+                } else {
+                    // Straight up
+                    b.vx = 0;
+                    b.vy = 0;
+                }
             } else {
                 // Normalize aim so diagonals aren't stronger
                 const nx = ax / aimLen;

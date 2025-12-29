@@ -147,7 +147,8 @@ const Render = {
                 // Tile visuals (flat colors + HP-based opacity)
                 const destructibleColor = '#4f865d';   // one green for all destructible tiles
                 const indestructibleColor = '#3f5f8a'; // one blue for all indestructible tiles (net-adjacent columns)
-                const holeColor = '#120f14';
+                // Match background color so holes blend into the void.
+                const holeColor = '#1a0a1a';
                 
                 let fill = destructibleColor;
                 let fillAlpha = 1.0;

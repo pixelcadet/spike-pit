@@ -1275,17 +1275,19 @@ const Physics = {
             // Only bounce if ball is on court - if off court, let it fall through
             if (this.isBallOnCourt()) {
                 // Tile system: determine impacted tile (single tile) and apply damage / holes.
-                // IMPORTANT: Never damage tiles (or trigger hole scoring) during the score splash/reset window.
+                // IMPORTANT: Never damage tiles or score during the score splash/reset window.
+                // However, hole fall-through should still happen (no bounce), otherwise it looks broken on matchOver screens.
                 const tileEffectsEnabled = !(Game?.state?.isResetting) && !(Game?.state?.matchOver);
                 const landing = this.getBallLandingTile();
-                if (tileEffectsEnabled && landing && Game?.getTileState) {
+                if (landing && Game?.getTileState) {
                     const { tx, ty } = landing;
                     const tile = Game.getTileState(tx, ty);
                     
-                    // If tile is already destroyed (hole), ball falls through and counts as out-of-bounds.
+                    // If tile is already destroyed (hole), ball falls through (no bounce).
+                    // Score only when tileEffectsEnabled; otherwise just fall through silently.
                     if (tile && !tile.indestructible && tile.destroyed) {
-                        // Hole scoring: treat as "ball hit the ground on that side" (encourages destroying opponent floor).
-                        if (!b.hasScored) {
+                        if (tileEffectsEnabled && !b.hasScored) {
+                            // Hole scoring: treat as "ball hit the ground on that side" (encourages destroying opponent floor).
                             if (tx < this.NET_X) {
                                 // Hole on player's side → AI scores
                                 Game.scorePoint('ai');
@@ -1305,7 +1307,7 @@ const Physics = {
                     
                     // Apply tile damage on ground contact (tile HP persists across points).
                     // Only the FIRST ground impact since last touch deals damage.
-                    if (tile && !tile.indestructible) {
+                    if (tileEffectsEnabled && tile && !tile.indestructible) {
                         const spikeLike = b.lastHitType === 'spike' || b.lastHitType === 'spikeServe';
                         if ((b.tileDamageBounces ?? 0) === 0) {
                             const damage = spikeLike ? 3 : 1;
@@ -1319,7 +1321,7 @@ const Physics = {
                             }
                         }
                         b.tileDamageBounces = (b.tileDamageBounces ?? 0) + 1;
-                    } else if (tile) {
+                    } else if (tile && !tile.indestructible) {
                         // Still count the bounce so later bounces (before next touch) are treated as "repeated".
                         b.tileDamageBounces = (b.tileDamageBounces ?? 0) + 1;
                     }

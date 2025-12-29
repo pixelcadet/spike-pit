@@ -333,7 +333,6 @@ const Game = {
             
             // Auto-serve at max charge (ball will go out of bounds)
             if (this.state.serveChargeTimer >= this.state.maxChargeTime) {
-                console.log('Auto-serving at max charge');
                 this.state.serveChargeTimer = this.state.maxChargeTime;
                 this.serveBallWithCharge();
                 // serveBallWithCharge will reset isChargingServe and set spikeServePending
@@ -348,22 +347,7 @@ const Game = {
             // Peak is when upward velocity becomes zero or negative
             if (!servingChar.onGround && servingChar.vz <= 0.01) {
                 // At peak! Execute the spike serve
-                console.log('Spike serve at jump peak!');
-                console.log('🔴 BEFORE executeSpikeServe: Ball velocities', {
-                    vx: Physics.ball.vx.toFixed(4),
-                    vy: Physics.ball.vy.toFixed(4),
-                    vz: Physics.ball.vz.toFixed(4),
-                    isServing: this.state.isServing,
-                    spikeServePending: this.state.spikeServePending
-                });
                 this.executeSpikeServe();
-                console.log('🔴 AFTER executeSpikeServe: Ball velocities', {
-                    vx: Physics.ball.vx.toFixed(4),
-                    vy: Physics.ball.vy.toFixed(4),
-                    vz: Physics.ball.vz.toFixed(4),
-                    isServing: this.state.isServing,
-                    spikeServePending: this.state.spikeServePending
-                });
             }
         }
     },
@@ -395,62 +379,14 @@ const Game = {
         
         // Set cooldown to prevent multiple scores
         this.state.scoreCooldown = 0.5; // 0.5 seconds cooldown
-
-        // Free Play mode: keep scoring indefinitely, but don't show score splash or reset to serve.
-        // Instead, immediately continue the rally by dropping the ball from the scoring character's head.
-        if (this.state.freePlay) {
-            this.state.isResetting = false;
-            this.state.resetTimer = 0;
-            this.state.lastPointWinner = winner;
-            this.updateScoreDisplay();
-            this.resetAfterPointFreePlay(winner);
-            return;
-        }
         
-        // Normal mode: start reset timer (delay before reset)
+        // Start reset timer (delay before reset)
         this.state.isResetting = true;
         this.state.resetTimer = this.state.resetDuration;
         this.state.lastPointWinner = winner;
         
         this.updateScoreDisplay();
         this.checkWinConditions();
-    },
-
-    // Free Play only: continue rally immediately by dropping the ball from the scoring character's head.
-    // This avoids serve state/splash and is useful for fast iteration/testing.
-    resetAfterPointFreePlay(winner) {
-        const dropChar = winner === 'player' ? Physics.player : Physics.ai;
-
-        // Ensure we are not in serve flow.
-        this.state.isServing = false;
-        this.state.isChargingServe = false;
-        this.state.serveChargeTimer = 0;
-        this.state.spikeServePending = false;
-        this.state.spikeServePower = null;
-        this.state.spikeServeTarget = null;
-        this.state.isOverchargedSpikeServe = false;
-        this.state.blockHitUntilIRelease = false;
-
-        // Reset per-rally action cooldowns so you can immediately test spike/receive again.
-        Physics.player.hasSpiked = false;
-        Physics.player.hasReceived = false;
-        Physics.ai.hasSpiked = false;
-        Physics.ai.hasReceived = false;
-
-        // Drop ball from above the scorer's head.
-        Physics.ball.x = dropChar.x;
-        Physics.ball.y = dropChar.y;
-        Physics.ball.z = (dropChar.z + dropChar.radius * 1.5) + 0.9;
-        Physics.ball.vx = 0;
-        Physics.ball.vy = 0;
-        Physics.ball.vz = 0;
-        Physics.ball.lastTouchedBy = null;
-        Physics.ball.lastHitType = null;
-        Physics.ball.tileDamageBounces = 0;
-        Physics.ball.hasScored = false;
-        Physics.ball.justServed = true; // short grace so it doesn't instantly collide with the drop character
-        Physics.ball.serveTimer = 0.12;
-        Physics.ball.fallingThroughHole = false;
     },
     
     resetAfterScore() {
@@ -793,22 +729,7 @@ const Game = {
         // Debug log to verify serve (capture charge time before resetting)
         const chargeTimeUsed = this.state.serveChargeTimer;
         const chargePercentUsed = (chargeTimeUsed / this.state.maxChargeTime) * 100;
-        console.log('Serve executed:', {
-            servingPlayer: this.state.servingPlayer,
-            chargeTime: chargeTimeUsed.toFixed(3),
-            chargePercent: chargePercentUsed.toFixed(1) + '%',
-            isSpikeServe: isSpikeServe,
-            ballPos: { x: Physics.ball.x.toFixed(2), y: Physics.ball.y.toFixed(2), z: Physics.ball.z.toFixed(2) },
-            target: { x: targetX.toFixed(2), y: targetY.toFixed(2) },
-            velocities: { vx: vx.toFixed(4), vy: vy.toFixed(4), vz: vz.toFixed(4) },
-            multipliers: { 
-                horizontal: horizontalMultiplier.toFixed(4), 
-                vertical: verticalMultiplier.toFixed(4) 
-            },
-            ballMovementSpeed: Physics.ballMovementSpeed.toFixed(4)
-        });
-        
-        // Reset charging state (after logging)
+        // Reset charging state
         this.state.isChargingServe = false;
         this.state.serveChargeTimer = 0;
         

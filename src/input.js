@@ -60,13 +60,10 @@ const Input = {
                 Game.state.servingPlayer === 'player' && 
                 Game.state.isChargingServe &&
                 !Game.state.spikeServePending) {
-                console.log('I key released, charge time:', Game.state.serveChargeTimer);
                 // Check minimum charge time - if too short, don't serve
                 if (Game.state.serveChargeTimer >= Game.state.minChargeTime) {
-                    console.log('Serving with charge');
                     Game.serveBallWithCharge();
                 } else {
-                    console.log('Charge time too short, not serving');
                 }
                 Game.state.isChargingServe = false;
                 Game.state.serveChargeTimer = 0;

@@ -1036,16 +1036,22 @@ const Render = {
         const finalSize = Math.max(charSize, minSize);
         const rectHeight = finalSize * 1.5;
         
-        // Calculate footprint dimensions (matches physics boundary detection)
-        const footprintWidth = character.radius * 1.2;
-        const footprintDepth = character.radius * 0.5;
+        // Footprint dimensions:
+        // - Edge checks use a smaller footprint (matches getFootprintOutsidePercentages)
+        // - Hole overlap uses a larger footprint (matches getFootprintHoleOverlapMax)
+        const edgeFootprintWidth = character.radius * 1.2;
+        const edgeFootprintDepth = character.radius * 0.5;
+        const holeFootprintWidth = character.radius * 1.35;
+        const holeFootprintDepth = character.radius * 0.9;
         
         // Project character position at ground level to get proper scale for footprint
         const groundProj = this.project(character.x, character.y, 0);
         
         // Convert to screen space (footprint follows character directly, no clamping)
-        const screenWidth = footprintWidth * this.courtTileSize * groundProj.scale;
-        const screenDepth = footprintDepth * this.courtTileSize * groundProj.scale;
+        const edgeScreenWidth = edgeFootprintWidth * this.courtTileSize * groundProj.scale;
+        const edgeScreenDepth = edgeFootprintDepth * this.courtTileSize * groundProj.scale;
+        const holeScreenWidth = holeFootprintWidth * this.courtTileSize * groundProj.scale;
+        const holeScreenDepth = holeFootprintDepth * this.courtTileSize * groundProj.scale;
         
         // Position footprint to cover the lower portion of the character body
         const charCenterScreenY = charProj.y;
@@ -1053,20 +1059,35 @@ const Render = {
         // Start footprint from middle of character (covers lower half)
         // Make footprint height match the lower half of character
         const lowerHalfHeight = rectHeight / 2;
-        const footprintScreenHeight = Math.max(screenDepth, lowerHalfHeight);
+        const edgeFootprintScreenHeight = Math.max(edgeScreenDepth, lowerHalfHeight);
+        const holeFootprintScreenHeight = Math.max(holeScreenDepth, lowerHalfHeight);
         
         // Draw rectangle covering lower portion of character body
         // Footprint follows character position directly (centered on character)
-        ctx.strokeStyle = color;
+        ctx.save();
         ctx.lineWidth = 2;
-        ctx.setLineDash([2, 2]); // Dashed line
+
+        // Edge footprint (green-ish, dashed)
+        ctx.strokeStyle = this.colorWithAlpha(color, 0.9);
+        ctx.setLineDash([2, 2]);
         ctx.strokeRect(
-            groundProj.x - screenWidth / 2, // Center on character's X position
-            charCenterScreenY, // Start from middle of character (covers lower half)
-            screenWidth, // Full width
-            footprintScreenHeight // Height to cover lower half
+            groundProj.x - edgeScreenWidth / 2,
+            charCenterScreenY,
+            edgeScreenWidth,
+            edgeFootprintScreenHeight
         );
-        ctx.setLineDash([]); // Reset to solid
+
+        // Hole footprint (magenta-ish, more sparse dash) so we can see the difference.
+        ctx.strokeStyle = 'rgba(255, 80, 200, 0.85)';
+        ctx.setLineDash([5, 4]);
+        ctx.strokeRect(
+            groundProj.x - holeScreenWidth / 2,
+            charCenterScreenY,
+            holeScreenWidth,
+            holeFootprintScreenHeight
+        );
+
+        ctx.restore();
     },
     
     // Draw edge labels for debugging (EDGE A, B, C)

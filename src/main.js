@@ -42,11 +42,6 @@ function gameLoop(currentTime) {
             if (Input.isPressed('i')) {
                 if (!Game.state.isChargingServe) {
                     // Start charging serve
-                    console.log('Starting charge serve', {
-                        isServing: Game.state.isServing,
-                        servingPlayer: Game.state.servingPlayer,
-                        isChargingServe: Game.state.isChargingServe
-                    });
                     Game.state.isChargingServe = true;
                     Game.state.serveChargeTimer = 0;
                 }

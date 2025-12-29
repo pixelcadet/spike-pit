@@ -48,7 +48,10 @@ const Physics = {
         fallEdge: null, // Which edge they fell from ('A', 'B', or 'C')
         fellFromHole: false, // True if the fall was triggered by a destroyed tile overlap (no grace slide)
         isBlinking: false, // Blinking state after respawn
-        blinkTimer: 0 // Timer for blinking duration (1 second)
+        blinkTimer: 0, // Timer for blinking duration (1 second)
+        // Blink briefly when taking touch-limit damage (separate from respawn blink).
+        damageBlinkTimeLeft: 0,
+        damageBlinkDuration: 0
     },
     
     // AI character
@@ -71,7 +74,10 @@ const Physics = {
         fallEdge: null, // Which edge they fell from ('A', 'B', or 'C')
         fellFromHole: false, // True if the fall was triggered by a destroyed tile overlap (no grace slide)
         isBlinking: false, // Blinking state after respawn
-        blinkTimer: 0 // Timer for blinking duration (1 second)
+        blinkTimer: 0, // Timer for blinking duration (1 second)
+        // Blink briefly when taking touch-limit damage (separate from respawn blink).
+        damageBlinkTimeLeft: 0,
+        damageBlinkDuration: 0
     },
     
     // Ball
@@ -141,6 +147,12 @@ const Physics = {
             if (b.touchesRemaining <= 0) {
                 if (Game?.damageCharacterHp && (bySide === 'player' || bySide === 'ai') && !Game?.state?.matchOver) {
                     Game.damageCharacterHp(bySide, 1, 'touchLimit');
+                    // Blink the damaged character for quick feedback.
+                    const ch = bySide === 'player' ? this.player : this.ai;
+                    if (ch) {
+                        ch.damageBlinkDuration = 0.18;
+                        ch.damageBlinkTimeLeft = 0.18;
+                    }
                 }
             } else {
                 b.touchesRemaining = Math.max(0, b.touchesRemaining - 1);
@@ -173,6 +185,8 @@ const Physics = {
         this.player.fellFromHole = false;
         this.player.isBlinking = false;
         this.player.blinkTimer = 0;
+        this.player.damageBlinkTimeLeft = 0;
+        this.player.damageBlinkDuration = 0;
         
         // Reset AI to serve position: further from net
         this.ai.x = 7.0; // Further from net (closer to right edge)
@@ -190,6 +204,8 @@ const Physics = {
         this.ai.fellFromHole = false;
         this.ai.isBlinking = false;
         this.ai.blinkTimer = 0;
+        this.ai.damageBlinkTimeLeft = 0;
+        this.ai.damageBlinkDuration = 0;
         
         // Reset game state to starting state (scores, serving)
         Game.init();
@@ -1689,6 +1705,8 @@ const Physics = {
         character.hasSpiked = false;
         character.hasReceived = false;
         character.fellFromHole = false;
+        character.damageBlinkTimeLeft = 0;
+        character.damageBlinkDuration = 0;
         
         // Start blinking state (1 second) - applies to both falling out of court and falling into holes
         character.isBlinking = true;
@@ -1717,6 +1735,20 @@ const Physics = {
             if (this.ai.blinkTimer >= 1.0) {
                 this.ai.isBlinking = false;
                 this.ai.blinkTimer = 0;
+            }
+        }
+
+        // Update damage blink timers (touch-limit HP penalty)
+        if ((this.player.damageBlinkTimeLeft ?? 0) > 0) {
+            this.player.damageBlinkTimeLeft = Math.max(0, (this.player.damageBlinkTimeLeft ?? 0) - deltaTime);
+            if (this.player.damageBlinkTimeLeft <= 0) {
+                this.player.damageBlinkDuration = 0;
+            }
+        }
+        if ((this.ai.damageBlinkTimeLeft ?? 0) > 0) {
+            this.ai.damageBlinkTimeLeft = Math.max(0, (this.ai.damageBlinkTimeLeft ?? 0) - deltaTime);
+            if (this.ai.damageBlinkTimeLeft <= 0) {
+                this.ai.damageBlinkDuration = 0;
             }
         }
         

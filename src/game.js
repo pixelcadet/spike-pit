@@ -409,6 +409,13 @@ const Game = {
         if (this.state.scoreCooldown > 0) {
             return;
         }
+
+        // Reset touch counter immediately on scoring (so next rally always starts clean).
+        if (typeof Physics !== 'undefined' && Physics.ball) {
+            Physics.ball.touchesRemaining = this.state.touchesPerSide ?? 3;
+            Physics.ball.touchCooldown = 0;
+            Physics.ball.prevX = Physics.ball.x;
+        }
         
         // Award point
         if (winner === 'player') {

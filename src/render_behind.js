@@ -46,6 +46,10 @@ const RenderBehind = {
     farRowWeights: [1.00, 0.92, 0.86, 0.80],
     zPixels: 90,        // pixels per world z at near end
 
+    // Visual scale multipliers (render-only; does NOT change physics)
+    characterScaleMul: 2.0,
+    ballScaleMul: 2.5,
+
     // ---- helpers ----
     colorWithAlpha(color, alpha) {
         if (typeof color !== 'string') return color;
@@ -413,7 +417,7 @@ const RenderBehind = {
         const ctx = this.ctx;
         const p = this.project(char.x, char.y, char.z);
         const g = this.project(char.x, char.y, 0);
-        const scale = (p.halfW / this.nearHalfWidth) * 1.2;
+        const scale = (p.halfW / this.nearHalfWidth) * 1.2 * this.characterScaleMul;
 
         // Shadow
         const shadowR = 18 * scale * (char.isFalling ? 0.6 : 1.0);
@@ -459,7 +463,7 @@ const RenderBehind = {
         const b = Physics.ball;
         const p = this.project(b.x, b.y, b.z);
         const g = this.project(b.x, b.y, 0);
-        const scale = (p.halfW / this.nearHalfWidth) * 1.2;
+        const scale = (p.halfW / this.nearHalfWidth) * 1.2 * this.ballScaleMul;
 
         // Shadow
         ctx.save();

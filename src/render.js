@@ -486,7 +486,7 @@ const Render = {
         // Place the arc right under the character feet. For a "bottom" arc centered at 90° (down),
         // the arc sits roughly at centerY + radius, so we offset centerY upward by ~radius.
         const feetGap = Math.max(2, lineWidth * 0.6);
-        const extraDown = 6; // nudge down a few pixels so the arc doesn't overlap the sprite
+        const extraDown = 16; // nudge down a few pixels so the arc doesn't overlap the sprite
         const centerY = shadowY - radius + feetGap + extraDown;
         
         // Draw only a ~100° arc on the FRONT/BOTTOM side of the ring (vertical flip vs the back/top arc).

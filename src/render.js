@@ -481,6 +481,25 @@ const Render = {
     drawBallBody() {
         const ctx = this.ctx;
         const ball = Physics.ball;
+
+        // When the ball is falling through a hole, fade it out quickly and then stop drawing it.
+        // This avoids the hard-looking "clipped by a rectangle" edge that can happen with the tile mask pass.
+        if (ball.fallingThroughHole) {
+            const fadeDepth = 0.6; // world units below ground until fully invisible
+            const alpha = Math.max(0, 1 - (-ball.z / fadeDepth));
+            if (alpha <= 0.01) return;
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            this._drawBallBodyInternal(ball);
+            ctx.restore();
+            return;
+        }
+
+        this._drawBallBodyInternal(ball);
+    },
+
+    _drawBallBodyInternal(ball) {
+        const ctx = this.ctx;
         const proj = this.project(ball.x, ball.y, ball.z);
         
         const ballSize = ball.radius * this.courtTileSize * proj.scale;

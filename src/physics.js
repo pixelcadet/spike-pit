@@ -352,7 +352,7 @@ const Physics = {
         return onCourtX && onCourtY;
     },
     
-    updatePlayer(input) {
+    updatePlayer(input, dtScale = 1) {
         const p = this.player;
         
         // SIMPLE FALLING/RESPAWN SYSTEM
@@ -401,7 +401,7 @@ const Physics = {
                     }
                 }
                 // Update position (only gravity affects it)
-                p.z += p.vz;
+                p.z += p.vz * dtScale;
                 // Don't allow getting back on court while falling - keep falling until timer expires
                 return;
             }
@@ -491,9 +491,9 @@ const Physics = {
         }
         
         // Update position
-        p.x += p.vx;
-        p.y += p.vy;
-        p.z += p.vz;
+        p.x += p.vx * dtScale;
+        p.y += p.vy * dtScale;
+        p.z += p.vz * dtScale;
         
         // Ground collision - only if footprint is on court
         if (p.z <= 0) {
@@ -568,7 +568,7 @@ const Physics = {
         }
     },
     
-    updateAI(aiInput) {
+    updateAI(aiInput, dtScale = 1) {
         const ai = this.ai;
         
         // SIMPLE FALLING/RESPAWN SYSTEM
@@ -617,7 +617,7 @@ const Physics = {
                     }
                 }
                 // Update position (only gravity affects it)
-                ai.z += ai.vz;
+                ai.z += ai.vz * dtScale;
                 // Don't allow getting back on court while falling - keep falling until timer expires
                 return;
             }
@@ -665,9 +665,9 @@ const Physics = {
         }
         
         // Update position
-        ai.x += ai.vx;
-        ai.y += ai.vy;
-        ai.z += ai.vz;
+        ai.x += ai.vx * dtScale;
+        ai.y += ai.vy * dtScale;
+        ai.z += ai.vz * dtScale;
         
         // Ground collision - only if footprint is on court
         if (ai.z <= 0) {
@@ -1243,14 +1243,15 @@ const Physics = {
     
     updateBall(deltaTime = 1/60) {
         const b = this.ball;
+        const dtScale = Math.min(2.0, Math.max(0.25, deltaTime / (1 / 60)));
 
         // If ball is falling through a hole, let it keep falling without any collisions.
         // This prevents net/character collision logic from injecting upward velocity while "under the floor".
         if (b.fallingThroughHole) {
-            b.vz -= this.GRAVITY * this.ballMovementSpeed;
-            b.x += b.vx;
-            b.y += b.vy;
-            b.z += b.vz;
+            b.vz -= this.GRAVITY * this.ballMovementSpeed * dtScale;
+            b.x += b.vx * dtScale;
+            b.y += b.vy * dtScale;
+            b.z += b.vz * dtScale;
             return;
         }
         
@@ -1277,16 +1278,16 @@ const Physics = {
         // Apply gravity (same as characters - uses Physics.GRAVITY which is controlled by slider)
         // Scale gravity by ballMovementSpeed to act as time-scale factor
         // This ensures the same trajectory but at different time scales
-        b.vz -= this.GRAVITY * this.ballMovementSpeed;
+        b.vz -= this.GRAVITY * this.ballMovementSpeed * dtScale;
         
         // Update position
         // ballMovementSpeed acts as time-scale: lower = slower = same distance takes longer
         // Since velocities are already scaled by ballMovementSpeed (from forces),
         // we update position directly with the scaled velocities
         // This maintains the same trajectory but at different time scales
-        b.x += b.vx;
-        b.y += b.vy;
-        b.z += b.vz;
+        b.x += b.vx * dtScale;
+        b.y += b.vy * dtScale;
+        b.z += b.vz * dtScale;
         
         // Check net collision (after position update)
         const velocitiesBeforeNetCheck = { vx: b.vx, vy: b.vy, vz: b.vz };
@@ -1463,6 +1464,10 @@ const Physics = {
     },
     
     update(input, aiInput, deltaTime = 1/60) {
+        // Convert real dt (seconds) into a scale relative to our original 60fps tuning.
+        // This makes the simulation speed consistent across 60Hz/120Hz/etc without rewriting every constant.
+        const dtScale = Math.min(2.0, Math.max(0.25, deltaTime / (1 / 60)));
+
         // Update fall timers with actual deltaTime
         if (this.player.isFalling) {
             this.player.fallTimer += deltaTime;
@@ -1487,8 +1492,8 @@ const Physics = {
             }
         }
         
-        this.updatePlayer(input);
-        this.updateAI(aiInput);
+        this.updatePlayer(input, dtScale);
+        this.updateAI(aiInput, dtScale);
         
         // If serving, keep ball "held" by serving character
         // Do this AFTER character movement so ball follows character if they move
@@ -1508,7 +1513,7 @@ const Physics = {
             const velocitiesBeforeUpdate = { vx: this.ball.vx, vy: this.ball.vy, vz: this.ball.vz };
             const posBeforeUpdate = { x: this.ball.x, y: this.ball.y, z: this.ball.z };
             
-            this.updateBall();
+            this.updateBall(deltaTime);
         }
 
         // Reset action flags at end of frame.

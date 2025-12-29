@@ -1339,6 +1339,8 @@ const Render = {
     // Draw receiving zone ground ring (always visible, shows area on court ground)
     drawReceivingZoneGroundRing(character, color) {
         const ctx = this.ctx;
+        ctx.save();
+        ctx.setLineDash([]); // guard against dash state leaking in
         const receiveZoneRadius = Physics.RECEIVING_ZONE_RADIUS;
         
         // Project character position at ground level (z=0)
@@ -1356,12 +1358,14 @@ const Render = {
         ctx.beginPath();
         ctx.arc(groundProj.x, groundProj.y, finalRingSize, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.setLineDash([]); // Reset to solid
+        ctx.restore();
     },
     
     // Draw spike zone ring (only visible when character is jumping, shows area at character's center mass)
     drawSpikeZoneGroundRing(character, color) {
         const ctx = this.ctx;
+        ctx.save();
+        ctx.setLineDash([]); // guard against dash state leaking in
         const spikeZoneRadius = Physics.SPIKE_ZONE_RADIUS;
         
         // Calculate spike zone position (offset forward and upward)
@@ -1389,7 +1393,7 @@ const Render = {
         ctx.beginPath();
         ctx.arc(spikeZoneProj.x, spikeZoneProj.y, finalRingSize, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.setLineDash([]); // Reset to solid
+        ctx.restore();
     },
     
     // Draw edge labels for debugging (EDGE A, B, C)

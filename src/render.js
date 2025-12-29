@@ -1122,7 +1122,7 @@ const Render = {
         ctx.save();
         ctx.translate(edgeB_PlayerX, edgeB_PlayerCenterY);
         ctx.rotate(-Math.PI / 2); // Rotate 90 degrees counter-clockwise
-        ctx.fillText('EDGE B (70%)', 0, 0);
+        ctx.fillText('EDGE B (50%)', 0, 0);
         ctx.restore();
         
         // EDGE C: Bottom side of screen (front of court, y = 0)
@@ -1134,7 +1134,7 @@ const Render = {
         ctx.fillStyle = '#ff0000';
         ctx.font = 'bold 16px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('EDGE C (10%)', edgeC_CenterX, edgeC_Y);
+        ctx.fillText('EDGE C (5%)', edgeC_CenterX, edgeC_Y);
         
         // Also draw EDGE B for AI side (right side, x = COURT_WIDTH)
         const edgeB_AIFront = this.project(Physics.COURT_WIDTH, 0, 0);
@@ -1145,7 +1145,7 @@ const Render = {
         ctx.save();
         ctx.translate(edgeB_AIX, edgeB_AICenterY);
         ctx.rotate(-Math.PI / 2); // Rotate 90 degrees counter-clockwise
-        ctx.fillText('EDGE B (70%)', 0, 0);
+        ctx.fillText('EDGE B (50%)', 0, 0);
         ctx.restore();
     },
     
@@ -1451,7 +1451,7 @@ const Render = {
         ctx.save();
         ctx.translate(edgeB_PlayerX, edgeB_PlayerCenterY);
         ctx.rotate(-Math.PI / 2); // Rotate 90 degrees counter-clockwise
-        ctx.fillText('EDGE B (70%)', 0, 0);
+        ctx.fillText('EDGE B (50%)', 0, 0);
         ctx.restore();
         
         // EDGE C: Bottom side of screen (front of court, y = 0)
@@ -1463,7 +1463,7 @@ const Render = {
         ctx.fillStyle = '#ff0000';
         ctx.font = 'bold 16px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText('EDGE C (10%)', edgeC_CenterX, edgeC_Y);
+        ctx.fillText('EDGE C (5%)', edgeC_CenterX, edgeC_Y);
         
         // Also draw EDGE B for AI side (right side, x = COURT_WIDTH)
         const edgeB_AIFront = this.project(Physics.COURT_WIDTH, 0, 0);
@@ -1474,7 +1474,7 @@ const Render = {
         ctx.save();
         ctx.translate(edgeB_AIX, edgeB_AICenterY);
         ctx.rotate(-Math.PI / 2); // Rotate 90 degrees counter-clockwise
-        ctx.fillText('EDGE B (70%)', 0, 0);
+        ctx.fillText('EDGE B (50%)', 0, 0);
         ctx.restore();
     },
 

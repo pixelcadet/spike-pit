@@ -702,7 +702,9 @@ const Render = {
 
         const isMaskTile = (tx, ty) => {
             const tile = Game?.getTileState ? Game.getTileState(tx, ty) : null;
-            if (!tile || tile.destroyed) return false; // "remaining tiles" only
+            // "Remaining tiles" only, and never mask with indestructible (net-adjacent) tiles.
+            // Indestructible columns sit at the net line (tx=3/4) and drawing them in the mask pass can clip the net.
+            if (!tile || tile.destroyed || tile.indestructible) return false;
             if (tx < Physics.NET_X) {
                 return maskBySide.player != null && ty <= maskBySide.player;
             }

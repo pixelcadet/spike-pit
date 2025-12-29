@@ -464,6 +464,7 @@ const Render = {
         if (hp == null || maxHp == null || maxHp <= 0) return;
         if (character.z < 0) return; // don't draw while falling under floor
 
+        const proj = this.project(character.x, character.y, character.z);
         const groundProj = this.project(character.x, character.y, 0);
         // Scale with perspective; keep minimum readable size.
         const base = character.radius * this.courtTileSize * groundProj.scale;
@@ -471,18 +472,31 @@ const Render = {
         const lineWidth = Math.max(3, radius * 0.22);
 
         const ratio = Math.max(0, Math.min(1, hp / maxHp));
-        // Upper semicircle (sits "behind" the body a bit in screen space)
-        const startAngle = Math.PI; // left
-        const endAngle = 0;         // right
+        
+        // Anchor the bar BELOW the sprite, at the same ground reference used by the shadow.
+        // This prevents it reading as "overhead" on the character.
+        const charSize = character.radius * this.courtTileSize * proj.scale;
+        const minSize = 8;
+        const finalSize = Math.max(charSize, minSize);
+        const rectHeight = finalSize * 1.5;
+        const scaleRatio = groundProj.scale / proj.scale;
+        const shadowY = groundProj.y + (rectHeight / 2) * scaleRatio;
+        
+        const centerX = groundProj.x;
+        const centerY = shadowY + radius; // top of arc touches the bottom of the sprite
+        
+        // Semicircle above this (so the visible arc "hugs" the ground under the character)
+        const startAngle = Math.PI;      // left
+        const endAngle = Math.PI * 2.0;  // right
 
         ctx.save();
         ctx.lineWidth = lineWidth;
         ctx.lineCap = 'round';
 
         // Background track
-        ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
         ctx.beginPath();
-        ctx.arc(groundProj.x, groundProj.y, radius, startAngle, endAngle, false);
+        ctx.arc(centerX, centerY, radius, startAngle, endAngle, false);
         ctx.stroke();
 
         // Filled portion
@@ -490,7 +504,7 @@ const Render = {
             const filledEnd = startAngle + (endAngle - startAngle) * ratio; // interpolate along semicircle
             ctx.strokeStyle = this.colorWithAlpha(color, 0.9);
             ctx.beginPath();
-            ctx.arc(groundProj.x, groundProj.y, radius, startAngle, filledEnd, false);
+            ctx.arc(centerX, centerY, radius, startAngle, filledEnd, false);
             ctx.stroke();
         }
 

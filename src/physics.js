@@ -90,11 +90,7 @@ const Physics = {
         hasScored: false,    // Flag to prevent multiple scores from same bounce/fall
         justServed: false,   // Flag to prevent immediate collision after serve
         serveTimer: 0,        // Timer for serve grace period
-        fallingThroughHole: false, // When true, ball ignores collisions and keeps falling (prevents "bouncing back up")
-
-        // Prevent "carrying": avoid repeated body-bounce impulses every frame while overlapping a character.
-        lastBodyHitBy: null,       // 'player' | 'ai' | null
-        bodyHitCooldown: 0         // seconds; while >0, ignore body collision with lastBodyHitBy
+        fallingThroughHole: false // When true, ball ignores collisions and keeps falling (prevents "bouncing back up")
     },
     
     init() {
@@ -117,8 +113,6 @@ const Physics = {
         this.ball.justServed = false;
         this.ball.serveTimer = 0;
         this.ball.fallingThroughHole = false;
-        this.ball.lastBodyHitBy = null;
-        this.ball.bodyHitCooldown = 0;
     },
     
     reset() {
@@ -358,7 +352,7 @@ const Physics = {
         return onCourtX && onCourtY;
     },
     
-    updatePlayer(input, dtScale = 1) {
+    updatePlayer(input) {
         const p = this.player;
         
         // SIMPLE FALLING/RESPAWN SYSTEM
@@ -366,11 +360,15 @@ const Physics = {
         // Don't trigger during jumps - allow characters to jump over edges
         const isOffCourt = !this.isFootprintOnCourt(p);
         const hasFallenTooFar = p.z < -2.0;
-        const isOnGroundAndOffCourt = p.onGround && isOffCourt;
+        // IMPORTANT: don't require onGround here. We can set onGround=false later in the frame when the
+        // footprint is invalid, which previously allowed a "half fall then pop back up" state.
+        // If the character is at/under the ground plane and their footprint is invalid (edge or hole),
+        // they should enter the falling state.
+        const isAtOrBelowGroundAndOffCourt = (p.z <= 0.01) && isOffCourt;
         
-        // Only start falling if: (on ground and off court) OR (fallen too far below)
+        // Only start falling if: (at/below ground and off court) OR (fallen too far below)
         // This allows jumping over edges without triggering falling state
-        if ((isOnGroundAndOffCourt || hasFallenTooFar) && !p.isFalling) {
+        if ((isAtOrBelowGroundAndOffCourt || hasFallenTooFar) && !p.isFalling) {
             p.isFalling = true;
             p.fallTimer = 0;
             // Determine which edge they fell from
@@ -407,7 +405,7 @@ const Physics = {
                     }
                 }
                 // Update position (only gravity affects it)
-                p.z += p.vz * dtScale;
+                p.z += p.vz;
                 // Don't allow getting back on court while falling - keep falling until timer expires
                 return;
             }
@@ -497,9 +495,9 @@ const Physics = {
         }
         
         // Update position
-        p.x += p.vx * dtScale;
-        p.y += p.vy * dtScale;
-        p.z += p.vz * dtScale;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.z += p.vz;
         
         // Ground collision - only if footprint is on court
         if (p.z <= 0) {
@@ -574,7 +572,7 @@ const Physics = {
         }
     },
     
-    updateAI(aiInput, dtScale = 1) {
+    updateAI(aiInput) {
         const ai = this.ai;
         
         // SIMPLE FALLING/RESPAWN SYSTEM
@@ -582,11 +580,13 @@ const Physics = {
         // Don't trigger during jumps - allow characters to jump over edges
         const isOffCourt = !this.isFootprintOnCourt(ai);
         const hasFallenTooFar = ai.z < -2.0;
-        const isOnGroundAndOffCourt = ai.onGround && isOffCourt;
+        // Same rationale as player: don't rely on onGround, because it can be set false later in the frame,
+        // leaving a "half fall then snap back" state. If we're at/under the ground plane and off court, fall.
+        const isAtOrBelowGroundAndOffCourt = (ai.z <= 0.01) && isOffCourt;
         
-        // Only start falling if: (on ground and off court) OR (fallen too far below)
+        // Only start falling if: (at/below ground and off court) OR (fallen too far below)
         // This allows jumping over edges without triggering falling state
-        if ((isOnGroundAndOffCourt || hasFallenTooFar) && !ai.isFalling) {
+        if ((isAtOrBelowGroundAndOffCourt || hasFallenTooFar) && !ai.isFalling) {
             ai.isFalling = true;
             ai.fallTimer = 0;
             // Determine which edge they fell from
@@ -623,7 +623,7 @@ const Physics = {
                     }
                 }
                 // Update position (only gravity affects it)
-                ai.z += ai.vz * dtScale;
+                ai.z += ai.vz;
                 // Don't allow getting back on court while falling - keep falling until timer expires
                 return;
             }
@@ -671,9 +671,9 @@ const Physics = {
         }
         
         // Update position
-        ai.x += ai.vx * dtScale;
-        ai.y += ai.vy * dtScale;
-        ai.z += ai.vz * dtScale;
+        ai.x += ai.vx;
+        ai.y += ai.vy;
+        ai.z += ai.vz;
         
         // Ground collision - only if footprint is on court
         if (ai.z <= 0) {
@@ -762,10 +762,6 @@ const Physics = {
         }
         
         const b = this.ball;
-        const side = (character === this.player) ? 'player' : 'ai';
-        if ((b.bodyHitCooldown ?? 0) > 0 && b.lastBodyHitBy === side) {
-            return false;
-        }
         const dx = b.x - character.x;
         const dy = b.y - character.y;
         const dz = b.z - character.z;
@@ -774,17 +770,9 @@ const Physics = {
         
         if (dist < collisionDist) {
             // Collision detected - calculate bounce
-            const safeDist = Math.max(0.000001, dist);
-            const pushDirX = dx / safeDist;
-            const pushDirY = dy / safeDist;
-            const pushDirZ = dz / safeDist;
-
-            // Only apply a "bounce impulse" if the ball is moving INTO the character.
-            // This prevents repeated impulses while the ball is already separating, which feels like "carrying".
-            const relVx = b.vx - character.vx;
-            const relVy = b.vy - character.vy;
-            const relVz = b.vz - character.vz;
-            const approachSpeed = relVx * pushDirX + relVy * pushDirY + relVz * pushDirZ; // <0 => approaching
+            const pushDirX = dx / dist;
+            const pushDirY = dy / dist;
+            const pushDirZ = dz / dist;
             
             // Move ball to just outside character
             b.x = character.x + pushDirX * (collisionDist + 0.05);
@@ -796,28 +784,24 @@ const Physics = {
                 b.z = b.groundLevel;
             }
             
-            if (approachSpeed < 0) {
-                // Calculate bounce velocity based on character's movement
-                // Character's velocity contributes to ball's bounce
-                const characterSpeed = Math.sqrt(character.vx * character.vx + character.vy * character.vy);
-                const bouncePower = 0.15; // Base bounce power
-                const speedMultiplier = Math.min(characterSpeed * 2, 0.1); // Character speed adds to bounce
-                
-                // Bounce direction: collision normal + character velocity influence
-                // Scale by ballMovementSpeed to maintain same trajectory at different time scales
-                b.vx = (pushDirX * (bouncePower + speedMultiplier) + character.vx * 0.3) * this.ballMovementSpeed;
-                b.vy = (pushDirY * (bouncePower + speedMultiplier) + character.vy * 0.3) * this.ballMovementSpeed;
-                b.vz = (pushDirZ * (bouncePower + speedMultiplier) + 0.1) * this.ballMovementSpeed; // Always add some upward component
-                
-                // Apply bounce damping
-                b.vx *= b.bounceDamping;
-                b.vy *= b.bounceDamping;
-                b.vz *= b.bounceDamping;
-
-                // Start per-character cooldown so we don't repeatedly "carry" the ball with multiple impulses.
-                b.lastBodyHitBy = side;
-                b.bodyHitCooldown = 0.12;
-            }
+            // Calculate bounce velocity based on character's movement
+            // Character's velocity contributes to ball's bounce
+            const characterSpeed = Math.sqrt(character.vx * character.vx + character.vy * character.vy);
+            const bouncePower = 0.15; // Base bounce power
+            const speedMultiplier = Math.min(characterSpeed * 2, 0.1); // Character speed adds to bounce
+            
+            // Bounce direction: opposite of collision normal + character velocity influence
+            // The ball bounces away from the character in the direction opposite to where it came from
+            // Plus it gets pushed in the direction the character is moving
+            // Scale by ballMovementSpeed to maintain same trajectory at different time scales
+            b.vx = (pushDirX * (bouncePower + speedMultiplier) + character.vx * 0.3) * this.ballMovementSpeed;
+            b.vy = (pushDirY * (bouncePower + speedMultiplier) + character.vy * 0.3) * this.ballMovementSpeed;
+            b.vz = (pushDirZ * (bouncePower + speedMultiplier) + 0.1) * this.ballMovementSpeed; // Always add some upward component
+            
+            // Apply bounce damping
+            b.vx *= b.bounceDamping;
+            b.vy *= b.bounceDamping;
+            b.vz *= b.bounceDamping;
 
             // If the ball bumps a character's body very close to the ground, it can end up with
             // too little airtime (especially with low ballMovementSpeed) and immediately hit the ground,
@@ -919,8 +903,6 @@ const Physics = {
             b.lastHitType = 'lob';
             b.tileDamageBounces = 0;
             b.fallingThroughHole = false;
-            b.lastBodyHitBy = null;
-            b.bodyHitCooldown = 0;
         } else {
             // SPIKE: Strong trajectory with steep downward angle (similar to spike serve)
             // Calculate target based on ball's distance from net
@@ -995,8 +977,6 @@ const Physics = {
             b.lastHitType = 'spike';
             b.tileDamageBounces = 0;
             b.fallingThroughHole = false;
-            b.lastBodyHitBy = null;
-            b.bodyHitCooldown = 0;
         }
         
         character.hasSpiked = true;
@@ -1081,8 +1061,6 @@ const Physics = {
             b.lastHitType = 'toss';
             b.tileDamageBounces = 0;
             b.fallingThroughHole = false;
-            b.lastBodyHitBy = null;
-            b.bodyHitCooldown = 0;
             
             const aim = Input.getAim2D?.() ?? { x: 0, y: 0 };
             // Disallow "back toss" (away from the net) so ground receives stay simple and forward-oriented.
@@ -1178,8 +1156,6 @@ const Physics = {
             b.lastHitType = 'receive';
             b.tileDamageBounces = 0;
             b.fallingThroughHole = false;
-            b.lastBodyHitBy = null;
-            b.bodyHitCooldown = 0;
         }
         
         // Mark character as having received (prevent spamming)
@@ -1273,23 +1249,14 @@ const Physics = {
     
     updateBall(deltaTime = 1/60) {
         const b = this.ball;
-        const dtScale = Math.min(2.0, Math.max(0.25, deltaTime / (1 / 60)));
-
-        // Decrement body collision cooldown (prevents "carrying" via repeated impulses).
-        if ((b.bodyHitCooldown ?? 0) > 0) {
-            b.bodyHitCooldown = Math.max(0, b.bodyHitCooldown - deltaTime);
-            if (b.bodyHitCooldown === 0) {
-                b.lastBodyHitBy = null;
-            }
-        }
 
         // If ball is falling through a hole, let it keep falling without any collisions.
         // This prevents net/character collision logic from injecting upward velocity while "under the floor".
         if (b.fallingThroughHole) {
-            b.vz -= this.GRAVITY * this.ballMovementSpeed * dtScale;
-            b.x += b.vx * dtScale;
-            b.y += b.vy * dtScale;
-            b.z += b.vz * dtScale;
+            b.vz -= this.GRAVITY * this.ballMovementSpeed;
+            b.x += b.vx;
+            b.y += b.vy;
+            b.z += b.vz;
             return;
         }
         
@@ -1316,16 +1283,16 @@ const Physics = {
         // Apply gravity (same as characters - uses Physics.GRAVITY which is controlled by slider)
         // Scale gravity by ballMovementSpeed to act as time-scale factor
         // This ensures the same trajectory but at different time scales
-        b.vz -= this.GRAVITY * this.ballMovementSpeed * dtScale;
+        b.vz -= this.GRAVITY * this.ballMovementSpeed;
         
         // Update position
         // ballMovementSpeed acts as time-scale: lower = slower = same distance takes longer
         // Since velocities are already scaled by ballMovementSpeed (from forces),
         // we update position directly with the scaled velocities
         // This maintains the same trajectory but at different time scales
-        b.x += b.vx * dtScale;
-        b.y += b.vy * dtScale;
-        b.z += b.vz * dtScale;
+        b.x += b.vx;
+        b.y += b.vy;
+        b.z += b.vz;
         
         // Check net collision (after position update)
         const velocitiesBeforeNetCheck = { vx: b.vx, vy: b.vy, vz: b.vz };
@@ -1438,11 +1405,9 @@ const Physics = {
             // If ball is off court, don't clamp z or reset velocities - let it fall through
         }
         
-        // Check for out-of-bounds score as soon as the ball leaves court bounds (even mid-air).
-        // With time-based updates (and net/body deflections), the ball can go out while still above ground.
-        // If we wait for z < 0, rallies can get "stuck" with the ball drifting out forever.
-        const scoringEnabled = !(Game?.state?.isResetting) && !(Game?.state?.matchOver);
-        if (scoringEnabled && !b.hasScored && !this.isBallOnCourt() && b.lastTouchedBy) {
+        // Check for out-of-bounds score when ball falls off court (even if z > groundLevel)
+        // This handles cases where ball goes out of bounds while still in the air
+        if (!b.hasScored && !this.isBallOnCourt() && b.z < 0 && b.lastTouchedBy) {
             // Ball went out of bounds - opponent of last toucher scores
             if (b.lastTouchedBy === 'player') {
                 // Player hit it out → AI scores
@@ -1451,7 +1416,7 @@ const Physics = {
                 // AI hit it out → Player scores
                 Game.scorePoint('player');
             }
-            b.hasScored = true; // Prevent multiple scores from same out
+            b.hasScored = true; // Prevent multiple scores from same fall
         }
         
         // Ball can move freely (no clamping)
@@ -1504,10 +1469,6 @@ const Physics = {
     },
     
     update(input, aiInput, deltaTime = 1/60) {
-        // Convert real dt (seconds) into a scale relative to our original 60fps tuning.
-        // This makes the simulation speed consistent across 60Hz/120Hz/etc without rewriting every constant.
-        const dtScale = Math.min(2.0, Math.max(0.25, deltaTime / (1 / 60)));
-
         // Update fall timers with actual deltaTime
         if (this.player.isFalling) {
             this.player.fallTimer += deltaTime;
@@ -1532,8 +1493,8 @@ const Physics = {
             }
         }
         
-        this.updatePlayer(input, dtScale);
-        this.updateAI(aiInput, dtScale);
+        this.updatePlayer(input);
+        this.updateAI(aiInput);
         
         // If serving, keep ball "held" by serving character
         // Do this AFTER character movement so ball follows character if they move
@@ -1553,7 +1514,7 @@ const Physics = {
             const velocitiesBeforeUpdate = { vx: this.ball.vx, vy: this.ball.vy, vz: this.ball.vz };
             const posBeforeUpdate = { x: this.ball.x, y: this.ball.y, z: this.ball.z };
             
-            this.updateBall(deltaTime);
+            this.updateBall();
         }
 
         // Reset action flags at end of frame.

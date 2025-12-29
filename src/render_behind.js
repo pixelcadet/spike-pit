@@ -22,7 +22,11 @@ const RenderBehind = {
     farHalfWidth: 135,  // half width of court at depth=COURT_WIDTH
     // Keep net visually centered between bottom and top for an optically even split.
     // Curvature can be adjusted later; for now keep it linear-per-half so the halves feel balanced.
-    depthPow: 1.0,
+    // Asymmetric depth shaping:
+    // - near (player side) uses < 1.0 to stretch vertically
+    // - far (opponent side) uses > 1.0 to squeeze vertically
+    depthPowNear: 0.88,
+    depthPowFar: 1.18,
     zPixels: 90,        // pixels per world z at near end
 
     init() {
@@ -51,10 +55,10 @@ const RenderBehind = {
         let tp;
         if (t <= netT) {
             const u = netT <= 0 ? 0 : (t / netT); // 0..1
-            tp = 0.5 * Math.pow(u, this.depthPow);
+            tp = 0.5 * Math.pow(u, this.depthPowNear);
         } else {
             const u = (1 - netT) <= 0 ? 1 : ((t - netT) / (1 - netT)); // 0..1
-            tp = 0.5 + 0.5 * Math.pow(u, this.depthPow);
+            tp = 0.5 + 0.5 * Math.pow(u, this.depthPowFar);
         }
 
         const yScreen = this.lerp(this.bottomY, this.topY, tp);

@@ -42,6 +42,27 @@ const Render = {
         this.depthRange = Physics.COURT_LENGTH;
     },
 
+    // Convert "#rrggbb" (or "#rgb") to "rgba(r,g,b,a)" for consistent alpha handling across browsers.
+    // Falls back to the input color string if it can't parse.
+    colorWithAlpha(color, alpha) {
+        if (typeof color !== 'string') return color;
+        const c = color.trim();
+        let r, g, b;
+        if (/^#([0-9a-f]{6})$/i.test(c)) {
+            r = parseInt(c.slice(1, 3), 16);
+            g = parseInt(c.slice(3, 5), 16);
+            b = parseInt(c.slice(5, 7), 16);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+        if (/^#([0-9a-f]{3})$/i.test(c)) {
+            r = parseInt(c[1] + c[1], 16);
+            g = parseInt(c[2] + c[2], 16);
+            b = parseInt(c[3] + c[3], 16);
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+        return color;
+    },
+
     startShake(intensity = 6, duration = 0.12) {
         // If multiple shakes happen quickly, keep the stronger shake and refresh the timer.
         this.shakeIntensity = Math.max(this.shakeIntensity, intensity);
@@ -1300,7 +1321,7 @@ const Render = {
         
         // Fill with transparent color if highlighted
         if (highlight) {
-            ctx.fillStyle = color + '30'; // 30% opacity
+            ctx.fillStyle = this.colorWithAlpha(color, 0.3);
             ctx.beginPath();
             ctx.arc(centerProj.x, centerProj.y, finalMainSize, 0, Math.PI * 2);
             ctx.fill();
@@ -1329,7 +1350,7 @@ const Render = {
         const finalRingSize = Math.max(ringSize, minSize);
         
         // Draw ring on ground (always visible, more prominent)
-        ctx.strokeStyle = color + 'AA'; // 67% opacity (AA in hex = 170/255) for more prominent visibility
+        ctx.strokeStyle = this.colorWithAlpha(color, 0.67);
         ctx.lineWidth = 2;
         ctx.setLineDash([3, 3]); // Slightly larger dashes
         ctx.beginPath();
@@ -1362,7 +1383,7 @@ const Render = {
         const finalRingSize = Math.max(ringSize, minSize);
         
         // Draw ring at spike zone position (more prominent)
-        ctx.strokeStyle = color + 'AA'; // 67% opacity (AA in hex = 170/255) for more prominent visibility
+        ctx.strokeStyle = this.colorWithAlpha(color, 0.67);
         ctx.lineWidth = 2;
         ctx.setLineDash([3, 3]); // Slightly larger dashes
         ctx.beginPath();

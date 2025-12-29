@@ -113,6 +113,14 @@ const Controls = {
         aiActiveToggle.addEventListener('change', (e) => {
             AI.isActive = e.target.checked;
         });
+
+        // Set up free play toggle (no match end)
+        const freePlayToggle = document.getElementById('free-play');
+        if (freePlayToggle) {
+            freePlayToggle.addEventListener('change', (e) => {
+                Game.setFreePlay?.(e.target.checked);
+            });
+        }
         
         // Initialize with default values
         this.updateMovementSpeed(5);
@@ -127,6 +135,11 @@ const Controls = {
         this.updateServeVertical(5);
         // AI active is already checked by default in HTML
         AI.isActive = aiActiveToggle.checked;
+        if (freePlayToggle) {
+            // Default off
+            freePlayToggle.checked = false;
+            Game.setFreePlay?.(freePlayToggle.checked);
+        }
     },
     
     // Convert 1-10 scale to movement speed (0.025 to 0.075, with 5 = 0.05)

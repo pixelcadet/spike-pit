@@ -5,6 +5,7 @@ const Game = {
         playerScore: 0,
         aiScore: 0,
         pointsToWin: 7,
+        freePlay: false, // If true, never end the match; scoring can continue indefinitely.
         matchOver: false,
         matchWinner: null, // 'player' | 'ai'
         matchEndReason: null,
@@ -56,6 +57,7 @@ const Game = {
         this.state.playerScore = 0;
         this.state.aiScore = 0;
         this.state.pointsToWin = 7;
+        this.state.freePlay = false;
         this.state.matchOver = false;
         this.state.matchWinner = null;
         this.state.matchEndReason = null;
@@ -187,6 +189,7 @@ const Game = {
     },
     
     checkWinConditions() {
+        if (this.state.freePlay) return;
         if (this.state.matchOver) return;
         
         if (this.state.playerScore >= this.state.pointsToWin) {
@@ -209,11 +212,22 @@ const Game = {
     },
     
     endMatch(winner, reason) {
+        if (this.state.freePlay) return;
         this.state.matchOver = true;
         this.state.matchWinner = winner;
         this.state.matchEndReason = reason;
         this.state.isResetting = false;
         this.state.resetTimer = 0;
+    },
+
+    setFreePlay(enabled) {
+        this.state.freePlay = !!enabled;
+        // If turning on free play while match over is showing, resume immediately.
+        if (this.state.freePlay && this.state.matchOver) {
+            this.state.matchOver = false;
+            this.state.matchWinner = null;
+            this.state.matchEndReason = null;
+        }
     },
     
     // Find nearest intact tile center on a side, starting from a preferred tile coord.

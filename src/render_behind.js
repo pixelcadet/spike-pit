@@ -28,7 +28,11 @@ const RenderBehind = {
     //   0.5 would be centered; >0.5 moves the net UP (toward topY).
     netScreenFrac: 0.60,
     depthPowNear: 0.78, // <1 stretches near side vertically
-    depthPowFar: 1.35,  // >1 squeezes far side vertically
+    depthPowFar: 1.35,  // >1 squeezes far side vertically (overall)
+    // Far-side shaping: the opponent row closest to the net can look too thin if we
+    // apply a single >1 exponent. Boost the first far tile row (NET_X..NET_X+1) a bit.
+    farFirstTileFrac: 0.36, // fraction of far-half vertical span allocated to the first far tile row
+    farFirstTilePow: 0.80,  // <1 = expands near-net far row
     zPixels: 90,        // pixels per world z at near end
 
     init() {
@@ -62,7 +66,19 @@ const RenderBehind = {
         } else {
             // Map [netT..1] -> [netS..1]
             const u = (1 - netT) <= 0 ? 1 : ((t - netT) / (1 - netT)); // 0..1
-            tp = netS + (1 - netS) * Math.pow(u, this.depthPowFar);
+            // Boost the first far tile row (closest to net) so it doesn't get too thin.
+            const farTiles = Math.max(1, (Physics.COURT_WIDTH - Physics.NET_X));
+            const u1 = 1 / farTiles; // corresponds to exactly one tile depth on the far side
+            const firstFrac = Math.max(0.10, Math.min(0.70, this.farFirstTileFrac));
+            let s;
+            if (u <= u1) {
+                const uu = u1 <= 0 ? 0 : (u / u1); // 0..1
+                s = firstFrac * Math.pow(uu, this.farFirstTilePow);
+            } else {
+                const uu = (1 - u1) <= 0 ? 1 : ((u - u1) / (1 - u1)); // 0..1
+                s = firstFrac + (1 - firstFrac) * Math.pow(uu, this.depthPowFar);
+            }
+            tp = netS + (1 - netS) * s;
         }
 
         const yScreen = this.lerp(this.bottomY, this.topY, tp);

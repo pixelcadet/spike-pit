@@ -483,12 +483,15 @@ const Render = {
         const shadowY = groundProj.y + (rectHeight / 2) * scaleRatio;
         
         const centerX = groundProj.x;
-        // Pull the bar up closer to the character. Keep it slightly below the feet so it reads as a ground UI element.
-        const centerY = shadowY + Math.max(2, lineWidth * 0.6);
+        // Pull the bar further up so it hugs the feet.
+        const centerY = shadowY + Math.max(1, lineWidth * 0.2);
         
-        // Semicircle under the character (a "smile" ∪), centered just below the feet.
-        const startAngle = Math.PI; // left
-        const endAngle = 0;         // right
+        // Draw only a ~100° arc on the BACK side of the ring (remove the front-facing portion).
+        // 270° is "up" in canvas-angle space (with y-down coords), so center the arc there.
+        const halfSpan = (Math.PI / 180) * 50; // 50° each side => 100° total
+        const arcCenter = Math.PI * 1.5; // 270°
+        const startAngle = arcCenter - halfSpan;
+        const endAngle = arcCenter + halfSpan;
 
         ctx.save();
         ctx.lineWidth = lineWidth;
@@ -497,15 +500,15 @@ const Render = {
         // Background track
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
         ctx.beginPath();
-        ctx.arc(centerX, centerY, radius, startAngle, endAngle, true);
+        ctx.arc(centerX, centerY, radius, startAngle, endAngle, false);
         ctx.stroke();
 
         // Filled portion
         if (ratio > 0) {
-            const filledEnd = startAngle + (endAngle - startAngle) * ratio; // interpolate along semicircle
+            const filledEnd = startAngle + (endAngle - startAngle) * ratio; // interpolate along arc
             ctx.strokeStyle = this.colorWithAlpha(color, 0.9);
             ctx.beginPath();
-            ctx.arc(centerX, centerY, radius, startAngle, filledEnd, true);
+            ctx.arc(centerX, centerY, radius, startAngle, filledEnd, false);
             ctx.stroke();
         }
 

@@ -459,7 +459,7 @@ const Render = {
 
     // Draw a semicircle HP bar on the ground at the character position.
     // Uses Game.state.playerHp/aiHp and max HP; purely visual.
-    drawHpArcGround(character, color, hp, maxHp) {
+    drawHpArcGround(character, color, hp, maxHp, drainFromRight = false) {
         const ctx = this.ctx;
         if (hp == null || maxHp == null || maxHp <= 0) return;
         if (character.z < 0) return; // don't draw while falling under floor
@@ -469,7 +469,7 @@ const Render = {
         // Scale with perspective; keep minimum readable size.
         const base = character.radius * this.courtTileSize * groundProj.scale;
         const radius = Math.max(14, base * 1.35);
-        const lineWidth = Math.max(3, radius * 0.22);
+        const lineWidth = Math.max(2.5, radius * 0.18);
 
         const ratio = Math.max(0, Math.min(1, hp / maxHp));
         
@@ -508,10 +508,15 @@ const Render = {
 
         // Filled portion
         if (ratio > 0) {
-            const filledEnd = startAngle + (endAngle - startAngle) * ratio; // interpolate along arc
+            const span = (endAngle - startAngle);
+            // Default: fill grows leftward from the right end (startAngle).
+            // Player option: drain from the RIGHT means the LEFT stays filled as HP drops,
+            // so we anchor the fill at the left end (endAngle).
+            const filledStart = drainFromRight ? (endAngle - span * ratio) : startAngle;
+            const filledEnd = drainFromRight ? endAngle : (startAngle + span * ratio);
             ctx.strokeStyle = this.colorWithAlpha(color, 0.9);
             ctx.beginPath();
-            ctx.arc(centerX, centerY, radius, startAngle, filledEnd, false);
+            ctx.arc(centerX, centerY, radius, filledStart, filledEnd, false);
             ctx.stroke();
         }
 
@@ -897,8 +902,8 @@ const Render = {
         // Always show (independent of showZones/showHitboxes).
         const pMaxHp = Game?.state?.maxPlayerHp ?? 10;
         const aMaxHp = Game?.state?.maxAiHp ?? 10;
-        this.drawHpArcGround(Physics.player, '#4a9eff', Game?.state?.playerHp ?? pMaxHp, pMaxHp);
-        this.drawHpArcGround(Physics.ai, '#ff4a4a', Game?.state?.aiHp ?? aMaxHp, aMaxHp);
+        this.drawHpArcGround(Physics.player, '#4a9eff', Game?.state?.playerHp ?? pMaxHp, pMaxHp, true);
+        this.drawHpArcGround(Physics.ai, '#ff4a4a', Game?.state?.aiHp ?? aMaxHp, aMaxHp, false);
 
         // Draw falling-into-hole entities first (so we can draw mask tiles above them).
         // Non-falling entities are drawn after the mask so they don't get clipped.

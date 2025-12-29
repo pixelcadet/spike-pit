@@ -110,10 +110,11 @@ const AI = {
                 const tile = Game?.getTileState?.(tx, ty);
                 if (tile && !tile.indestructible && tile.destroyed) {
                     onHole = true;
-                } else if (typeof Physics?.getFootprintHoleOverlapMax === 'function') {
-                    // If any single destroyed tile overlaps a meaningful fraction of the footprint, treat it as unsafe.
+                } else if (typeof Physics?.getFootprintHoleOverlapInfo === 'function' || typeof Physics?.getFootprintHoleOverlapMax === 'function') {
+                    // If destroyed tiles overlap a meaningful fraction of the footprint, treat it as unsafe.
                     // Use a lower threshold than the "fall" threshold so AI doesn't idle half-on a hole.
-                    const overlap = Physics.getFootprintHoleOverlapMax(ai);
+                    const info = typeof Physics.getFootprintHoleOverlapInfo === 'function' ? Physics.getFootprintHoleOverlapInfo(ai) : null;
+                    const overlap = info ? (info.totalOverlap ?? info.maxOverlap ?? 0) : Physics.getFootprintHoleOverlapMax(ai);
                     if (overlap >= 0.2) onHole = true;
                 }
                 

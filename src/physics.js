@@ -218,6 +218,32 @@ const Physics = {
     // - EDGE B: Left side of screen (opposite from net) - threshold 50%
     // - EDGE C: Bottom side of screen (front of court) - threshold 5%
     isFootprintOnCourt(character) {
+        // Edges first (fast path)
+        if (!this.isFootprintOnCourtEdgesOnly(character)) return false;
+
+        // Hole rule: directional thresholds based on which side of the hole "trapezoid" the character is on.
+        // - Top/back side of hole: fall sooner (lower threshold)
+        // - Bottom/front side of hole: fall later (higher threshold)
+        // - Left/right sides: medium threshold
+        const holeInfo = this.getFootprintHoleOverlapInfo(character);
+        if (!holeInfo.overlaps.length) return true;
+
+        let minThreshold = Infinity;
+        for (const o of holeInfo.overlaps) {
+            const t = this.getHoleFallThresholdForTileApproach(character, o.tx, o.ty);
+            if (t < minThreshold) minThreshold = t;
+            if (o.overlap >= t) return false;
+        }
+
+        // Adjacent holes: overlap can be split across tiles, so also consider total overlap.
+        // Use the most-forgiving threshold among the overlapped tiles (minThreshold), so bottom/front "falls later"
+        // still behaves as intended even when standing across multiple holes.
+        if (holeInfo.totalOverlap >= minThreshold) return false;
+        return true;
+    },
+
+    // Edge-only standing check (no hole logic). Used to distinguish edge-fall vs hole-fall.
+    isFootprintOnCourtEdgesOnly(character) {
         const percentages = this.getFootprintOutsidePercentages(character);
         
         // Character falls if any edge exceeds its threshold:
@@ -229,13 +255,7 @@ const Physics = {
         const onCourtEdges = percentages.edgeA < edgeA_Threshold && 
                              percentages.edgeB < edgeB_Threshold && 
                              percentages.edgeC < edgeC_Threshold;
-        if (!onCourtEdges) return false;
-        
-        // Hole rule: if footprint overlaps a destroyed tile by >= threshold, they fall.
-        // Use a slightly lower threshold than edges so "standing on a hole" matches the visual better.
-        const maxHoleOverlap = this.getFootprintHoleOverlapMax(character);
-        const holeThreshold = 0.55;
-        return maxHoleOverlap < holeThreshold;
+        return onCourtEdges;
     },
     
     // Returns 0..1 indicating the maximum fraction of the character footprint that lies over any single destroyed tile.
@@ -288,6 +308,97 @@ const Physics = {
         }
 
         return Math.max(0, Math.min(1, maxOverlap));
+    },
+
+    // Returns overlap details for destroyed tiles under the character footprint.
+    // - overlaps: [{tx, ty, overlap}] for each destroyed (non-indestructible) tile touched
+    // - maxOverlap: max single-tile overlap
+    // - totalOverlap: sum of overlaps across all destroyed tiles (helps when holes are adjacent)
+    getFootprintHoleOverlapInfo(character) {
+        if (!Game?.getTileState) {
+            return { overlaps: [], maxOverlap: 0, totalOverlap: 0, maxTx: -1, maxTy: -1 };
+        }
+
+        // Same footprint as `getFootprintHoleOverlapMax()` so visuals + physics match.
+        const footprintWidth = character.radius * 1.35;
+        const footprintDepth = character.radius * 0.9;
+
+        const left = character.x - footprintWidth * 0.5;
+        const right = character.x + footprintWidth * 0.5;
+        const front = character.y - footprintDepth * 0.5;
+        const back = character.y + footprintDepth * 0.5;
+
+        const footprintArea = Math.max(0.000001, (right - left) * (back - front));
+
+        const txMin = Math.max(0, Math.floor(left));
+        const txMax = Math.min(this.COURT_WIDTH - 1, Math.floor(right - 1e-6));
+        const tyMin = Math.max(0, Math.floor(front));
+        const tyMax = Math.min(this.COURT_LENGTH - 1, Math.floor(back - 1e-6));
+
+        const overlaps = [];
+        let maxOverlap = 0;
+        let totalOverlap = 0;
+        let maxTx = -1;
+        let maxTy = -1;
+
+        for (let ty = tyMin; ty <= tyMax; ty++) {
+            const tileY0 = ty;
+            const tileY1 = ty + 1;
+            const iy0 = Math.max(front, tileY0);
+            const iy1 = Math.min(back, tileY1);
+            const ih = iy1 - iy0;
+            if (ih <= 0) continue;
+
+            for (let tx = txMin; tx <= txMax; tx++) {
+                const tile = Game.getTileState(tx, ty);
+                if (!tile || tile.indestructible || !tile.destroyed) continue;
+
+                const tileX0 = tx;
+                const tileX1 = tx + 1;
+                const ix0 = Math.max(left, tileX0);
+                const ix1 = Math.min(right, tileX1);
+                const iw = ix1 - ix0;
+                if (iw <= 0) continue;
+
+                const overlapArea = iw * ih;
+                const ratio = overlapArea / footprintArea;
+                if (ratio <= 0) continue;
+
+                overlaps.push({ tx, ty, overlap: ratio });
+                totalOverlap += ratio;
+                if (ratio > maxOverlap) {
+                    maxOverlap = ratio;
+                    maxTx = tx;
+                    maxTy = ty;
+                }
+            }
+        }
+
+        return {
+            overlaps,
+            maxOverlap: Math.max(0, Math.min(1, maxOverlap)),
+            totalOverlap: Math.max(0, Math.min(1, totalOverlap)),
+            maxTx,
+            maxTy
+        };
+    },
+
+    // Directional hole fall thresholds (by approach direction relative to tile center).
+    // Interpretation:
+    // - dy > 0 => character is "above" the tile center (approaching from top/back): fall sooner (0.35)
+    // - dy < 0 => approaching from bottom/front: fall later (0.65)
+    // - Left/right approaches: 0.50
+    getHoleFallThresholdForTileApproach(character, tx, ty) {
+        const cx = tx + 0.5;
+        const cy = ty + 0.5;
+        const dx = character.x - cx;
+        const dy = character.y - cy;
+
+        // Choose dominant axis to determine which "side" of the trapezoid we're on.
+        if (Math.abs(dy) >= Math.abs(dx)) {
+            return dy > 0 ? 0.35 : 0.65;
+        }
+        return 0.5;
     },
     
     // Determine which tile the ball "landed on" by sampling points around the ball's footprint circle.
@@ -381,7 +492,7 @@ const Physics = {
             p.onGround = false;
             if (p.vz > -0.08) p.vz = -0.08;
             // Distinguish edge-fall vs hole-fall. We only apply grace slide for edge falls.
-            p.fellFromHole = this.getFootprintHoleOverlapMax(p) >= 0.55;
+            p.fellFromHole = this.isFootprintOnCourtEdgesOnly(p) && !this.isFootprintOnCourt(p);
             // Determine which edge they fell from
             const percentages = this.getFootprintOutsidePercentages(p);
             if (percentages.edgeA >= 0.7) {
@@ -612,7 +723,7 @@ const Physics = {
             ai.onGround = false;
             if (ai.vz > -0.08) ai.vz = -0.08;
             // Distinguish edge-fall vs hole-fall. We only apply grace slide for edge falls.
-            ai.fellFromHole = this.getFootprintHoleOverlapMax(ai) >= 0.55;
+            ai.fellFromHole = this.isFootprintOnCourtEdgesOnly(ai) && !this.isFootprintOnCourt(ai);
             // Determine which edge they fell from
             const percentages = this.getFootprintOutsidePercentages(ai);
             if (percentages.edgeA >= 0.7) {

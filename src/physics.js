@@ -100,7 +100,7 @@ const Physics = {
         serveTimer: 0,        // Timer for serve grace period
         fallingThroughHole: false, // When true, ball ignores collisions and keeps falling (prevents "bouncing back up")
         // Touch counter (per-side). Resets only when ball crosses the net.
-        touchesRemaining: 3,
+        touchesRemaining: 5,
         touchCooldown: 0, // small cooldown to avoid repeated decrements while overlapping net/body
         prevX: 2.0
     },
@@ -125,7 +125,7 @@ const Physics = {
         this.ball.justServed = false;
         this.ball.serveTimer = 0;
         this.ball.fallingThroughHole = false;
-        this.ball.touchesRemaining = Game?.state?.touchesPerSide ?? 3;
+        this.ball.touchesRemaining = Game?.state?.touchesPerSide ?? 5;
         this.ball.touchCooldown = 0;
         this.ball.prevX = this.ball.x;
     },
@@ -1531,7 +1531,7 @@ const Physics = {
             (prevX < this.NET_X && b.x >= this.NET_X) ||
             (prevX >= this.NET_X && b.x < this.NET_X);
         if (crossedNet && b.z >= (this.NET_HEIGHT - this.NET_TOP_THRESHOLD)) {
-            b.touchesRemaining = Game?.state?.touchesPerSide ?? 3;
+            b.touchesRemaining = Game?.state?.touchesPerSide ?? 5;
             b.touchCooldown = 0;
         }
         b.prevX = b.x;

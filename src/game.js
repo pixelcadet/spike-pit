@@ -12,7 +12,7 @@ const Game = {
         aiHp: 10,
         fallDamage: 3,
         // Touch limit per side (resets only when ball crosses the net)
-        touchesPerSide: 3,
+        touchesPerSide: 5,
         freePlay: false, // If true, never end the match; scoring can continue indefinitely.
         matchOver: false,
         matchWinner: null, // 'player' | 'ai'
@@ -76,7 +76,7 @@ const Game = {
         this.state.playerHp = 10;
         this.state.aiHp = 10;
         this.state.fallDamage = 3;
-        this.state.touchesPerSide = 3;
+        this.state.touchesPerSide = 5;
         this.state.freePlay = false;
         this.state.matchOver = false;
         this.state.matchWinner = null;

@@ -98,9 +98,37 @@ const AI = {
                 this.state.targetY = 0;
             } else {
                 // Player is serving: AI can idle toward a safe center spot, but never jump/hit.
-                const center = this.snapIfOnHoleAISide(6.0, Physics.COURT_LENGTH / 2);
-                const dx = center.x - ai.x;
-                const dy = center.y - ai.y;
+                // IMPORTANT: AI should also avoid standing on holes while waiting for a serve.
+                // If AI is currently on/over a destroyed tile, steer to the nearest intact tile immediately.
+                let desiredX = 6.0;
+                let desiredY = Physics.COURT_LENGTH / 2;
+                
+                // Detect if AI is on a hole by center-tile OR footprint overlap (more robust).
+                let onHole = false;
+                const tx = Math.floor(ai.x);
+                const ty = Math.floor(ai.y);
+                const tile = Game?.getTileState?.(tx, ty);
+                if (tile && !tile.indestructible && tile.destroyed) {
+                    onHole = true;
+                } else if (typeof Physics?.getFootprintHoleOverlapMax === 'function') {
+                    // If any single destroyed tile overlaps a meaningful fraction of the footprint, treat it as unsafe.
+                    // Use a lower threshold than the "fall" threshold so AI doesn't idle half-on a hole.
+                    const overlap = Physics.getFootprintHoleOverlapMax(ai);
+                    if (overlap >= 0.2) onHole = true;
+                }
+                
+                if (onHole && Game?.findNearestIntactTileCenter) {
+                    const safe = Game.findNearestIntactTileCenter(tx, ty, 'ai');
+                    desiredX = safe.x;
+                    desiredY = safe.y;
+                } else {
+                    const center = this.snapIfOnHoleAISide(desiredX, desiredY);
+                    desiredX = center.x;
+                    desiredY = center.y;
+                }
+                
+                const dx = desiredX - ai.x;
+                const dy = desiredY - ai.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
                 if (dist > 0.2) {
                     this.state.targetX = dx / dist;

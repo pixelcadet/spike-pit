@@ -22,6 +22,13 @@ const Render = {
     
     // Court rendering
     courtTileSize: 88,      // Base tile size in pixels (reduced slightly for narrower court width)
+
+    // Camera shake (screen-space, applied to world rendering only)
+    shakeTimeLeft: 0,
+    shakeDuration: 0,
+    shakeIntensity: 0,
+    shakeOffsetX: 0,
+    shakeOffsetY: 0,
     
     init() {
         this.canvas = document.getElementById('game-canvas');
@@ -33,6 +40,31 @@ const Render = {
         
         // Initialize projection parameters based on court
         this.depthRange = Physics.COURT_LENGTH;
+    },
+
+    startShake(intensity = 6, duration = 0.12) {
+        // If multiple shakes happen quickly, keep the stronger shake and refresh the timer.
+        this.shakeIntensity = Math.max(this.shakeIntensity, intensity);
+        this.shakeDuration = Math.max(this.shakeDuration, duration);
+        this.shakeTimeLeft = Math.max(this.shakeTimeLeft, duration);
+    },
+
+    update(deltaTime = 1 / 60) {
+        if (this.shakeTimeLeft > 0) {
+            this.shakeTimeLeft -= deltaTime;
+            if (this.shakeTimeLeft < 0) this.shakeTimeLeft = 0;
+
+            const t = this.shakeDuration > 0 ? (this.shakeTimeLeft / this.shakeDuration) : 0;
+            const amp = this.shakeIntensity * t;
+            // Jittery shake (small random offsets), decays to 0.
+            this.shakeOffsetX = (Math.random() * 2 - 1) * amp;
+            this.shakeOffsetY = (Math.random() * 2 - 1) * amp;
+        } else {
+            this.shakeOffsetX = 0;
+            this.shakeOffsetY = 0;
+            this.shakeIntensity = 0;
+            this.shakeDuration = 0;
+        }
     },
     
     // Project world coordinates to screen space
@@ -126,9 +158,8 @@ const Render = {
                         fill = indestructibleColor;
                         fillAlpha = 1.0;
                     } else if (tileState.destroyed) {
-                        // Hole
-                        fill = holeColor;
-                        fillAlpha = 1.0;
+                        // Hole tiles are drawn in a separate overlay pass (so they can occlude falling characters/ball).
+                        continue;
                     } else {
                         // Brittleness visualization: fade opacity as HP drops.
                         const hp = tileState.hp ?? 0;
@@ -160,7 +191,7 @@ const Render = {
                 
                 // Draw tile border
                 // Thin outline around each tile
-                ctx.strokeStyle = (tileState && tileState.destroyed) ? 'rgba(60, 50, 70, 0.9)' : 'rgba(0, 0, 0, 0.18)';
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
                 ctx.lineWidth = 1;
                 ctx.stroke();
             }
@@ -496,6 +527,10 @@ const Render = {
         
         // Draw purple background first (always at the back)
         this.drawBackground();
+
+        // Apply camera shake to world rendering (court/characters/ball), not to HUD text.
+        ctx.save();
+        ctx.translate(this.shakeOffsetX, this.shakeOffsetY);
         
         // Separate entities into those behind the court (off EDGE A or EDGE B) and those on/in front of the court
         const entities = [
@@ -612,9 +647,15 @@ const Render = {
                 this.drawBallBody();
             }
         });
+
+        // Draw hole tiles last (occluder overlay) so falling into holes reads correctly.
+        this.drawHolesOverlay();
         
         // Draw hitboxes for debugging
         this.drawHitboxes();
+
+        // End camera shake transform before drawing UI overlays.
+        ctx.restore();
         
         // Draw serve charge indicator if charging (only after 0.1s has elapsed)
         // Don't show if spike serve is pending (character is jumping)
@@ -1213,5 +1254,44 @@ const Render = {
         ctx.fillText('EDGE B (70%)', 0, 0);
         ctx.restore();
     }
+
+    // Draw destroyed tiles (holes) on top of entities as an occluder.
+    // This makes characters/ball look like they fall "into" the hole instead of in front of it.
+    drawHolesOverlay() {
+        const ctx = this.ctx;
+        const tilesWide = Physics.COURT_WIDTH;
+        const tilesLong = Physics.COURT_LENGTH;
+
+        const holeColor = 'rgba(20, 16, 28, 1.0)';
+
+        for (let ty = 0; ty < tilesLong; ty++) {
+            for (let tx = 0; tx < tilesWide; tx++) {
+                const tileState = Game?.getTileState ? Game.getTileState(tx, ty) : null;
+                if (!tileState || tileState.indestructible || !tileState.destroyed) continue;
+
+                const worldX = tx;
+                const worldY = ty;
+
+                const frontLeft = this.project(worldX, worldY, 0);
+                const frontRight = this.project(worldX + 1, worldY, 0);
+                const backLeft = this.project(worldX, worldY + 1, 0);
+                const backRight = this.project(worldX + 1, worldY + 1, 0);
+
+                ctx.beginPath();
+                ctx.moveTo(frontLeft.x, frontLeft.y);
+                ctx.lineTo(frontRight.x, frontRight.y);
+                ctx.lineTo(backRight.x, backRight.y);
+                ctx.lineTo(backLeft.x, backLeft.y);
+                ctx.closePath();
+                ctx.fillStyle = holeColor;
+                ctx.fill();
+
+                // Slightly stronger outline for hole rim to sell depth.
+                ctx.strokeStyle = 'rgba(60, 50, 70, 0.9)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+        }
+    },
 };
 

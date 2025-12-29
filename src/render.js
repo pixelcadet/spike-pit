@@ -192,10 +192,12 @@ const Render = {
                 ctx.restore();
                 
                 // Draw tile border
-                // Thin outline around each tile
-                ctx.strokeStyle = (tileState && tileState.destroyed) ? 'rgba(60, 50, 70, 0.9)' : 'rgba(0, 0, 0, 0.18)';
-                ctx.lineWidth = 1;
-                ctx.stroke();
+                // Thin outline around each tile (skip borders for holes so they blend into the background cleanly)
+                if (!(tileState && tileState.destroyed)) {
+                    ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
             }
         }
         

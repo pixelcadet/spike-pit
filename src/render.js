@@ -483,13 +483,15 @@ const Render = {
         const shadowY = groundProj.y + (rectHeight / 2) * scaleRatio;
         
         const centerX = groundProj.x;
-        // Pull the bar further up so it hugs the feet.
-        const centerY = shadowY + Math.max(1, lineWidth * 0.2);
+        // Place the arc right under the character feet. For a "bottom" arc centered at 90° (down),
+        // the arc sits roughly at centerY + radius, so we offset centerY upward by ~radius.
+        const feetGap = Math.max(2, lineWidth * 0.6);
+        const centerY = shadowY - radius + feetGap;
         
-        // Draw only a ~100° arc on the BACK side of the ring (remove the front-facing portion).
-        // 270° is "up" in canvas-angle space (with y-down coords), so center the arc there.
+        // Draw only a ~100° arc on the FRONT/BOTTOM side of the ring (vertical flip vs the back/top arc).
+        // 90° is "down" in canvas-angle space (with y-down coords), so center the arc there.
         const halfSpan = (Math.PI / 180) * 50; // 50° each side => 100° total
-        const arcCenter = Math.PI * 1.5; // 270°
+        const arcCenter = Math.PI * 0.5; // 90°
         const startAngle = arcCenter - halfSpan;
         const endAngle = arcCenter + halfSpan;
 

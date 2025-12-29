@@ -457,7 +457,10 @@ const RenderBehind = {
             ctx.strokeRect(x0, y0, bodyW, bodyH);
         }
 
-        ctx.fillStyle = '#ff3b3b';
+        // Head color: keep distinct from the ball (ball is bright/outlined).
+        // Slightly warmer for player, cooler for AI.
+        const headColor = (char === Physics.player) ? '#ff6b6b' : '#ff8a8a';
+        ctx.fillStyle = headColor;
         ctx.beginPath();
         ctx.arc(p.x, p.y - bodyH / 2 - headR * 0.1, headR, 0, Math.PI * 2);
         ctx.fill();
@@ -493,9 +496,19 @@ const RenderBehind = {
         if (b.fallingThroughHole && b.z < 0) alpha = 0.25;
         ctx.save();
         ctx.globalAlpha = alpha;
-        ctx.fillStyle = '#c93030';
+        // Make the ball visually distinct from character heads.
+        // Bright body + outline reads as "the ball" immediately.
+        ctx.fillStyle = '#f7f4ff';
         ctx.beginPath();
         ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        // Small highlight
+        ctx.fillStyle = 'rgba(255,255,255,0.75)';
+        ctx.beginPath();
+        ctx.arc(p.x - r * 0.25, p.y - r * 0.25, r * 0.35, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
     },

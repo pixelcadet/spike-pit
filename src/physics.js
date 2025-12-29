@@ -1297,11 +1297,11 @@ const Physics = {
                             }
                             b.hasScored = true;
                         }
-                        // Fall through: don't clamp or bounce
-                        b.z = b.groundLevel - 0.05;
-                        if (b.vz > -0.05 * this.ballMovementSpeed) {
-                            b.vz = -0.05 * this.ballMovementSpeed;
-                        }
+                        // Fall through: don't clamp or bounce.
+                        // IMPORTANT: don't continuously clamp z to just-below-ground, otherwise the ball looks like it
+                        // "bounces" on an invisible floor at the hole. Let it keep falling.
+                        const minFallVz = -0.12 * this.ballMovementSpeed;
+                        if (b.vz > minFallVz) b.vz = minFallVz;
                         return;
                     }
                     

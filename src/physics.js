@@ -89,7 +89,8 @@ const Physics = {
         tileDamageBounces: 0, // Count of ground impacts since last touch (first impact = big dmg, later = 0.2)
         hasScored: false,    // Flag to prevent multiple scores from same bounce/fall
         justServed: false,   // Flag to prevent immediate collision after serve
-        serveTimer: 0         // Timer for serve grace period
+        serveTimer: 0,        // Timer for serve grace period
+        fallingThroughHole: false // When true, ball ignores collisions and keeps falling (prevents "bouncing back up")
     },
     
     init() {
@@ -111,6 +112,7 @@ const Physics = {
         this.ball.hasScored = false;
         this.ball.justServed = false;
         this.ball.serveTimer = 0;
+        this.ball.fallingThroughHole = false;
     },
     
     reset() {
@@ -805,6 +807,7 @@ const Physics = {
             b.lastHitType = 'body';
             b.tileDamageBounces = 0;
             b.hasScored = false; // Reset score flag on new touch
+            b.fallingThroughHole = false;
             
             return true;
         }
@@ -888,6 +891,7 @@ const Physics = {
             
             b.lastHitType = 'lob';
             b.tileDamageBounces = 0;
+            b.fallingThroughHole = false;
         } else {
             // SPIKE: Strong trajectory with steep downward angle (similar to spike serve)
             // Calculate target based on ball's distance from net
@@ -961,6 +965,7 @@ const Physics = {
             
             b.lastHitType = 'spike';
             b.tileDamageBounces = 0;
+            b.fallingThroughHole = false;
         }
         
         character.hasSpiked = true;
@@ -1044,6 +1049,7 @@ const Physics = {
             b.vz = vz0;
             b.lastHitType = 'toss';
             b.tileDamageBounces = 0;
+            b.fallingThroughHole = false;
             
             const aim = Input.getAim2D?.() ?? { x: 0, y: 0 };
             // Disallow "back toss" (away from the net) so ground receives stay simple and forward-oriented.
@@ -1138,6 +1144,7 @@ const Physics = {
             
             b.lastHitType = 'receive';
             b.tileDamageBounces = 0;
+            b.fallingThroughHole = false;
         }
         
         // Mark character as having received (prevent spamming)
@@ -1231,6 +1238,16 @@ const Physics = {
     
     updateBall(deltaTime = 1/60) {
         const b = this.ball;
+
+        // If ball is falling through a hole, let it keep falling without any collisions.
+        // This prevents net/character collision logic from injecting upward velocity while "under the floor".
+        if (b.fallingThroughHole) {
+            b.vz -= this.GRAVITY * this.ballMovementSpeed;
+            b.x += b.vx;
+            b.y += b.vy;
+            b.z += b.vz;
+            return;
+        }
         
         // Update serve timer
         if (b.justServed) {
@@ -1302,6 +1319,7 @@ const Physics = {
                         // "bounces" on an invisible floor at the hole. Let it keep falling.
                         const minFallVz = -0.12 * this.ballMovementSpeed;
                         if (b.vz > minFallVz) b.vz = minFallVz;
+                        b.fallingThroughHole = true;
                         return;
                     }
                     

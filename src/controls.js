@@ -130,12 +130,15 @@ const Controls = {
             });
         }
 
+        const getRenderer = () => (typeof Render !== 'undefined' ? Render : (typeof RenderBehind !== 'undefined' ? RenderBehind : null));
+
         // Show/hide zone rings (receive/spike)
         const showZonesToggle = document.getElementById('show-zones');
         if (showZonesToggle) {
             showZonesToggle.addEventListener('change', (e) => {
-                if (typeof Render !== 'undefined') {
-                    Render.showZones = e.target.checked;
+                const R = getRenderer();
+                if (R) {
+                    R.showZones = e.target.checked;
                 }
             });
         }
@@ -144,8 +147,9 @@ const Controls = {
         const showHitboxesToggle = document.getElementById('show-hitboxes');
         if (showHitboxesToggle) {
             showHitboxesToggle.addEventListener('change', (e) => {
-                if (typeof Render !== 'undefined') {
-                    Render.showHitboxes = e.target.checked;
+                const R = getRenderer();
+                if (R) {
+                    R.showHitboxes = e.target.checked;
                 }
             });
         }
@@ -170,12 +174,13 @@ const Controls = {
             Game.setFreePlay?.(freePlayToggle.checked);
         }
 
-        // Defaults for debug overlays (Render is loaded before controls.js in index.html)
-        if (showZonesToggle && typeof Render !== 'undefined') {
-            Render.showZones = showZonesToggle.checked;
+        // Defaults for debug overlays (renderer script loads before controls.js in both pages)
+        const R = getRenderer();
+        if (showZonesToggle && R) {
+            R.showZones = showZonesToggle.checked;
         }
-        if (showHitboxesToggle && typeof Render !== 'undefined') {
-            Render.showHitboxes = showHitboxesToggle.checked;
+        if (showHitboxesToggle && R) {
+            R.showHitboxes = showHitboxesToggle.checked;
         }
     },
     

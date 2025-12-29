@@ -1400,8 +1400,9 @@ const Physics = {
             // If ball is off court, don't clamp z or reset velocities - let it fall through
         }
         
-        // Check for out-of-bounds score when ball leaves the court (even if still in the air).
-        // Without this, the AI can "dribble" the ball out while it's above ground and the point never registers.
+        // Check for out-of-bounds score as soon as the ball leaves court bounds (even mid-air).
+        // With time-based updates (and net/body deflections), the ball can go out while still above ground.
+        // If we wait for z < 0, rallies can get "stuck" with the ball drifting out forever.
         const scoringEnabled = !(Game?.state?.isResetting) && !(Game?.state?.matchOver);
         if (scoringEnabled && !b.hasScored && !this.isBallOnCourt() && b.lastTouchedBy) {
             // Ball went out of bounds - opponent of last toucher scores

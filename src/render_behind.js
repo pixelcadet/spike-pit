@@ -31,7 +31,7 @@ const RenderBehind = {
     depthPowFar: 1.35,  // >1 squeezes far side vertically (overall)
     // Far-side shaping: the opponent row closest to the net can look too thin if we
     // apply a single >1 exponent. Boost the first far tile row (NET_X..NET_X+1) a bit.
-    farFirstTileFrac: 0.36, // fraction of far-half vertical span allocated to the first far tile row
+    farFirstTileFrac: 0.32, // fraction of far-half vertical span allocated to the first far tile row
     farFirstTilePow: 0.80,  // <1 = expands near-net far row
     zPixels: 90,        // pixels per world z at near end
 

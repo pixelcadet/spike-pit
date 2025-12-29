@@ -441,6 +441,8 @@ const Game = {
         Physics.ball.vx = 0;
         Physics.ball.vy = 0;
         Physics.ball.vz = 0;
+        // If the ball previously fell through a hole, clear that state so the next rally can start normally.
+        Physics.ball.fallingThroughHole = false;
         Physics.ball.lastTouchedBy = null;
         Physics.ball.lastHitType = null;
         Physics.ball.tileDamageBounces = 0;

@@ -371,6 +371,11 @@ const Physics = {
         if ((isAtOrBelowGroundAndOffCourt || hasFallenTooFar) && !p.isFalling) {
             p.isFalling = true;
             p.fallTimer = 0;
+            // CRITICAL: ensure gravity actually applies during the falling state.
+            // Without this, it's possible to enter `isFalling` while `onGround` is still true (from the prior frame),
+            // which makes the character "hang" at the edge until respawn.
+            p.onGround = false;
+            if (p.vz > -0.08) p.vz = -0.08;
             // Determine which edge they fell from
             const percentages = this.getFootprintOutsidePercentages(p);
             if (percentages.edgeA >= 0.7) {
@@ -589,6 +594,9 @@ const Physics = {
         if ((isAtOrBelowGroundAndOffCourt || hasFallenTooFar) && !ai.isFalling) {
             ai.isFalling = true;
             ai.fallTimer = 0;
+            // CRITICAL: ensure gravity applies during falling (avoid "hanging" while off-court).
+            ai.onGround = false;
+            if (ai.vz > -0.08) ai.vz = -0.08;
             // Determine which edge they fell from
             const percentages = this.getFootprintOutsidePercentages(ai);
             if (percentages.edgeA >= 0.7) {

@@ -227,9 +227,11 @@ const Physics = {
                              percentages.edgeC < edgeC_Threshold;
         if (!onCourtEdges) return false;
         
-        // Hole rule: if footprint overlaps a destroyed tile by >= 70%, they fall (same threshold feel as edges A/B).
+        // Hole rule: if footprint overlaps a destroyed tile by >= threshold, they fall.
+        // Use a slightly lower threshold than edges so "standing on a hole" matches the visual better.
         const maxHoleOverlap = this.getFootprintHoleOverlapMax(character);
-        return maxHoleOverlap < 0.7;
+        const holeThreshold = 0.55;
+        return maxHoleOverlap < holeThreshold;
     },
     
     // Returns 0..1 indicating the maximum fraction of the character footprint that lies over any single destroyed tile.
@@ -237,8 +239,10 @@ const Physics = {
     getFootprintHoleOverlapMax(character) {
         if (!Game?.getTileState) return 0;
         
-        const footprintWidth = character.radius * 1.2;
-        const footprintDepth = character.radius * 0.5;
+        // Use a slightly larger footprint for hole overlap than for edge checks, to better match what players perceive
+        // as the "base" of the character in the perspective view.
+        const footprintWidth = character.radius * 1.35;
+        const footprintDepth = character.radius * 0.9;
         
         const left = character.x - footprintWidth * 0.5;
         const right = character.x + footprintWidth * 0.5;

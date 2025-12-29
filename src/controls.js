@@ -130,15 +130,12 @@ const Controls = {
             });
         }
 
-        const getRenderer = () => (typeof Render !== 'undefined' ? Render : (typeof RenderBehind !== 'undefined' ? RenderBehind : null));
-
         // Show/hide zone rings (receive/spike)
         const showZonesToggle = document.getElementById('show-zones');
         if (showZonesToggle) {
             showZonesToggle.addEventListener('change', (e) => {
-                const R = getRenderer();
-                if (R) {
-                    R.showZones = e.target.checked;
+                if (typeof Render !== 'undefined') {
+                    Render.showZones = e.target.checked;
                 }
             });
         }
@@ -147,9 +144,8 @@ const Controls = {
         const showHitboxesToggle = document.getElementById('show-hitboxes');
         if (showHitboxesToggle) {
             showHitboxesToggle.addEventListener('change', (e) => {
-                const R = getRenderer();
-                if (R) {
-                    R.showHitboxes = e.target.checked;
+                if (typeof Render !== 'undefined') {
+                    Render.showHitboxes = e.target.checked;
                 }
             });
         }
@@ -161,8 +157,9 @@ const Controls = {
         this.updateAirTime(5);
         // Ball speed default: 5 (recalibrated so 5 is slower than before)
         this.updateBallMovementSpeed(5);
-        // Defaults (on refresh): receive zone = 3, spike zone = 2
-        this.updateReceiveZoneSize(3);
+        // Defaults (on refresh): receive zone = 4, spike zone = 2
+        // NOTE: zone size is a shared physics radius, so it affects BOTH the player and the AI.
+        this.updateReceiveZoneSize(4);
         this.updateSpikeZoneSize(2);
         this.updateServeHorizontal(5);
         this.updateServeVertical(5);
@@ -174,13 +171,12 @@ const Controls = {
             Game.setFreePlay?.(freePlayToggle.checked);
         }
 
-        // Defaults for debug overlays (renderer script loads before controls.js in both pages)
-        const R = getRenderer();
-        if (showZonesToggle && R) {
-            R.showZones = showZonesToggle.checked;
+        // Defaults for debug overlays (Render is loaded before controls.js in index.html)
+        if (showZonesToggle && typeof Render !== 'undefined') {
+            Render.showZones = showZonesToggle.checked;
         }
-        if (showHitboxesToggle && R) {
-            R.showHitboxes = showHitboxesToggle.checked;
+        if (showHitboxesToggle && typeof Render !== 'undefined') {
+            Render.showHitboxes = showHitboxesToggle.checked;
         }
     },
     
@@ -278,7 +274,7 @@ const Controls = {
         const maxRadius = 1.8;
         const radius = minRadius + (maxRadius - minRadius) * ((scale - 1) / 9);
         
-        // Apply to physics system
+        // Apply to physics system (shared by both player + AI)
         Physics.RECEIVING_ZONE_RADIUS = radius;
     },
     
@@ -297,7 +293,7 @@ const Controls = {
             radius = 0.96 + (1.26 - 0.96) * ((scale - 5) / (10 - 5));
         }
         
-        // Apply to physics system
+        // Apply to physics system (shared by both player + AI)
         Physics.SPIKE_ZONE_RADIUS = radius;
     },
     

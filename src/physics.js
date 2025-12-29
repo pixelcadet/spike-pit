@@ -90,7 +90,11 @@ const Physics = {
         hasScored: false,    // Flag to prevent multiple scores from same bounce/fall
         justServed: false,   // Flag to prevent immediate collision after serve
         serveTimer: 0,        // Timer for serve grace period
-        fallingThroughHole: false // When true, ball ignores collisions and keeps falling (prevents "bouncing back up")
+        fallingThroughHole: false, // When true, ball ignores collisions and keeps falling (prevents "bouncing back up")
+
+        // Prevent "carrying": avoid repeated body-bounce impulses every frame while overlapping a character.
+        lastBodyHitBy: null,       // 'player' | 'ai' | null
+        bodyHitCooldown: 0         // seconds; while >0, ignore body collision with lastBodyHitBy
     },
     
     init() {
@@ -113,6 +117,8 @@ const Physics = {
         this.ball.justServed = false;
         this.ball.serveTimer = 0;
         this.ball.fallingThroughHole = false;
+        this.ball.lastBodyHitBy = null;
+        this.ball.bodyHitCooldown = 0;
     },
     
     reset() {
@@ -756,6 +762,10 @@ const Physics = {
         }
         
         const b = this.ball;
+        const side = (character === this.player) ? 'player' : 'ai';
+        if ((b.bodyHitCooldown ?? 0) > 0 && b.lastBodyHitBy === side) {
+            return false;
+        }
         const dx = b.x - character.x;
         const dy = b.y - character.y;
         const dz = b.z - character.z;
@@ -764,9 +774,17 @@ const Physics = {
         
         if (dist < collisionDist) {
             // Collision detected - calculate bounce
-            const pushDirX = dx / dist;
-            const pushDirY = dy / dist;
-            const pushDirZ = dz / dist;
+            const safeDist = Math.max(0.000001, dist);
+            const pushDirX = dx / safeDist;
+            const pushDirY = dy / safeDist;
+            const pushDirZ = dz / safeDist;
+
+            // Only apply a "bounce impulse" if the ball is moving INTO the character.
+            // This prevents repeated impulses while the ball is already separating, which feels like "carrying".
+            const relVx = b.vx - character.vx;
+            const relVy = b.vy - character.vy;
+            const relVz = b.vz - character.vz;
+            const approachSpeed = relVx * pushDirX + relVy * pushDirY + relVz * pushDirZ; // <0 => approaching
             
             // Move ball to just outside character
             b.x = character.x + pushDirX * (collisionDist + 0.05);
@@ -778,24 +796,28 @@ const Physics = {
                 b.z = b.groundLevel;
             }
             
-            // Calculate bounce velocity based on character's movement
-            // Character's velocity contributes to ball's bounce
-            const characterSpeed = Math.sqrt(character.vx * character.vx + character.vy * character.vy);
-            const bouncePower = 0.15; // Base bounce power
-            const speedMultiplier = Math.min(characterSpeed * 2, 0.1); // Character speed adds to bounce
-            
-            // Bounce direction: opposite of collision normal + character velocity influence
-            // The ball bounces away from the character in the direction opposite to where it came from
-            // Plus it gets pushed in the direction the character is moving
-            // Scale by ballMovementSpeed to maintain same trajectory at different time scales
-            b.vx = (pushDirX * (bouncePower + speedMultiplier) + character.vx * 0.3) * this.ballMovementSpeed;
-            b.vy = (pushDirY * (bouncePower + speedMultiplier) + character.vy * 0.3) * this.ballMovementSpeed;
-            b.vz = (pushDirZ * (bouncePower + speedMultiplier) + 0.1) * this.ballMovementSpeed; // Always add some upward component
-            
-            // Apply bounce damping
-            b.vx *= b.bounceDamping;
-            b.vy *= b.bounceDamping;
-            b.vz *= b.bounceDamping;
+            if (approachSpeed < 0) {
+                // Calculate bounce velocity based on character's movement
+                // Character's velocity contributes to ball's bounce
+                const characterSpeed = Math.sqrt(character.vx * character.vx + character.vy * character.vy);
+                const bouncePower = 0.15; // Base bounce power
+                const speedMultiplier = Math.min(characterSpeed * 2, 0.1); // Character speed adds to bounce
+                
+                // Bounce direction: collision normal + character velocity influence
+                // Scale by ballMovementSpeed to maintain same trajectory at different time scales
+                b.vx = (pushDirX * (bouncePower + speedMultiplier) + character.vx * 0.3) * this.ballMovementSpeed;
+                b.vy = (pushDirY * (bouncePower + speedMultiplier) + character.vy * 0.3) * this.ballMovementSpeed;
+                b.vz = (pushDirZ * (bouncePower + speedMultiplier) + 0.1) * this.ballMovementSpeed; // Always add some upward component
+                
+                // Apply bounce damping
+                b.vx *= b.bounceDamping;
+                b.vy *= b.bounceDamping;
+                b.vz *= b.bounceDamping;
+
+                // Start per-character cooldown so we don't repeatedly "carry" the ball with multiple impulses.
+                b.lastBodyHitBy = side;
+                b.bodyHitCooldown = 0.12;
+            }
 
             // If the ball bumps a character's body very close to the ground, it can end up with
             // too little airtime (especially with low ballMovementSpeed) and immediately hit the ground,
@@ -897,6 +919,8 @@ const Physics = {
             b.lastHitType = 'lob';
             b.tileDamageBounces = 0;
             b.fallingThroughHole = false;
+            b.lastBodyHitBy = null;
+            b.bodyHitCooldown = 0;
         } else {
             // SPIKE: Strong trajectory with steep downward angle (similar to spike serve)
             // Calculate target based on ball's distance from net
@@ -971,6 +995,8 @@ const Physics = {
             b.lastHitType = 'spike';
             b.tileDamageBounces = 0;
             b.fallingThroughHole = false;
+            b.lastBodyHitBy = null;
+            b.bodyHitCooldown = 0;
         }
         
         character.hasSpiked = true;
@@ -1055,6 +1081,8 @@ const Physics = {
             b.lastHitType = 'toss';
             b.tileDamageBounces = 0;
             b.fallingThroughHole = false;
+            b.lastBodyHitBy = null;
+            b.bodyHitCooldown = 0;
             
             const aim = Input.getAim2D?.() ?? { x: 0, y: 0 };
             // Disallow "back toss" (away from the net) so ground receives stay simple and forward-oriented.
@@ -1150,6 +1178,8 @@ const Physics = {
             b.lastHitType = 'receive';
             b.tileDamageBounces = 0;
             b.fallingThroughHole = false;
+            b.lastBodyHitBy = null;
+            b.bodyHitCooldown = 0;
         }
         
         // Mark character as having received (prevent spamming)
@@ -1244,6 +1274,14 @@ const Physics = {
     updateBall(deltaTime = 1/60) {
         const b = this.ball;
         const dtScale = Math.min(2.0, Math.max(0.25, deltaTime / (1 / 60)));
+
+        // Decrement body collision cooldown (prevents "carrying" via repeated impulses).
+        if ((b.bodyHitCooldown ?? 0) > 0) {
+            b.bodyHitCooldown = Math.max(0, b.bodyHitCooldown - deltaTime);
+            if (b.bodyHitCooldown === 0) {
+                b.lastBodyHitBy = null;
+            }
+        }
 
         // If ball is falling through a hole, let it keep falling without any collisions.
         // This prevents net/character collision logic from injecting upward velocity while "under the floor".

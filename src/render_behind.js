@@ -15,11 +15,14 @@ const RenderBehind = {
 
     // Camera / projection tuning
     centerX: 400,
-    bottomY: 540,
-    topY: 150,
+    // Shift the whole court upward a bit (more "from above / behind" framing)
+    bottomY: 520,
+    topY: 120,
     nearHalfWidth: 310, // half width of court at depth=0
     farHalfWidth: 135,  // half width of court at depth=COURT_WIDTH
-    depthPow: 1.08,     // >1 increases compression near far end
+    // Keep net visually centered between bottom and top for an optically even split.
+    // Curvature can be adjusted later; for now keep it linear-per-half so the halves feel balanced.
+    depthPow: 1.0,
     zPixels: 90,        // pixels per world z at near end
 
     init() {
@@ -40,9 +43,19 @@ const RenderBehind = {
         const lateralMid = Physics.COURT_LENGTH * 0.5;
         const lateralHalf = Math.max(0.0001, lateralMid);
 
+        // Depth mapping: keep the net plane (x = NET_X) visually centered.
+        // This avoids the "opponent side feels bigger/taller" effect from non-centered projections.
+        const netT = Physics.NET_X / depthMax; // 0.5 for current court
         let t = x / depthMax;
         t = Math.max(0, Math.min(1, t));
-        const tp = Math.pow(t, this.depthPow);
+        let tp;
+        if (t <= netT) {
+            const u = netT <= 0 ? 0 : (t / netT); // 0..1
+            tp = 0.5 * Math.pow(u, this.depthPow);
+        } else {
+            const u = (1 - netT) <= 0 ? 1 : ((t - netT) / (1 - netT)); // 0..1
+            tp = 0.5 + 0.5 * Math.pow(u, this.depthPow);
+        }
 
         const yScreen = this.lerp(this.bottomY, this.topY, tp);
         const halfW = this.lerp(this.nearHalfWidth, this.farHalfWidth, tp);

@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spike Pit — Behind Camera (Preview)</title>
+    <link rel="stylesheet" href="style.css" />
+    <style>
+        /* Keep this page lightweight; reuse base styling but ensure the canvas is centered. */
+        body { display: flex; flex-direction: column; align-items: center; }
+        .top-links { width: 800px; display: flex; justify-content: space-between; margin: 10px 0; }
+        .top-links a { color: #cfd3ff; text-decoration: none; font-family: monospace; }
+        .top-links a:hover { text-decoration: underline; }
+        .hint { width: 800px; color: rgba(255,255,255,0.75); font-family: monospace; font-size: 12px; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div class="top-links">
+        <a href="index.html">← Side camera version</a>
+        <a href="index_behind.html">Behind camera preview</a>
+    </div>
+    <div class="hint">
+        Court-only preview for the behind-camera layout. Next step is wiring characters/ball once perspective looks right.
+    </div>
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Use Physics constants (court size / net) for accurate layout. -->
+    <script src="src/physics.js"></script>
+    <script src="src/render_behind.js"></script>
+    <script src="src/main_behind.js"></script>
+</body>
+</html>
+
+

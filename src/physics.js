@@ -1400,9 +1400,10 @@ const Physics = {
             // If ball is off court, don't clamp z or reset velocities - let it fall through
         }
         
-        // Check for out-of-bounds score when ball falls off court (even if z > groundLevel)
-        // This handles cases where ball goes out of bounds while still in the air
-        if (!b.hasScored && !this.isBallOnCourt() && b.z < 0 && b.lastTouchedBy) {
+        // Check for out-of-bounds score when ball leaves the court (even if still in the air).
+        // Without this, the AI can "dribble" the ball out while it's above ground and the point never registers.
+        const scoringEnabled = !(Game?.state?.isResetting) && !(Game?.state?.matchOver);
+        if (scoringEnabled && !b.hasScored && !this.isBallOnCourt() && b.lastTouchedBy) {
             // Ball went out of bounds - opponent of last toucher scores
             if (b.lastTouchedBy === 'player') {
                 // Player hit it out → AI scores
@@ -1411,7 +1412,7 @@ const Physics = {
                 // AI hit it out → Player scores
                 Game.scorePoint('player');
             }
-            b.hasScored = true; // Prevent multiple scores from same fall
+            b.hasScored = true; // Prevent multiple scores from same out
         }
         
         // Ball can move freely (no clamping)

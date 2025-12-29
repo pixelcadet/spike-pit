@@ -70,6 +70,10 @@ const Controls = {
         // Set up receive zone size slider
         const receiveZoneSlider = document.getElementById('receive-zone');
         const receiveZoneValue = document.getElementById('receive-zone-value');
+        // Sync displayed value to HTML default
+        if (receiveZoneSlider && receiveZoneValue) {
+            receiveZoneValue.textContent = receiveZoneSlider.value;
+        }
         
         receiveZoneSlider.addEventListener('input', (e) => {
             const value = parseInt(e.target.value);
@@ -80,6 +84,10 @@ const Controls = {
         // Set up spike zone size slider
         const spikeZoneSlider = document.getElementById('spike-zone');
         const spikeZoneValue = document.getElementById('spike-zone-value');
+        // Sync displayed value to HTML default
+        if (spikeZoneSlider && spikeZoneValue) {
+            spikeZoneValue.textContent = spikeZoneSlider.value;
+        }
         
         spikeZoneSlider.addEventListener('input', (e) => {
             const value = parseInt(e.target.value);
@@ -149,8 +157,9 @@ const Controls = {
         this.updateAirTime(5);
         // Ball speed default: 5 (recalibrated so 5 is slower than before)
         this.updateBallMovementSpeed(5);
-        this.updateReceiveZoneSize(5);
-        this.updateSpikeZoneSize(5);
+        // Defaults (on refresh): receive zone = 3, spike zone = 2
+        this.updateReceiveZoneSize(3);
+        this.updateSpikeZoneSize(2);
         this.updateServeHorizontal(5);
         this.updateServeVertical(5);
         // AI active is already checked by default in HTML

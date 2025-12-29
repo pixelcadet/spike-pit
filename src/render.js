@@ -1367,7 +1367,7 @@ const Render = {
     drawReceivingZoneGroundRing(character, color) {
         const ctx = this.ctx;
         ctx.save();
-        ctx.setLineDash([]); // guard against dash state leaking in
+        ctx.setLineDash([]); // solid (distinct from debug overlays)
         // Match physics: effective zone radius includes the ball radius
         const receiveZoneRadius = Physics.RECEIVING_ZONE_RADIUS + Physics.ball.radius;
         
@@ -1379,10 +1379,9 @@ const Render = {
         const minSize = 6;
         const finalRingSize = Math.max(ringSize, minSize);
         
-        // Draw ring on ground (always visible, more prominent)
-        ctx.strokeStyle = this.colorWithAlpha(color, 0.67);
-        ctx.lineWidth = 2;
-        ctx.setLineDash([3, 3]); // Slightly larger dashes
+        // Draw ring on ground (visual cue, keep subtle + distinct from debug)
+        ctx.strokeStyle = this.colorWithAlpha(color, 0.55);
+        ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.arc(groundProj.x, groundProj.y, finalRingSize, 0, Math.PI * 2);
         ctx.stroke();
@@ -1393,7 +1392,7 @@ const Render = {
     drawSpikeZoneGroundRing(character, color) {
         const ctx = this.ctx;
         ctx.save();
-        ctx.setLineDash([]); // guard against dash state leaking in
+        ctx.setLineDash([]); // solid (distinct from debug overlays)
         // Match physics: effective zone radius includes the ball radius
         const spikeZoneRadius = Physics.SPIKE_ZONE_RADIUS + Physics.ball.radius;
         
@@ -1415,10 +1414,9 @@ const Render = {
         const minSize = 6;
         const finalRingSize = Math.max(ringSize, minSize);
         
-        // Draw ring at spike zone position (more prominent)
-        ctx.strokeStyle = this.colorWithAlpha(color, 0.67);
-        ctx.lineWidth = 2;
-        ctx.setLineDash([3, 3]); // Slightly larger dashes
+        // Draw ring at spike zone position (visual cue, keep subtle + distinct from debug)
+        ctx.strokeStyle = this.colorWithAlpha(color, 0.55);
+        ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.arc(spikeZoneProj.x, spikeZoneProj.y, finalRingSize, 0, Math.PI * 2);
         ctx.stroke();

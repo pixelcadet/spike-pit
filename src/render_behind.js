@@ -25,8 +25,9 @@ const RenderBehind = {
     // Asymmetric depth shaping:
     // - near (player side) uses < 1.0 to stretch vertically
     // - far (opponent side) uses > 1.0 to squeeze vertically
-    depthPowNear: 0.88,
-    depthPowFar: 1.18,
+    // Exaggerated version (can be tuned): bigger near side, more compressed far side
+    depthPowNear: 0.78,
+    depthPowFar: 1.38,
     zPixels: 90,        // pixels per world z at near end
 
     init() {

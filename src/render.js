@@ -343,6 +343,29 @@ const Render = {
         ctx.lineTo(netBackTop.x, netBackTop.y);
         ctx.stroke();
     },
+
+    // Draw a thin outline around the entire court footprint so the boundary remains visible
+    // even when many tiles are destroyed (holes).
+    drawCourtOutline() {
+        const ctx = this.ctx;
+
+        const frontLeft = this.project(0, 0, 0);
+        const frontRight = this.project(Physics.COURT_WIDTH, 0, 0);
+        const backRight = this.project(Physics.COURT_WIDTH, Physics.COURT_LENGTH, 0);
+        const backLeft = this.project(0, Physics.COURT_LENGTH, 0);
+
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(frontLeft.x, frontLeft.y);
+        ctx.lineTo(frontRight.x, frontRight.y);
+        ctx.lineTo(backRight.x, backRight.y);
+        ctx.lineTo(backLeft.x, backLeft.y);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
+    },
     
     // Draw character shadow (separated for proper rendering order)
     drawCharacterShadow(character) {
@@ -803,6 +826,9 @@ const Render = {
 
         // Draw hitboxes for debugging
         this.drawHitboxes();
+
+        // Court boundary outline (drawn last in world space so it's always visible).
+        this.drawCourtOutline();
 
         // End camera shake transform before drawing UI overlays.
         ctx.restore();

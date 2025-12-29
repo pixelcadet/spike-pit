@@ -9,6 +9,10 @@ const Render = {
     playerReceivingHighlight: false,
     aiSpikeHighlight: false,
     aiReceivingHighlight: false,
+
+    // Visualization toggles (wired via UI in `src/controls.js`)
+    showZones: true,       // spike/receive rings
+    showHitboxes: false,   // heavy debug overlays (hitboxes/footprints/zone spheres)
     
     // Canvas dimensions
     width: 800,
@@ -778,19 +782,21 @@ const Render = {
         // Draw edge labels for debugging (hidden)
         // this.drawEdgeLabels();
         
-        // Draw receiving zone ground rings (only visible when character is above ground and on court)
-        entitiesOnCourt.forEach(entity => {
-            if (entity.type === 'character' && entity.data.z >= 0) {
-                this.drawReceivingZoneGroundRing(entity.data, entity.color);
-            }
-        });
-        
-        // Draw spike zone rings (only visible when character is jumping and above ground and on court)
-        entitiesOnCourt.forEach(entity => {
-            if (entity.type === 'character' && !entity.data.onGround && entity.data.z >= 0) {
-                this.drawSpikeZoneGroundRing(entity.data, entity.color);
-            }
-        });
+        if (this.showZones) {
+            // Draw receiving zone ground rings (only visible when character is above ground and on court)
+            entitiesOnCourt.forEach(entity => {
+                if (entity.type === 'character' && entity.data.z >= 0) {
+                    this.drawReceivingZoneGroundRing(entity.data, entity.color);
+                }
+            });
+            
+            // Draw spike zone rings (only visible when character is jumping and above ground and on court)
+            entitiesOnCourt.forEach(entity => {
+                if (entity.type === 'character' && !entity.data.onGround && entity.data.z >= 0) {
+                    this.drawSpikeZoneGroundRing(entity.data, entity.color);
+                }
+            });
+        }
         
         // Draw shadows for entities on/in front of court (so they appear behind entities, only when above ground)
         entitiesOnCourt.forEach(entity => {
@@ -853,7 +859,7 @@ const Render = {
         }
         
         // Debug: Show game state in corner (temporary)
-        if (Game.state.isServing && Game.state.servingPlayer === 'player') {
+        if (this.showHitboxes && Game.state.isServing && Game.state.servingPlayer === 'player') {
             ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
             ctx.font = '12px monospace';
             ctx.textAlign = 'left';
@@ -1001,29 +1007,25 @@ const Render = {
     
     // Draw hitboxes for debugging
     drawHitboxes() {
-        const ctx = this.ctx;
-        
-        // Draw character hitboxes (hidden)
-        // this.drawCharacterHitbox(Physics.player, '#4a9eff');
-        // this.drawCharacterHitbox(Physics.ai, '#ff4a4a');
-        
-        // Draw character footprint boxes (boundary detection) - hidden
-        // this.drawCharacterFootprint(Physics.player, '#00ff00');
-        // this.drawCharacterFootprint(Physics.ai, '#00ff00');
-        
-        // Draw ball hitbox (hidden)
-        // this.drawBallHitbox();
-        
-        // Draw net hitbox (hidden)
-        // this.drawNetHitbox();
-        
-        // Draw spike zones (hidden)
-        // this.drawSpikeZone(Physics.player, '#4a9eff', this.playerSpikeHighlight);
-        // this.drawSpikeZone(Physics.ai, '#ff4a4a', this.aiSpikeHighlight);
-        
-        // Draw receiving zones (hidden)
-        // this.drawReceivingZone(Physics.player, '#4a9eff', this.playerReceivingHighlight);
-        // this.drawReceivingZone(Physics.ai, '#ff4a4a', this.aiReceivingHighlight);
+        if (!this.showHitboxes) return;
+
+        // Character hitboxes (3D spheres)
+        this.drawCharacterHitbox(Physics.player, '#4a9eff');
+        this.drawCharacterHitbox(Physics.ai, '#ff4a4a');
+
+        // Footprints (edge vs hole footprint sizes are drawn distinctly)
+        this.drawCharacterFootprint(Physics.player, '#00ff00');
+        this.drawCharacterFootprint(Physics.ai, '#00ff00');
+
+        // Ball + net hitboxes
+        this.drawBallHitbox();
+        this.drawNetHitbox();
+
+        // Zone spheres (use effective radius = zone + ball radius)
+        this.drawSpikeZone(Physics.player, '#4a9eff', this.playerSpikeHighlight);
+        this.drawSpikeZone(Physics.ai, '#ff4a4a', this.aiSpikeHighlight);
+        this.drawReceivingZone(Physics.player, '#4a9eff', this.playerReceivingHighlight);
+        this.drawReceivingZone(Physics.ai, '#ff4a4a', this.aiReceivingHighlight);
     },
     
     // Draw character footprint (rectangular boundary detection box at character's base)
@@ -1291,7 +1293,8 @@ const Render = {
     // Draw spike zone (3D sphere above character's head)
     drawSpikeZone(character, color, highlight = false) {
         const ctx = this.ctx;
-        const spikeZoneRadius = Physics.SPIKE_ZONE_RADIUS;
+        // Match physics: effective zone radius includes the ball radius
+        const spikeZoneRadius = Physics.SPIKE_ZONE_RADIUS + Physics.ball.radius;
         
         // Calculate spike zone position (offset forward and upward)
         let forwardOffset = Physics.SPIKE_ZONE_FORWARD_OFFSET;
@@ -1332,7 +1335,8 @@ const Render = {
     drawReceivingZone(character, color, highlight = false) {
         const ctx = this.ctx;
         const receiveZoneZ = character.z; // At character's center mass (ground level)
-        const receiveZoneRadius = Physics.RECEIVING_ZONE_RADIUS;
+        // Match physics: effective zone radius includes the ball radius
+        const receiveZoneRadius = Physics.RECEIVING_ZONE_RADIUS + Physics.ball.radius;
         const minSize = 6;
         
         // Single circle at center (ground level) - properly scaled with perspective
@@ -1362,7 +1366,8 @@ const Render = {
         const ctx = this.ctx;
         ctx.save();
         ctx.setLineDash([]); // guard against dash state leaking in
-        const receiveZoneRadius = Physics.RECEIVING_ZONE_RADIUS;
+        // Match physics: effective zone radius includes the ball radius
+        const receiveZoneRadius = Physics.RECEIVING_ZONE_RADIUS + Physics.ball.radius;
         
         // Project character position at ground level (z=0)
         const groundProj = this.project(character.x, character.y, 0);
@@ -1387,7 +1392,8 @@ const Render = {
         const ctx = this.ctx;
         ctx.save();
         ctx.setLineDash([]); // guard against dash state leaking in
-        const spikeZoneRadius = Physics.SPIKE_ZONE_RADIUS;
+        // Match physics: effective zone radius includes the ball radius
+        const spikeZoneRadius = Physics.SPIKE_ZONE_RADIUS + Physics.ball.radius;
         
         // Calculate spike zone position (offset forward and upward)
         let forwardOffset = Physics.SPIKE_ZONE_FORWARD_OFFSET;

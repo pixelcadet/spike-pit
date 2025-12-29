@@ -121,6 +121,26 @@ const Controls = {
                 Game.setFreePlay?.(e.target.checked);
             });
         }
+
+        // Show/hide zone rings (receive/spike)
+        const showZonesToggle = document.getElementById('show-zones');
+        if (showZonesToggle) {
+            showZonesToggle.addEventListener('change', (e) => {
+                if (typeof Render !== 'undefined') {
+                    Render.showZones = e.target.checked;
+                }
+            });
+        }
+
+        // Show/hide debug hitboxes/footprints/zones overlay (heavier draw)
+        const showHitboxesToggle = document.getElementById('show-hitboxes');
+        if (showHitboxesToggle) {
+            showHitboxesToggle.addEventListener('change', (e) => {
+                if (typeof Render !== 'undefined') {
+                    Render.showHitboxes = e.target.checked;
+                }
+            });
+        }
         
         // Initialize with default values
         this.updateMovementSpeed(5);
@@ -139,6 +159,14 @@ const Controls = {
             // Default off
             freePlayToggle.checked = false;
             Game.setFreePlay?.(freePlayToggle.checked);
+        }
+
+        // Defaults for debug overlays (Render is loaded before controls.js in index.html)
+        if (showZonesToggle && typeof Render !== 'undefined') {
+            Render.showZones = showZonesToggle.checked;
+        }
+        if (showHitboxesToggle && typeof Render !== 'undefined') {
+            Render.showHitboxes = showHitboxesToggle.checked;
         }
     },
     

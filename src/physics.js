@@ -1239,12 +1239,6 @@ const Physics = {
     updateBall(deltaTime = 1/60) {
         const b = this.ball;
 
-        // During the score splash/reset window, freeze ball physics.
-        // This prevents "no ball / no serve" dead states if the ball falls into a hole while scoring is disabled.
-        if (Game?.state?.isResetting) {
-            return;
-        }
-
         // If ball is falling through a hole, let it keep falling without any collisions.
         // This prevents net/character collision logic from injecting upward velocity while "under the floor".
         if (b.fallingThroughHole) {

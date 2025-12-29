@@ -46,6 +46,7 @@ const Physics = {
         isFalling: false, // Falling state
         fallTimer: 0, // Timer for falling duration (1 second)
         fallEdge: null, // Which edge they fell from ('A', 'B', or 'C')
+        fellFromHole: false, // True if the fall was triggered by a destroyed tile overlap (no grace slide)
         isBlinking: false, // Blinking state after respawn
         blinkTimer: 0 // Timer for blinking duration (1 second)
     },
@@ -68,6 +69,7 @@ const Physics = {
         isFalling: false, // Falling state
         fallTimer: 0, // Timer for falling duration (1 second)
         fallEdge: null, // Which edge they fell from ('A', 'B', or 'C')
+        fellFromHole: false, // True if the fall was triggered by a destroyed tile overlap (no grace slide)
         isBlinking: false, // Blinking state after respawn
         blinkTimer: 0 // Timer for blinking duration (1 second)
     },
@@ -129,6 +131,7 @@ const Physics = {
         this.player.isFalling = false;
         this.player.fallTimer = 0;
         this.player.fallEdge = null;
+        this.player.fellFromHole = false;
         this.player.isBlinking = false;
         this.player.blinkTimer = 0;
         
@@ -145,6 +148,7 @@ const Physics = {
         this.ai.isFalling = false;
         this.ai.fallTimer = 0;
         this.ai.fallEdge = null;
+        this.ai.fellFromHole = false;
         this.ai.isBlinking = false;
         this.ai.blinkTimer = 0;
         
@@ -352,7 +356,7 @@ const Physics = {
         return onCourtX && onCourtY;
     },
     
-    updatePlayer(input) {
+    updatePlayer(input, deltaTime = 1/60) {
         const p = this.player;
         
         // SIMPLE FALLING/RESPAWN SYSTEM
@@ -376,6 +380,8 @@ const Physics = {
             // which makes the character "hang" at the edge until respawn.
             p.onGround = false;
             if (p.vz > -0.08) p.vz = -0.08;
+            // Distinguish edge-fall vs hole-fall. We only apply grace slide for edge falls.
+            p.fellFromHole = this.getFootprintHoleOverlapMax(p) >= 0.55;
             // Determine which edge they fell from
             const percentages = this.getFootprintOutsidePercentages(p);
             if (percentages.edgeA >= 0.7) {
@@ -411,6 +417,14 @@ const Physics = {
                 }
                 // Update position (only gravity affects it)
                 p.z += p.vz;
+                // Grace slide: while falling off an EDGE (not a hole), drift outward so it never reads like "hanging".
+                // Small world-units-per-second drift, scaled by deltaTime for consistency.
+                if (!p.fellFromHole) {
+                    const slideSpeed = 0.55; // tiles/sec (tuned for subtlety)
+                    if (p.fallEdge === 'A') p.y += slideSpeed * deltaTime;
+                    else if (p.fallEdge === 'C') p.y -= slideSpeed * deltaTime;
+                    else if (p.fallEdge === 'B') p.x -= slideSpeed * deltaTime; // player outer edge is x < 0
+                }
                 // Don't allow getting back on court while falling - keep falling until timer expires
                 return;
             }
@@ -577,7 +591,7 @@ const Physics = {
         }
     },
     
-    updateAI(aiInput) {
+    updateAI(aiInput, deltaTime = 1/60) {
         const ai = this.ai;
         
         // SIMPLE FALLING/RESPAWN SYSTEM
@@ -597,6 +611,8 @@ const Physics = {
             // CRITICAL: ensure gravity applies during falling (avoid "hanging" while off-court).
             ai.onGround = false;
             if (ai.vz > -0.08) ai.vz = -0.08;
+            // Distinguish edge-fall vs hole-fall. We only apply grace slide for edge falls.
+            ai.fellFromHole = this.getFootprintHoleOverlapMax(ai) >= 0.55;
             // Determine which edge they fell from
             const percentages = this.getFootprintOutsidePercentages(ai);
             if (percentages.edgeA >= 0.7) {
@@ -632,6 +648,13 @@ const Physics = {
                 }
                 // Update position (only gravity affects it)
                 ai.z += ai.vz;
+                // Grace slide: while falling off an EDGE (not a hole), drift outward so it never reads like "hanging".
+                if (!ai.fellFromHole) {
+                    const slideSpeed = 0.55; // tiles/sec (tuned for subtlety)
+                    if (ai.fallEdge === 'A') ai.y += slideSpeed * deltaTime;
+                    else if (ai.fallEdge === 'C') ai.y -= slideSpeed * deltaTime;
+                    else if (ai.fallEdge === 'B') ai.x += slideSpeed * deltaTime; // AI outer edge is x > COURT_WIDTH
+                }
                 // Don't allow getting back on court while falling - keep falling until timer expires
                 return;
             }
@@ -1470,6 +1493,7 @@ const Physics = {
         character.onGround = true;
         character.hasSpiked = false;
         character.hasReceived = false;
+        character.fellFromHole = false;
         
         // Start blinking state (1 second) - applies to both falling out of court and falling into holes
         character.isBlinking = true;
@@ -1501,8 +1525,8 @@ const Physics = {
             }
         }
         
-        this.updatePlayer(input);
-        this.updateAI(aiInput);
+        this.updatePlayer(input, deltaTime);
+        this.updateAI(aiInput, deltaTime);
         
         // If serving, keep ball "held" by serving character
         // Do this AFTER character movement so ball follows character if they move

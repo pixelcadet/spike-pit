@@ -990,6 +990,15 @@ const Render = {
                 this.drawScoreSplash();
             }
         }
+
+        // Match over splash overlay (delayed so last hit/camera shake reads)
+        if (Game.state.matchOver) {
+            const delay = Game.state.matchOverSplashDelay ?? 0.8;
+            const elapsed = Game.state.matchOverElapsed ?? 0;
+            if (elapsed >= delay) {
+                this.drawMatchOverSplash();
+            }
+        }
     },
     
     drawScoreSplash() {
@@ -1018,6 +1027,44 @@ const Render = {
             ctx.fillText(`${who} SCORED`, this.width / 2, this.height / 2 + 60);
         }
         
+        ctx.restore();
+    },
+
+    drawMatchOverSplash() {
+        const ctx = this.ctx;
+        const elapsed = Game.state.matchOverElapsed ?? 0;
+        const delay = Game.state.matchOverSplashDelay ?? 0.8;
+        // Fade in quickly after delay.
+        const t = Math.max(0, Math.min(1, (elapsed - delay) / 0.25));
+        const alpha = 0.55 + 0.35 * t;
+
+        const who = Game.state.matchWinner === 'player' ? 'PLAYER' : 'AI';
+        const reason =
+            Game.state.matchEndReason === 'tiles'
+                ? 'ALL TILES DESTROYED'
+                : Game.state.matchEndReason === 'hp'
+                    ? 'HP DEPLETED'
+                    : 'POINTS';
+
+        ctx.save();
+        ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
+        ctx.fillRect(0, 0, this.width, this.height);
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        ctx.font = 'bold 64px sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.fillText('MATCH OVER', this.width / 2, this.height / 2 - 30);
+
+        ctx.font = 'bold 22px sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.fillText(`${who} WINS`, this.width / 2, this.height / 2 + 30);
+
+        ctx.font = 'bold 14px sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.70)';
+        ctx.fillText(`(${reason})  Press P to reset`, this.width / 2, this.height / 2 + 62);
+
         ctx.restore();
     },
     

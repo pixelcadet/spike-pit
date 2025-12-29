@@ -23,6 +23,8 @@ const Game = {
         isResetting: false,
         lastPointWinner: null, // 'player' | 'ai' (for UI feedback)
         scoreSplashDelay: 0.4, // Visual-only delay before showing "SCORED!" overlay (seconds)
+        matchOverSplashDelay: 0.8, // Visual-only delay before showing match-over overlay (seconds)
+        matchOverElapsed: 0,       // Elapsed time since matchOver became true
         
         // AI serve pacing (when it's AI turn to serve)
         aiServeDelay: 1.0,
@@ -87,6 +89,8 @@ const Game = {
         this.state.isResetting = false;
         this.state.lastPointWinner = null;
         this.state.scoreSplashDelay = 0.4;
+        this.state.matchOverSplashDelay = 0.8;
+        this.state.matchOverElapsed = 0;
         this.state.holeScoreFxTimeLeft = 0;
         this.state.holeScoreFxDuration = 0;
         this.state.holeScoreFxTx = -1;
@@ -250,6 +254,7 @@ const Game = {
         this.state.matchOver = true;
         this.state.matchWinner = winner;
         this.state.matchEndReason = reason;
+        this.state.matchOverElapsed = 0;
         this.state.isResetting = false;
         this.state.resetTimer = 0;
     },
@@ -277,6 +282,7 @@ const Game = {
             this.state.matchOver = false;
             this.state.matchWinner = null;
             this.state.matchEndReason = null;
+            this.state.matchOverElapsed = 0;
         }
     },
     
@@ -303,6 +309,13 @@ const Game = {
     },
     
     update(input, deltaTime) {
+        // Match-over splash timer (used by Render for delayed overlay)
+        if (this.state.matchOver) {
+            this.state.matchOverElapsed = (this.state.matchOverElapsed ?? 0) + deltaTime;
+        } else {
+            this.state.matchOverElapsed = 0;
+        }
+
         // Hole-score hologram FX timer
         if ((this.state.holeScoreFxTimeLeft ?? 0) > 0) {
             this.state.holeScoreFxTimeLeft -= deltaTime;

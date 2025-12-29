@@ -176,6 +176,20 @@ const Render = {
                         // Hole
                         fill = holeColor;
                         fillAlpha = 1.0;
+
+                        // If the ball fell through this hole and it scored, show a pink "hologram tile" briefly
+                        // so it reads as a special scoring surface rather than "ball went out".
+                        const fxT = Game?.state?.holeScoreFxTimeLeft ?? 0;
+                        const fxTx = Game?.state?.holeScoreFxTx ?? -1;
+                        const fxTy = Game?.state?.holeScoreFxTy ?? -1;
+                        if (fxT > 0 && fxTx === tx && fxTy === ty) {
+                            const dur = Game.state.holeScoreFxDuration || 0.0001;
+                            const tNorm = Math.max(0, Math.min(1, fxT / dur)); // 1..0
+                            // Soft pulse + fade-out
+                            const pulse = 0.6 + 0.4 * Math.sin((1 - tNorm) * Math.PI * 6);
+                            fill = '#ff3fbf';
+                            fillAlpha = (0.18 + 0.22 * pulse) * tNorm;
+                        }
                     } else {
                         // Brittleness visualization: fade opacity as HP drops.
                         // If a tile was just damaged, we blink first using the pre-damage HP opacity
@@ -342,29 +356,6 @@ const Render = {
         ctx.moveTo(netFrontTop.x, netFrontTop.y);
         ctx.lineTo(netBackTop.x, netBackTop.y);
         ctx.stroke();
-    },
-
-    // Draw a thin outline around the entire court footprint so the boundary remains visible
-    // even when many tiles are destroyed (holes).
-    drawCourtOutline() {
-        const ctx = this.ctx;
-
-        const frontLeft = this.project(0, 0, 0);
-        const frontRight = this.project(Physics.COURT_WIDTH, 0, 0);
-        const backRight = this.project(Physics.COURT_WIDTH, Physics.COURT_LENGTH, 0);
-        const backLeft = this.project(0, Physics.COURT_LENGTH, 0);
-
-        ctx.save();
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(frontLeft.x, frontLeft.y);
-        ctx.lineTo(frontRight.x, frontRight.y);
-        ctx.lineTo(backRight.x, backRight.y);
-        ctx.lineTo(backLeft.x, backLeft.y);
-        ctx.closePath();
-        ctx.stroke();
-        ctx.restore();
     },
     
     // Draw character shadow (separated for proper rendering order)
@@ -826,9 +817,6 @@ const Render = {
 
         // Draw hitboxes for debugging
         this.drawHitboxes();
-
-        // Court boundary outline (drawn last in world space so it's always visible).
-        this.drawCourtOutline();
 
         // End camera shake transform before drawing UI overlays.
         ctx.restore();

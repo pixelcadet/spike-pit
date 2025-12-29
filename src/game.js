@@ -46,7 +46,13 @@ const Game = {
         tileBlinkTimeLeft: [],
         tileBlinkDuration: [],
         tileBlinkStrength: [],
-        tileBlinkOldHp: []
+        tileBlinkOldHp: [],
+
+        // Hole score visual: briefly show a pink "hologram tile" where the ball fell through and scored.
+        holeScoreFxTimeLeft: 0,
+        holeScoreFxDuration: 0,
+        holeScoreFxTx: -1,
+        holeScoreFxTy: -1
     },
     
     // Serve multipliers (set by sliders)
@@ -67,6 +73,10 @@ const Game = {
         this.state.isResetting = false;
         this.state.lastPointWinner = null;
         this.state.scoreSplashDelay = 0.4;
+        this.state.holeScoreFxTimeLeft = 0;
+        this.state.holeScoreFxDuration = 0;
+        this.state.holeScoreFxTx = -1;
+        this.state.holeScoreFxTy = -1;
         this.state.aiServeDelay = 1.0;
         this.state.aiServeTimer = 0;
         this.state.isServing = true;
@@ -253,6 +263,17 @@ const Game = {
     },
     
     update(input, deltaTime) {
+        // Hole-score hologram FX timer
+        if ((this.state.holeScoreFxTimeLeft ?? 0) > 0) {
+            this.state.holeScoreFxTimeLeft -= deltaTime;
+            if (this.state.holeScoreFxTimeLeft <= 0) {
+                this.state.holeScoreFxTimeLeft = 0;
+                this.state.holeScoreFxDuration = 0;
+                this.state.holeScoreFxTx = -1;
+                this.state.holeScoreFxTy = -1;
+            }
+        }
+
         // Tile blink feedback timers
         if (this.state.tileBlinkTimeLeft && this.state.tileBlinkTimeLeft.length) {
             for (let i = 0; i < this.state.tileBlinkTimeLeft.length; i++) {
@@ -345,6 +366,15 @@ const Game = {
                 });
             }
         }
+    },
+
+    startHoleScoreFx(tx, ty, damageLike = false) {
+        // Visual-only hologram tile cue. Keep it short so it reads before the score splash dim.
+        const duration = damageLike ? 0.35 : 0.28;
+        this.state.holeScoreFxTx = tx;
+        this.state.holeScoreFxTy = ty;
+        this.state.holeScoreFxDuration = duration;
+        this.state.holeScoreFxTimeLeft = duration;
     },
     
     scorePoint(winner) {

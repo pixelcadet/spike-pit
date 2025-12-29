@@ -1312,6 +1312,7 @@ const Physics = {
                                 // Hole on AI's side → Player scores
                                 Game.scorePoint('player');
                             }
+                            Game.startHoleScoreFx?.(tx, ty);
                             b.hasScored = true;
                         }
                         // Fall through: don't clamp or bounce.

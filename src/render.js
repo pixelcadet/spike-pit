@@ -649,6 +649,24 @@ const Render = {
             return !!(tile && !tile.indestructible && tile.destroyed);
         };
 
+        // Helper: for characters, use footprint-based hole overlap (matches physics) so masking triggers
+        // even when the character falls while only their footprint overlaps a hole (center can still be on solid tile).
+        // Returns { tx, ty } for the "most overlapped" hole tile, or null if not overlapping any hole tiles.
+        const getCharacterHoleTile = (character) => {
+            if (typeof Physics?.getFootprintHoleOverlapInfo === 'function') {
+                const info = Physics.getFootprintHoleOverlapInfo(character);
+                if (info && info.overlaps && info.overlaps.length && info.maxTx >= 0 && info.maxTy >= 0) {
+                    return { tx: info.maxTx, ty: info.maxTy };
+                }
+                return null;
+            }
+            // Fallback: center-tile test (older behavior)
+            if (isOverHole(character.x, character.y)) {
+                return { tx: Math.floor(character.x), ty: Math.floor(character.y) };
+            }
+            return null;
+        };
+
         // Separate entities into those behind the court (off EDGE A or EDGE B) and those on/in front of the court
         const entities = [
             { type: 'character', data: Physics.player, color: '#4a9eff', y: Physics.player.y },
@@ -737,14 +755,16 @@ const Render = {
         // If so, we'll render a targeted "mask" of tiles (same row and closer-to-camera rows on that half-court)
         // above the falling entity, without clipping the opponent or the whole scene.
         const fallingIntoHole = [];
-        if (Physics.player.z < 0 && isOverHole(Physics.player.x, Physics.player.y)) {
-            fallingIntoHole.push({ type: 'character', data: Physics.player, color: '#4a9eff' });
+        if (Physics.player.z < 0) {
+            const ht = getCharacterHoleTile(Physics.player);
+            if (ht) fallingIntoHole.push({ type: 'character', data: Physics.player, color: '#4a9eff', holeTx: ht.tx, holeTy: ht.ty });
         }
-        if (Physics.ai.z < 0 && isOverHole(Physics.ai.x, Physics.ai.y)) {
-            fallingIntoHole.push({ type: 'character', data: Physics.ai, color: '#ff4a4a' });
+        if (Physics.ai.z < 0) {
+            const ht = getCharacterHoleTile(Physics.ai);
+            if (ht) fallingIntoHole.push({ type: 'character', data: Physics.ai, color: '#ff4a4a', holeTx: ht.tx, holeTy: ht.ty });
         }
         if (Physics.ball.z < 0 && isOverHole(Physics.ball.x, Physics.ball.y)) {
-            fallingIntoHole.push({ type: 'ball' });
+            fallingIntoHole.push({ type: 'ball', holeTx: Math.floor(Physics.ball.x), holeTy: Math.floor(Physics.ball.y) });
         }
 
         // Build per-side mask rows: for each side that has a falling entity, we draw all intact tiles
@@ -754,11 +774,11 @@ const Render = {
             ai: null
         };
         for (const fe of fallingIntoHole) {
-            const x = fe.type === 'ball' ? Physics.ball.x : fe.data.x;
-            const y = fe.type === 'ball' ? Physics.ball.y : fe.data.y;
-            const ty = Math.max(0, Math.min(Physics.COURT_LENGTH - 1, Math.floor(y)));
-            const side = x < Physics.NET_X ? 'player' : 'ai';
-            maskBySide[side] = maskBySide[side] == null ? ty : Math.max(maskBySide[side], ty);
+            const tx = fe.holeTx != null ? fe.holeTx : (fe.type === 'ball' ? Math.floor(Physics.ball.x) : Math.floor(fe.data.x));
+            const ty = fe.holeTy != null ? fe.holeTy : (fe.type === 'ball' ? Math.floor(Physics.ball.y) : Math.floor(fe.data.y));
+            const clampedTy = Math.max(0, Math.min(Physics.COURT_LENGTH - 1, ty));
+            const side = tx < Physics.NET_X ? 'player' : 'ai';
+            maskBySide[side] = maskBySide[side] == null ? clampedTy : Math.max(maskBySide[side], clampedTy);
         }
 
         const isMaskTile = (tx, ty) => {
@@ -815,7 +835,7 @@ const Render = {
         // Draw falling-into-hole entities first (so we can draw mask tiles above them).
         // Non-falling entities are drawn after the mask so they don't get clipped.
         const isFallingEntity = (entity) => {
-            if (entity.type === 'character') return entity.data.z < 0 && isOverHole(entity.data.x, entity.data.y);
+            if (entity.type === 'character') return entity.data.z < 0 && !!getCharacterHoleTile(entity.data);
             if (entity.type === 'ball') return Physics.ball.z < 0 && isOverHole(Physics.ball.x, Physics.ball.y);
             return false;
         };

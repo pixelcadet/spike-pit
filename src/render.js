@@ -164,7 +164,11 @@ const Render = {
                         fillAlpha = 1.0;
                     } else {
                         // Brittleness visualization: fade opacity as HP drops.
-                        const hp = tileState.hp ?? 0;
+                        // If a tile was just damaged, we blink first using the pre-damage HP opacity
+                        // to make the hit more readable, then settle into the new (lower) opacity.
+                        const hp = (tileState.blinkTimeLeft > 0 && tileState.blinkOldHp != null)
+                            ? tileState.blinkOldHp
+                            : (tileState.hp ?? 0);
                         fill = destructibleColor;
                         // HP → opacity mapping:
                         // (tileMaxHp=3)
@@ -190,6 +194,33 @@ const Render = {
                 ctx.closePath();
                 ctx.fill();
                 ctx.restore();
+
+                // Blink feedback overlay for recent hits (only destructible intact tiles).
+                if (tileState && !tileState.indestructible && !tileState.destroyed && tileState.blinkTimeLeft > 0) {
+                    const dur = tileState.blinkDuration || 0.0001;
+                    const strength = tileState.blinkStrength || 0;
+                    const elapsed = Math.max(0, dur - tileState.blinkTimeLeft);
+                    // Calmer vs vicious: strength influences both frequency and amplitude.
+                    const freq = 10 + 10 * strength; // Hz-ish (per second)
+                    const phase = elapsed * freq * Math.PI * 2;
+                    const wave = 0.5 + 0.5 * Math.sin(phase); // 0..1
+                    const decay = tileState.blinkTimeLeft / dur; // 1..0
+                    const flashAlpha = (0.10 + 0.25 * wave) * strength * decay;
+
+                    if (flashAlpha > 0.001) {
+                        ctx.save();
+                        ctx.globalAlpha = Math.min(0.5, flashAlpha);
+                        ctx.fillStyle = 'rgba(255, 255, 255, 1.0)';
+                        ctx.beginPath();
+                        ctx.moveTo(frontLeft.x, frontLeft.y);
+                        ctx.lineTo(frontRight.x, frontRight.y);
+                        ctx.lineTo(backRight.x, backRight.y);
+                        ctx.lineTo(backLeft.x, backLeft.y);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.restore();
+                    }
+                }
                 
                 // Draw tile border
                 // Thin outline around each tile (skip borders for holes so they blend into the background cleanly)

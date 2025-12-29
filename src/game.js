@@ -38,7 +38,13 @@ const Game = {
         // Court tiles (8x4). Destructible tiles start at 3 HP; destroyed tiles are holes.
         // Net-adjacent columns (tx=3 and tx=4) are indestructible (stored as null).
         tileMaxHp: 3,
-        tileHp: [] // flat array length = Physics.COURT_WIDTH * Physics.COURT_LENGTH
+        tileHp: [], // flat array length = Physics.COURT_WIDTH * Physics.COURT_LENGTH
+
+        // Tile hit feedback (blink) - parallel arrays indexed by tileIndex(tx, ty)
+        tileBlinkTimeLeft: [],
+        tileBlinkDuration: [],
+        tileBlinkStrength: [],
+        tileBlinkOldHp: []
     },
     
     // Serve multipliers (set by sliders)
@@ -97,6 +103,10 @@ const Game = {
     initCourtTiles() {
         const total = Physics.COURT_WIDTH * Physics.COURT_LENGTH;
         this.state.tileHp = new Array(total);
+        this.state.tileBlinkTimeLeft = new Array(total).fill(0);
+        this.state.tileBlinkDuration = new Array(total).fill(0);
+        this.state.tileBlinkStrength = new Array(total).fill(0);
+        this.state.tileBlinkOldHp = new Array(total).fill(null);
         for (let ty = 0; ty < Physics.COURT_LENGTH; ty++) {
             for (let tx = 0; tx < Physics.COURT_WIDTH; tx++) {
                 const idx = this.tileIndex(tx, ty);
@@ -110,7 +120,16 @@ const Game = {
         const hp = this.state.tileHp[idx];
         const indestructible = hp === null;
         const destroyed = !indestructible && hp <= 0;
-        return { hp, indestructible, destroyed, maxHp: this.state.tileMaxHp };
+        return {
+            hp,
+            indestructible,
+            destroyed,
+            maxHp: this.state.tileMaxHp,
+            blinkTimeLeft: this.state.tileBlinkTimeLeft?.[idx] ?? 0,
+            blinkDuration: this.state.tileBlinkDuration?.[idx] ?? 0,
+            blinkStrength: this.state.tileBlinkStrength?.[idx] ?? 0,
+            blinkOldHp: this.state.tileBlinkOldHp?.[idx] ?? null
+        };
     },
     
     isTileDestroyed(tx, ty) {
@@ -134,8 +153,21 @@ const Game = {
         if (hp === null) return null; // indestructible
         if (hp <= 0) return hp; // already destroyed
         
+        // Start blink feedback BEFORE showing the new (lower) opacity.
+        // Use oldHp for the duration of the blink, then settle to the new hp opacity.
+        const oldHp = hp;
         const newHp = Math.max(0, hp - amount);
         this.state.tileHp[idx] = newHp;
+
+        // 1 damage = calmer blink; 3 damage = more vicious blink.
+        const isBigHit = amount >= 3;
+        const duration = isBigHit ? 0.28 : 0.18;
+        const strength = isBigHit ? 1.0 : 0.55;
+        this.state.tileBlinkTimeLeft[idx] = duration;
+        this.state.tileBlinkDuration[idx] = duration;
+        this.state.tileBlinkStrength[idx] = strength;
+        this.state.tileBlinkOldHp[idx] = oldHp;
+
         this.checkWinConditions();
         return newHp;
     },
@@ -205,6 +237,22 @@ const Game = {
     },
     
     update(input, deltaTime) {
+        // Tile blink feedback timers
+        if (this.state.tileBlinkTimeLeft && this.state.tileBlinkTimeLeft.length) {
+            for (let i = 0; i < this.state.tileBlinkTimeLeft.length; i++) {
+                const t = this.state.tileBlinkTimeLeft[i] ?? 0;
+                if (t > 0) {
+                    const next = t - deltaTime;
+                    this.state.tileBlinkTimeLeft[i] = next > 0 ? next : 0;
+                    if (next <= 0) {
+                        this.state.tileBlinkDuration[i] = 0;
+                        this.state.tileBlinkStrength[i] = 0;
+                        this.state.tileBlinkOldHp[i] = null;
+                    }
+                }
+            }
+        }
+
         // Update score cooldown
         if (this.state.scoreCooldown > 0) {
             this.state.scoreCooldown -= deltaTime;

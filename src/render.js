@@ -614,7 +614,32 @@ const Render = {
         const minBallSize = 6;
         const finalBallSize = Math.max(ballSize, minBallSize);
         
-        ctx.fillStyle = '#ff0000';
+        // Touch counter visual cue: as touches remaining decreases, the ball becomes a darker red.
+        const maxTouches = Game?.state?.touchesPerSide ?? 3;
+        const tr = (typeof ball.touchesRemaining === 'number') ? ball.touchesRemaining : maxTouches;
+        const clampTr = Math.max(0, Math.min(maxTouches, tr));
+        // Map 3->0, 2->0.5, 1->1, 0->1
+        const denom = Math.max(1, maxTouches - 1);
+        const t = clampTr <= 1 ? 1 : (maxTouches - clampTr) / denom;
+
+        const lerp = (a, b, tt) => a + (b - a) * tt;
+        const hexToRgb = (hex) => {
+            const h = hex.replace('#', '');
+            const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
+            return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+        };
+        const rgbToHex = (r, g, b) => {
+            const to2 = (x) => x.toString(16).padStart(2, '0');
+            return `#${to2(r)}${to2(g)}${to2(b)}`;
+        };
+        const baseBright = hexToRgb('#ff2a2a');
+        const baseDark = hexToRgb('#220000');
+        const br = Math.round(lerp(baseBright.r, baseDark.r, t));
+        const bg = Math.round(lerp(baseBright.g, baseDark.g, t));
+        const bb = Math.round(lerp(baseBright.b, baseDark.b, t));
+        const baseColor = rgbToHex(br, bg, bb);
+
+        ctx.fillStyle = baseColor;
         ctx.beginPath();
         ctx.arc(proj.x, proj.y, finalBallSize, 0, Math.PI * 2);
         ctx.fill();
@@ -625,7 +650,13 @@ const Render = {
         ctx.stroke();
         
         // Draw ball highlight
-        ctx.fillStyle = '#ff6666';
+        // Highlight darkens too as touches drop (touches=1 is near-black red)
+        const hiBright = hexToRgb('#ff7a7a');
+        const hiDark = hexToRgb('#550000');
+        const hr = Math.round(lerp(hiBright.r, hiDark.r, t));
+        const hg = Math.round(lerp(hiBright.g, hiDark.g, t));
+        const hb = Math.round(lerp(hiBright.b, hiDark.b, t));
+        ctx.fillStyle = rgbToHex(hr, hg, hb);
         ctx.beginPath();
         ctx.arc(proj.x - finalBallSize * 0.3, proj.y - finalBallSize * 0.3, finalBallSize * 0.4, 0, Math.PI * 2);
         ctx.fill();

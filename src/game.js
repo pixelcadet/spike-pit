@@ -11,6 +11,8 @@ const Game = {
         playerHp: 10,
         aiHp: 10,
         fallDamage: 3,
+        // Touch limit per side (resets only when ball crosses the net)
+        touchesPerSide: 3,
         freePlay: false, // If true, never end the match; scoring can continue indefinitely.
         matchOver: false,
         matchWinner: null, // 'player' | 'ai'
@@ -74,6 +76,7 @@ const Game = {
         this.state.playerHp = 10;
         this.state.aiHp = 10;
         this.state.fallDamage = 3;
+        this.state.touchesPerSide = 3;
         this.state.freePlay = false;
         this.state.matchOver = false;
         this.state.matchWinner = null;
@@ -500,6 +503,10 @@ const Game = {
         Physics.ball.hasScored = false;
         Physics.ball.justServed = false;
         Physics.ball.serveTimer = 0;
+        // Touch counter resets for the serving side at start of rally.
+        Physics.ball.touchesRemaining = this.state.touchesPerSide ?? 3;
+        Physics.ball.touchCooldown = 0;
+        Physics.ball.prevX = Physics.ball.x;
         
         // AI serving pacing
         this.state.aiServeTimer = (this.state.servingPlayer === 'ai') ? this.state.aiServeDelay : 0;
@@ -754,6 +761,8 @@ const Game = {
         Physics.ball.lastHitType = 'serve';
         Physics.ball.tileDamageBounces = 0;
         Physics.ball.hasScored = false;
+        // Serving consumes a touch for the serving side.
+        Physics.applyBallTouch?.('serve', this.state.servingPlayer, true);
         
         // Exit serving state LAST, after everything is set up
         // This ensures Physics.update() will process the ball with the new velocities
@@ -860,6 +869,8 @@ const Game = {
         Physics.ball.lastHitType = 'serve';
         Physics.ball.tileDamageBounces = 0;
         Physics.ball.hasScored = false;
+        // Serving consumes a touch for the serving side.
+        Physics.applyBallTouch?.('serve', this.state.servingPlayer, true);
         
         // Exit serving state
         this.state.isServing = false;
@@ -935,6 +946,8 @@ const Game = {
         Physics.ball.lastHitType = 'spikeServe';
         Physics.ball.tileDamageBounces = 0;
         Physics.ball.hasScored = false;
+        // Spike serve consumes a touch for the serving side.
+        Physics.applyBallTouch?.('spikeServe', this.state.servingPlayer, true);
         
         // Exit serving state (isServing already set to false at the beginning of this function)
         this.state.spikeServePending = false;

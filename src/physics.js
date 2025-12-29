@@ -92,7 +92,11 @@ const Physics = {
         hasScored: false,    // Flag to prevent multiple scores from same bounce/fall
         justServed: false,   // Flag to prevent immediate collision after serve
         serveTimer: 0,        // Timer for serve grace period
-        fallingThroughHole: false // When true, ball ignores collisions and keeps falling (prevents "bouncing back up")
+        fallingThroughHole: false, // When true, ball ignores collisions and keeps falling (prevents "bouncing back up")
+        // Touch counter (per-side). Resets only when ball crosses the net.
+        touchesRemaining: 3,
+        touchCooldown: 0, // small cooldown to avoid repeated decrements while overlapping net/body
+        prevX: 2.0
     },
     
     init() {
@@ -115,6 +119,41 @@ const Physics = {
         this.ball.justServed = false;
         this.ball.serveTimer = 0;
         this.ball.fallingThroughHole = false;
+        this.ball.touchesRemaining = Game?.state?.touchesPerSide ?? 3;
+        this.ball.touchCooldown = 0;
+        this.ball.prevX = this.ball.x;
+    },
+
+    // Apply touch limit logic.
+    // - Touch count decrements on: character touches (body/spike/receive/serve) and net touches.
+    // - Touch count resets ONLY when ball crosses the net plane (handled in updateBall()).
+    // - If touchesRemaining is already 0, the NEXT character touch costs that side 1 HP.
+    applyBallTouch(kind, bySide, useCooldown = false) {
+        const b = this.ball;
+        if (!b) return;
+        if (useCooldown && (b.touchCooldown ?? 0) > 0) return;
+
+        const maxTouches = Game?.state?.touchesPerSide ?? 3;
+        b.touchesRemaining = b.touchesRemaining ?? maxTouches;
+
+        const isCharacterTouch = kind === 'character' || kind === 'serve' || kind === 'spike' || kind === 'receive' || kind === 'toss' || kind === 'body';
+        if (isCharacterTouch) {
+            if (b.touchesRemaining <= 0) {
+                if (Game?.damageCharacterHp && (bySide === 'player' || bySide === 'ai') && !Game?.state?.matchOver) {
+                    Game.damageCharacterHp(bySide, 1, 'touchLimit');
+                }
+            } else {
+                b.touchesRemaining = Math.max(0, b.touchesRemaining - 1);
+            }
+        } else if (kind === 'net') {
+            if (b.touchesRemaining > 0) {
+                b.touchesRemaining = Math.max(0, b.touchesRemaining - 1);
+            }
+        }
+
+        if (useCooldown) {
+            b.touchCooldown = 0.08;
+        }
     },
     
     reset() {
@@ -970,6 +1009,9 @@ const Physics = {
             b.tileDamageBounces = 0;
             b.hasScored = false; // Reset score flag on new touch
             b.fallingThroughHole = false;
+
+            // Touch counter decrement (body touch). Use cooldown to avoid repeated decrements while overlapping.
+            this.applyBallTouch('body', b.lastTouchedBy, true);
             
             return true;
         }
@@ -1136,6 +1178,9 @@ const Physics = {
         // Track who last touched the ball
         b.lastTouchedBy = (character === this.player) ? 'player' : 'ai';
         b.hasScored = false; // Reset score flag on new touch
+
+        // Touch counter decrement (action touch). Also prevents immediate body-collision decrement this frame.
+        this.applyBallTouch('spike', b.lastTouchedBy, true);
         
         return true;
     },
@@ -1316,6 +1361,9 @@ const Physics = {
         // Track who last touched the ball
         b.lastTouchedBy = (character === this.player) ? 'player' : 'ai';
         b.hasScored = false; // Reset score flag on new touch
+
+        // Touch counter decrement (action touch).
+        this.applyBallTouch(b.lastHitType || 'receive', b.lastTouchedBy, true);
         
         return true;
     },
@@ -1345,6 +1393,7 @@ const Physics = {
             if (belowNet) {
                 // Main net collision - ball hits the net below the top
                 const ballOnLeftSide = b.x < netX;
+                const side = ballOnLeftSide ? 'player' : 'ai';
                 
                 // Push ball away from net
                 if (ballOnLeftSide) {
@@ -1366,11 +1415,15 @@ const Physics = {
                 
                 // Apply slight damping to other velocities
                 b.vy *= 0.95;
+
+                // Net counts as a touch for the current side.
+                this.applyBallTouch('net', side, true);
                 
                 return true;
             } else if (atTopEdge) {
                 // Top edge collision - ball hits the tape/rope at top of net
                 const ballOnLeftSide = b.x < netX;
+                const side = ballOnLeftSide ? 'player' : 'ai';
                 
                 // Push ball away from net
                 if (ballOnLeftSide) {
@@ -1390,6 +1443,9 @@ const Physics = {
                 
                 // Apply damping
                 b.vy *= 0.95;
+
+                // Top-tape also counts as a net touch.
+                this.applyBallTouch('net', side, true);
                 
                 return true;
             }
@@ -1419,6 +1475,14 @@ const Physics = {
                 b.serveTimer = 0;
             }
         }
+
+        // Touch cooldown (prevents repeated decrements while overlapping net/body)
+        if ((b.touchCooldown ?? 0) > 0) {
+            b.touchCooldown = Math.max(0, (b.touchCooldown ?? 0) - deltaTime);
+        }
+
+        // Track net crossing (resets touch counter only when ball goes over the net plane).
+        const prevX = (b.prevX ?? b.x);
         
         // Check collisions with characters first (before updating position)
         // Skip collision check if ball was just served (prevents immediate collision with serving character)
@@ -1444,6 +1508,17 @@ const Physics = {
         b.x += b.vx;
         b.y += b.vy;
         b.z += b.vz;
+
+        // If the ball crossed the net plane this frame, reset the per-side touch counter.
+        // Use a small height gate so we only reset when it plausibly went over the net.
+        const crossedNet =
+            (prevX < this.NET_X && b.x >= this.NET_X) ||
+            (prevX >= this.NET_X && b.x < this.NET_X);
+        if (crossedNet && b.z >= (this.NET_HEIGHT - this.NET_TOP_THRESHOLD)) {
+            b.touchesRemaining = Game?.state?.touchesPerSide ?? 3;
+            b.touchCooldown = 0;
+        }
+        b.prevX = b.x;
         
         // Check net collision (after position update)
         const velocitiesBeforeNetCheck = { vx: b.vx, vy: b.vy, vz: b.vz };

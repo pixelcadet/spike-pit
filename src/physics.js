@@ -161,7 +161,7 @@ const Physics = {
     // Edge labels (from camera view):
     // - EDGE A: Top side of screen (back of court, y = COURT_LENGTH) - threshold 80%
     // - EDGE B: Left side of screen (opposite from net, x = 0 for player, x = COURT_WIDTH for AI) - threshold 80%
-    // - EDGE C: Bottom side of screen (front of court, y = 0) - threshold 20%
+    // - EDGE C: Bottom side of screen (front of court, y = 0)
     getFootprintOutsidePercentages(character) {
         const footprintWidth = character.radius * 1.2;
         const footprintDepth = character.radius * 0.5;
@@ -186,7 +186,7 @@ const Physics = {
             const leftOutside = Math.max(0, 0 - footprintLeft);
             edgeB_Outside = Math.min(1.0, leftOutside / footprintWidth);
             
-            // EDGE C: Bottom side of screen (front of court, y = 0) - threshold 10%
+            // EDGE C: Bottom side of screen (front of court, y = 0)
             const frontOutside = Math.max(0, 0 - footprintFront);
             edgeC_Outside = Math.min(1.0, frontOutside / footprintDepth);
         } else {
@@ -199,7 +199,7 @@ const Physics = {
             const rightOutside = Math.max(0, footprintRight - this.COURT_WIDTH);
             edgeB_Outside = Math.min(1.0, rightOutside / footprintWidth);
             
-            // EDGE C: Bottom side of screen (front of court, y = 0) - threshold 10%
+            // EDGE C: Bottom side of screen (front of court, y = 0)
             const frontOutside = Math.max(0, 0 - footprintFront);
             edgeC_Outside = Math.min(1.0, frontOutside / footprintDepth);
         }
@@ -216,14 +216,14 @@ const Physics = {
     // Edge labels (from camera view):
     // - EDGE A: Top side of screen (back of court) - threshold 70%
     // - EDGE B: Left side of screen (opposite from net) - threshold 70%
-    // - EDGE C: Bottom side of screen (front of court) - threshold 10%
+    // - EDGE C: Bottom side of screen (front of court) - threshold 5%
     isFootprintOnCourt(character) {
         const percentages = this.getFootprintOutsidePercentages(character);
         
         // Character falls if any edge exceeds its threshold:
         const edgeA_Threshold = 0.7; // Top side (back of court) - can lean more
         const edgeB_Threshold = 0.7; // Left side (opposite from net) - can lean more
-        const edgeC_Threshold = 0.1; // Bottom side (front of court) - falls quickly
+        const edgeC_Threshold = 0.05; // Bottom side (front of court) - falls quickly
         
         // Character can stand if all edges are below their thresholds
         const onCourtEdges = percentages.edgeA < edgeA_Threshold && 
@@ -388,7 +388,7 @@ const Physics = {
                 p.fallEdge = 'A';
             } else if (percentages.edgeB >= 0.7) {
                 p.fallEdge = 'B';
-            } else if (percentages.edgeC >= 0.1) {
+            } else if (percentages.edgeC >= 0.05) {
                 p.fallEdge = 'C';
             } else {
                 p.fallEdge = 'A'; // Default
@@ -552,8 +552,8 @@ const Physics = {
             
             // Add a gentle push away from court center for natural sliding-off animation
             const percentages = this.getFootprintOutsidePercentages(p);
-            // Check if any edge exceeds its threshold (EDGE A: 70%, EDGE B: 70%, EDGE C: 10%)
-            if (percentages.edgeA >= 0.7 || percentages.edgeB >= 0.7 || percentages.edgeC >= 0.1) {
+            // Check if any edge exceeds its threshold (EDGE A: 70%, EDGE B: 70%, EDGE C: 5%)
+            if (percentages.edgeA >= 0.7 || percentages.edgeB >= 0.7 || percentages.edgeC >= 0.05) {
                 // Calculate direction from court center to character
                 const courtCenterX = this.NET_X * 0.5; // Center of player's side
                 const courtCenterY = this.COURT_LENGTH * 0.5;
@@ -619,7 +619,7 @@ const Physics = {
                 ai.fallEdge = 'A';
             } else if (percentages.edgeB >= 0.7) {
                 ai.fallEdge = 'B';
-            } else if (percentages.edgeC >= 0.1) {
+            } else if (percentages.edgeC >= 0.05) {
                 ai.fallEdge = 'C';
             } else {
                 ai.fallEdge = 'A'; // Default
@@ -740,8 +740,8 @@ const Physics = {
             
             // Add a gentle push away from court center for natural sliding-off animation
             const percentages = this.getFootprintOutsidePercentages(ai);
-            // Check if any edge exceeds its threshold (EDGE A: 70%, EDGE B: 70%, EDGE C: 10%)
-            if (percentages.edgeA >= 0.7 || percentages.edgeB >= 0.7 || percentages.edgeC >= 0.1) {
+            // Check if any edge exceeds its threshold (EDGE A: 70%, EDGE B: 70%, EDGE C: 5%)
+            if (percentages.edgeA >= 0.7 || percentages.edgeB >= 0.7 || percentages.edgeC >= 0.05) {
                 // Calculate direction from court center to character
                 // AI is on the right side, so court center is on AI's side
                 const courtCenterX = this.NET_X + (this.COURT_WIDTH - this.NET_X) * 0.5; // Center of AI's side

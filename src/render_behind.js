@@ -15,19 +15,20 @@ const RenderBehind = {
 
     // Camera / projection tuning
     centerX: 400,
-    // Shift the whole court upward a bit (more "from above / behind" framing)
-    bottomY: 520,
-    topY: 120,
+    bottomY: 540,
+    topY: 150,
     nearHalfWidth: 310, // half width of court at depth=0
     farHalfWidth: 135,  // half width of court at depth=COURT_WIDTH
-    // Keep net visually centered between bottom and top for an optically even split.
-    // Curvature can be adjusted later; for now keep it linear-per-half so the halves feel balanced.
-    // Asymmetric depth shaping:
-    // - near (player side) uses < 1.0 to stretch vertically
-    // - far (opponent side) uses > 1.0 to squeeze vertically
-    // Exaggerated version (can be tuned): bigger near side, more compressed far side
-    depthPowNear: 0.78,
-    depthPowFar: 1.38,
+    // Depth mapping is asymmetric around the net:
+    // - We want the PLAYER side (near) to look bigger (more vertical space).
+    // - We want the OPPONENT side (far) to look smaller (more compressed).
+    // We also place the net a bit higher on screen so the player side is visually emphasized.
+    //
+    // netScreenFrac: where the net plane maps along [bottomY..topY] in "t" space.
+    //   0.5 would be centered; >0.5 moves the net UP (toward topY).
+    netScreenFrac: 0.60,
+    depthPowNear: 0.78, // <1 stretches near side vertically
+    depthPowFar: 1.35,  // >1 squeezes far side vertically
     zPixels: 90,        // pixels per world z at near end
 
     init() {
@@ -48,18 +49,20 @@ const RenderBehind = {
         const lateralMid = Physics.COURT_LENGTH * 0.5;
         const lateralHalf = Math.max(0.0001, lateralMid);
 
-        // Depth mapping: keep the net plane (x = NET_X) visually centered.
-        // This avoids the "opponent side feels bigger/taller" effect from non-centered projections.
-        const netT = Physics.NET_X / depthMax; // 0.5 for current court
         let t = x / depthMax;
         t = Math.max(0, Math.min(1, t));
+        // Asymmetric depth-to-screen mapping, anchored at the net plane.
+        const netT = Physics.NET_X / depthMax; // 0..1
+        const netS = Math.max(0.05, Math.min(0.95, this.netScreenFrac)); // safety clamp
         let tp;
         if (t <= netT) {
+            // Map [0..netT] -> [0..netS]
             const u = netT <= 0 ? 0 : (t / netT); // 0..1
-            tp = 0.5 * Math.pow(u, this.depthPowNear);
+            tp = netS * Math.pow(u, this.depthPowNear);
         } else {
+            // Map [netT..1] -> [netS..1]
             const u = (1 - netT) <= 0 ? 1 : ((t - netT) / (1 - netT)); // 0..1
-            tp = 0.5 + 0.5 * Math.pow(u, this.depthPowFar);
+            tp = netS + (1 - netS) * Math.pow(u, this.depthPowFar);
         }
 
         const yScreen = this.lerp(this.bottomY, this.topY, tp);

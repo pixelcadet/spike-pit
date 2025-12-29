@@ -310,6 +310,20 @@ The MVP must remain minimal and shippable.
 
 ## Future Considerations / Notes
 
+### Frame-rate dependent physics (time-based integration)
+**Observed behavior:** Moving the game between monitors (e.g., 60Hz ↔ 120Hz) can make the ball/game feel significantly faster/slower.
+
+**Why:** Some physics integration is effectively **per-frame** (e.g., position updates like `x += vx`, `z += vz`), so a higher refresh rate runs more updates per second.
+
+**Future fix:** Convert physics to be **time-based** using `deltaTime` for integration (e.g., `x += vx * dt`, `vz -= g * dt`, etc.). This will require re-tuning `ballMovementSpeed` so it remains a *time-scale* control rather than a frame-rate proxy.
+
+### Canvas artifacts across monitors / DPI scaling
+**Observed behavior:** “Ghost” dashed lines / ring artifacts can appear on one monitor but disappear when moving the tab to another.
+
+**Why:** Canvas rendering can differ across **devicePixelRatio**, OS scaling, and compositor paths; dash patterns and anti-aliasing can land on different subpixels.
+
+**Mitigations:** Prefer `rgba()` for alpha, isolate canvas state with `save()/restore()`, and consider DPR-aware canvas sizing if artifacts persist.
+
 ### Receiving Mechanic and Falling System Interaction
 
 **Current Behavior (as of latest implementation):**

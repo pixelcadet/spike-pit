@@ -951,12 +951,8 @@ const Game = {
     updateScoreDisplay() {
         const playerScoreEl = document.getElementById('player-score');
         const aiScoreEl = document.getElementById('ai-score');
-        const playerHpEl = document.getElementById('player-hp');
-        const aiHpEl = document.getElementById('ai-hp');
         if (playerScoreEl) playerScoreEl.textContent = this.state.playerScore;
         if (aiScoreEl) aiScoreEl.textContent = this.state.aiScore;
-        if (playerHpEl) playerHpEl.textContent = this.state.playerHp;
-        if (aiHpEl) aiHpEl.textContent = this.state.aiHp;
     },
     
     getStatusText() {

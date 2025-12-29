@@ -47,13 +47,6 @@ body {
     text-align: center;
 }
 
-#hp {
-    margin-top: 4px;
-    font-size: 18px;
-    font-weight: bold;
-    opacity: 0.9;
-}
-
 #game-status {
     position: absolute;
     top: 80px;

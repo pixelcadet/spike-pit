@@ -456,6 +456,46 @@ const Render = {
         // Reset alpha
         ctx.globalAlpha = 1.0;
     },
+
+    // Draw a semicircle HP bar on the ground at the character position.
+    // Uses Game.state.playerHp/aiHp and max HP; purely visual.
+    drawHpArcGround(character, color, hp, maxHp) {
+        const ctx = this.ctx;
+        if (hp == null || maxHp == null || maxHp <= 0) return;
+        if (character.z < 0) return; // don't draw while falling under floor
+
+        const groundProj = this.project(character.x, character.y, 0);
+        // Scale with perspective; keep minimum readable size.
+        const base = character.radius * this.courtTileSize * groundProj.scale;
+        const radius = Math.max(14, base * 1.35);
+        const lineWidth = Math.max(3, radius * 0.22);
+
+        const ratio = Math.max(0, Math.min(1, hp / maxHp));
+        // Upper semicircle (sits "behind" the body a bit in screen space)
+        const startAngle = Math.PI; // left
+        const endAngle = 0;         // right
+
+        ctx.save();
+        ctx.lineWidth = lineWidth;
+        ctx.lineCap = 'round';
+
+        // Background track
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+        ctx.beginPath();
+        ctx.arc(groundProj.x, groundProj.y, radius, startAngle, endAngle, false);
+        ctx.stroke();
+
+        // Filled portion
+        if (ratio > 0) {
+            const filledEnd = startAngle + (endAngle - startAngle) * ratio; // interpolate along semicircle
+            ctx.strokeStyle = this.colorWithAlpha(color, 0.9);
+            ctx.beginPath();
+            ctx.arc(groundProj.x, groundProj.y, radius, startAngle, filledEnd, false);
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    },
     
     // Draw ball shadow (separated for proper rendering order)
     drawBallShadow() {
@@ -831,6 +871,13 @@ const Render = {
                 this.drawBallShadow();
             }
         });
+
+        // Draw HP arcs on the ground above shadows but below bodies.
+        // Always show (independent of showZones/showHitboxes).
+        const pMaxHp = Game?.state?.maxPlayerHp ?? 10;
+        const aMaxHp = Game?.state?.maxAiHp ?? 10;
+        this.drawHpArcGround(Physics.player, '#4a9eff', Game?.state?.playerHp ?? pMaxHp, pMaxHp);
+        this.drawHpArcGround(Physics.ai, '#ff4a4a', Game?.state?.aiHp ?? aMaxHp, aMaxHp);
 
         // Draw falling-into-hole entities first (so we can draw mask tiles above them).
         // Non-falling entities are drawn after the mask so they don't get clipped.

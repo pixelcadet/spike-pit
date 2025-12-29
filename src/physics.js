@@ -385,7 +385,7 @@ const Physics = {
 
     // Directional hole fall thresholds (by approach direction relative to tile center).
     // Interpretation:
-    // - dy > 0 => character is "above" the tile center (approaching from top/back): fall sooner (0.15)
+    // - dy > 0 => character is "above" the tile center (approaching from top/back): fall sooner (0.05)
     // - dy < 0 => approaching from bottom/front: fall later (0.85)
     // - Left/right approaches: 0.70
     getHoleFallThresholdForTileApproach(character, tx, ty) {
@@ -396,7 +396,7 @@ const Physics = {
 
         // Choose dominant axis to determine which "side" of the trapezoid we're on.
         if (Math.abs(dy) >= Math.abs(dx)) {
-            return dy > 0 ? 0.15 : 0.85;
+            return dy > 0 ? 0.05 : 0.85;
         }
         return 0.7;
     },

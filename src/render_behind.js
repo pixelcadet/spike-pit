@@ -457,11 +457,18 @@ const RenderBehind = {
             ctx.strokeRect(x0, y0, bodyW, bodyH);
         }
 
-        // Head color: blue (distinct from the orange ball).
-        ctx.fillStyle = '#2ea8ff';
+        // Head color:
+        // - player: blue
+        // - ai: red
+        const headFill = (char === Physics.ai) ? '#ff3b3b' : '#2ea8ff';
+        ctx.fillStyle = headFill;
         ctx.beginPath();
         ctx.arc(p.x, p.y - bodyH / 2 - headR * 0.1, headR, 0, Math.PI * 2);
         ctx.fill();
+        // Outline (match body outline style)
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
         ctx.restore();
     },
 

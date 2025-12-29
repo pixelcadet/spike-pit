@@ -1253,7 +1253,7 @@ const Render = {
         ctx.rotate(-Math.PI / 2); // Rotate 90 degrees counter-clockwise
         ctx.fillText('EDGE B (70%)', 0, 0);
         ctx.restore();
-    }
+    },
 
     // Draw destroyed tiles (holes) on top of entities as an occluder.
     // This makes characters/ball look like they fall "into" the hole instead of in front of it.

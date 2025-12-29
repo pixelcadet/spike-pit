@@ -12,6 +12,7 @@ const Render = {
 
     // Visualization toggles (wired via UI in `src/controls.js`)
     showZones: true,       // spike/receive rings
+    showReceiveZone: true, // receive zone only (ring + debug sphere)
     showHitboxes: false,   // heavy debug overlays (hitboxes/footprints/zone spheres)
     
     // Canvas dimensions
@@ -875,11 +876,13 @@ const Render = {
         // The gameplay-accurate visualization is the 3D zone sphere shown in `drawHitboxes()`.
         if (this.showZones && !this.showHitboxes) {
             // Draw receiving zone ground rings (only visible when character is above ground and on court)
-            entitiesOnCourt.forEach(entity => {
-                if (entity.type === 'character' && entity.data.z >= 0) {
-                    this.drawReceivingZoneGroundRing(entity.data, entity.color);
-                }
-            });
+            if (this.showReceiveZone) {
+                entitiesOnCourt.forEach(entity => {
+                    if (entity.type === 'character' && entity.data.z >= 0) {
+                        this.drawReceivingZoneGroundRing(entity.data, entity.color);
+                    }
+                });
+            }
             
             // Draw spike zone rings (only visible when character is jumping and above ground and on court)
             entitiesOnCourt.forEach(entity => {
@@ -1122,8 +1125,10 @@ const Render = {
         // Zone spheres (use effective radius = zone + ball radius)
         this.drawSpikeZone(Physics.player, '#4a9eff', this.playerSpikeHighlight);
         this.drawSpikeZone(Physics.ai, '#ff4a4a', this.aiSpikeHighlight);
-        this.drawReceivingZone(Physics.player, '#4a9eff', this.playerReceivingHighlight);
-        this.drawReceivingZone(Physics.ai, '#ff4a4a', this.aiReceivingHighlight);
+        if (this.showReceiveZone) {
+            this.drawReceivingZone(Physics.player, '#4a9eff', this.playerReceivingHighlight);
+            this.drawReceivingZone(Physics.ai, '#ff4a4a', this.aiReceivingHighlight);
+        }
     },
     
     // Draw character footprint (rectangular boundary detection box at character's base)

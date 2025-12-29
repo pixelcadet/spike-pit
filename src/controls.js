@@ -140,6 +140,16 @@ const Controls = {
             });
         }
 
+        // Show/hide receive zone visualization (ground ring + debug sphere)
+        const showReceiveZoneToggle = document.getElementById('show-receive-zone');
+        if (showReceiveZoneToggle) {
+            showReceiveZoneToggle.addEventListener('change', (e) => {
+                if (typeof Render !== 'undefined') {
+                    Render.showReceiveZone = e.target.checked;
+                }
+            });
+        }
+
         // Show/hide debug hitboxes/footprints/zones overlay (heavier draw)
         const showHitboxesToggle = document.getElementById('show-hitboxes');
         if (showHitboxesToggle) {
@@ -174,6 +184,9 @@ const Controls = {
         // Defaults for debug overlays (Render is loaded before controls.js in index.html)
         if (showZonesToggle && typeof Render !== 'undefined') {
             Render.showZones = showZonesToggle.checked;
+        }
+        if (showReceiveZoneToggle && typeof Render !== 'undefined') {
+            Render.showReceiveZone = showReceiveZoneToggle.checked;
         }
         if (showHitboxesToggle && typeof Render !== 'undefined') {
             Render.showHitboxes = showHitboxesToggle.checked;

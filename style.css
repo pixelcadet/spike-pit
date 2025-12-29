@@ -44,6 +44,14 @@ body {
     left: 50%;
     transform: translateX(-50%);
     font-size: 32px;
+    text-align: center;
+}
+
+#hp {
+    margin-top: 4px;
+    font-size: 18px;
+    font-weight: bold;
+    opacity: 0.9;
 }
 
 #game-status {

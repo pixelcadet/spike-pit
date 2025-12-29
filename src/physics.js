@@ -486,6 +486,11 @@ const Physics = {
         if ((isAtOrBelowGroundAndOffCourt || hasFallenTooFar) && !p.isFalling) {
             p.isFalling = true;
             p.fallTimer = 0;
+            // Falling costs HP (once per fall).
+            // Applies to both hole-falls and off-court falls.
+            if (Game?.damageCharacterHp && !Game?.state?.matchOver) {
+                Game.damageCharacterHp('player', Game?.state?.fallDamage ?? 3, 'fall');
+            }
             // CRITICAL: ensure gravity actually applies during the falling state.
             // Without this, it's possible to enter `isFalling` while `onGround` is still true (from the prior frame),
             // which makes the character "hang" at the edge until respawn.
@@ -719,6 +724,10 @@ const Physics = {
         if ((isAtOrBelowGroundAndOffCourt || hasFallenTooFar) && !ai.isFalling) {
             ai.isFalling = true;
             ai.fallTimer = 0;
+            // Falling costs HP (once per fall).
+            if (Game?.damageCharacterHp && !Game?.state?.matchOver) {
+                Game.damageCharacterHp('ai', Game?.state?.fallDamage ?? 3, 'fall');
+            }
             // CRITICAL: ensure gravity applies during falling (avoid "hanging" while off-court).
             ai.onGround = false;
             if (ai.vz > -0.08) ai.vz = -0.08;

@@ -5,6 +5,12 @@ const Game = {
         playerScore: 0,
         aiScore: 0,
         pointsToWin: 11,
+        // Character HP (separate from tiles). Falls deal damage; 0 HP loses the match.
+        maxPlayerHp: 10,
+        maxAiHp: 10,
+        playerHp: 10,
+        aiHp: 10,
+        fallDamage: 3,
         freePlay: false, // If true, never end the match; scoring can continue indefinitely.
         matchOver: false,
         matchWinner: null, // 'player' | 'ai'
@@ -63,6 +69,11 @@ const Game = {
         this.state.playerScore = 0;
         this.state.aiScore = 0;
         this.state.pointsToWin = 11;
+        this.state.maxPlayerHp = 10;
+        this.state.maxAiHp = 10;
+        this.state.playerHp = 10;
+        this.state.aiHp = 10;
+        this.state.fallDamage = 3;
         this.state.freePlay = false;
         this.state.matchOver = false;
         this.state.matchWinner = null;
@@ -201,6 +212,16 @@ const Game = {
     checkWinConditions() {
         if (this.state.freePlay) return;
         if (this.state.matchOver) return;
+
+        // HP win: a character at 0 HP loses immediately.
+        if (this.state.playerHp <= 0) {
+            this.endMatch('ai', 'hp');
+            return;
+        }
+        if (this.state.aiHp <= 0) {
+            this.endMatch('player', 'hp');
+            return;
+        }
         
         if (this.state.playerScore >= this.state.pointsToWin) {
             this.endMatch('player', 'points');
@@ -228,6 +249,22 @@ const Game = {
         this.state.matchEndReason = reason;
         this.state.isResetting = false;
         this.state.resetTimer = 0;
+    },
+
+    damageCharacterHp(side, amount, source = 'unknown') {
+        if (!amount || amount <= 0) return;
+
+        if (side === 'player') {
+            this.state.playerHp = Math.max(0, (this.state.playerHp ?? this.state.maxPlayerHp ?? 10) - amount);
+        } else if (side === 'ai') {
+            this.state.aiHp = Math.max(0, (this.state.aiHp ?? this.state.maxAiHp ?? 10) - amount);
+        } else {
+            return;
+        }
+
+        this.updateScoreDisplay();
+        // If HP hits zero, match ends (unless free play).
+        this.checkWinConditions();
     },
 
     setFreePlay(enabled) {
@@ -914,14 +951,23 @@ const Game = {
     updateScoreDisplay() {
         const playerScoreEl = document.getElementById('player-score');
         const aiScoreEl = document.getElementById('ai-score');
+        const playerHpEl = document.getElementById('player-hp');
+        const aiHpEl = document.getElementById('ai-hp');
         if (playerScoreEl) playerScoreEl.textContent = this.state.playerScore;
         if (aiScoreEl) aiScoreEl.textContent = this.state.aiScore;
+        if (playerHpEl) playerHpEl.textContent = this.state.playerHp;
+        if (aiHpEl) aiHpEl.textContent = this.state.aiHp;
     },
     
     getStatusText() {
         if (this.state.matchOver) {
             const who = this.state.matchWinner === 'player' ? 'Player wins!' : 'AI wins!';
-            const why = this.state.matchEndReason === 'tiles' ? ' (All tiles destroyed)' : ' (First to 7)';
+            const why =
+                this.state.matchEndReason === 'tiles'
+                    ? ' (All tiles destroyed)'
+                    : this.state.matchEndReason === 'hp'
+                        ? ' (HP depleted)'
+                        : ` (First to ${this.state.pointsToWin})`;
             return `Match over — ${who}${why} Press P to reset.`;
         }
         if (this.state.isResetting) {

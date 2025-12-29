@@ -1060,17 +1060,16 @@ const Render = {
         const holeScreenWidth = holeFootprintWidth * this.courtTileSize * groundProj.scale;
         const holeScreenDepth = holeFootprintDepth * this.courtTileSize * groundProj.scale;
         
-        // Position footprint to cover the lower portion of the character body
-        const charCenterScreenY = charProj.y;
-        
-        // Start footprint from middle of character (covers lower half)
-        // Make footprint height match the lower half of character
+        // IMPORTANT: The footprint represents *ground contact / collision* and should be centered on the
+        // character's ground-projected position (tile center when snapped), not anchored to the body sprite.
+        // Otherwise the footprint can look offset even when physics is perfectly aligned to tx+0.5/ty+0.5.
         const lowerHalfHeight = rectHeight / 2;
         const edgeFootprintScreenHeight = Math.max(edgeScreenDepth, lowerHalfHeight);
         const holeFootprintScreenHeight = Math.max(holeScreenDepth, lowerHalfHeight);
+        const edgeTopY = groundProj.y - edgeFootprintScreenHeight * 0.5;
+        const holeTopY = groundProj.y - holeFootprintScreenHeight * 0.5;
         
-        // Draw rectangle covering lower portion of character body
-        // Footprint follows character position directly (centered on character)
+        // Footprint follows character position directly (centered on groundProj)
         ctx.save();
         ctx.lineWidth = 2;
 
@@ -1079,7 +1078,7 @@ const Render = {
         ctx.setLineDash([2, 2]);
         ctx.strokeRect(
             groundProj.x - edgeScreenWidth / 2,
-            charCenterScreenY,
+            edgeTopY,
             edgeScreenWidth,
             edgeFootprintScreenHeight
         );
@@ -1089,7 +1088,7 @@ const Render = {
         ctx.setLineDash([5, 4]);
         ctx.strokeRect(
             groundProj.x - holeScreenWidth / 2,
-            charCenterScreenY,
+            holeTopY,
             holeScreenWidth,
             holeFootprintScreenHeight
         );

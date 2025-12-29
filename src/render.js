@@ -782,7 +782,9 @@ const Render = {
         // Draw edge labels for debugging (hidden)
         // this.drawEdgeLabels();
         
-        if (this.showZones) {
+        // If heavy debug hitboxes are enabled, hide the ground rings to avoid visual "double zones".
+        // The gameplay-accurate visualization is the 3D zone sphere shown in `drawHitboxes()`.
+        if (this.showZones && !this.showHitboxes) {
             // Draw receiving zone ground rings (only visible when character is above ground and on court)
             entitiesOnCourt.forEach(entity => {
                 if (entity.type === 'character' && entity.data.z >= 0) {

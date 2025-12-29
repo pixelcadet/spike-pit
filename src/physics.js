@@ -233,7 +233,7 @@ const Physics = {
     },
     
     // Returns 0..1 indicating the maximum fraction of the character footprint that lies over any single destroyed tile.
-    // Approximated via sampling points across the footprint rectangle.
+    // Computed via exact rectangle–tile intersection area (no sampling), so visuals match physics more closely.
     getFootprintHoleOverlapMax(character) {
         if (!Game?.getTileState) return 0;
         
@@ -244,41 +244,42 @@ const Physics = {
         const right = character.x + footprintWidth * 0.5;
         const front = character.y - footprintDepth * 0.5;
         const back = character.y + footprintDepth * 0.5;
-        
-        const samplesX = 5;
-        const samplesY = 3;
-        const counts = new Map(); // key "tx,ty" -> count
-        let totalInBounds = 0;
-        
-        for (let iy = 0; iy < samplesY; iy++) {
-            const fy = samplesY === 1 ? 0.5 : iy / (samplesY - 1);
-            const sy = front + (back - front) * fy;
-            for (let ix = 0; ix < samplesX; ix++) {
-                const fx = samplesX === 1 ? 0.5 : ix / (samplesX - 1);
-                const sx = left + (right - left) * fx;
-                
-                const tx = Math.floor(sx);
-                const ty = Math.floor(sy);
-                if (tx < 0 || tx >= this.COURT_WIDTH || ty < 0 || ty >= this.COURT_LENGTH) continue;
-                totalInBounds++;
-                const key = `${tx},${ty}`;
-                counts.set(key, (counts.get(key) ?? 0) + 1);
+
+        const footprintArea = Math.max(0.000001, (right - left) * (back - front));
+
+        // Only tiles overlapped by the footprint AABB can contribute.
+        const txMin = Math.max(0, Math.floor(left));
+        const txMax = Math.min(this.COURT_WIDTH - 1, Math.floor(right - 1e-6));
+        const tyMin = Math.max(0, Math.floor(front));
+        const tyMax = Math.min(this.COURT_LENGTH - 1, Math.floor(back - 1e-6));
+
+        let maxOverlap = 0;
+        for (let ty = tyMin; ty <= tyMax; ty++) {
+            const tileY0 = ty;
+            const tileY1 = ty + 1;
+            const iy0 = Math.max(front, tileY0);
+            const iy1 = Math.min(back, tileY1);
+            const ih = iy1 - iy0;
+            if (ih <= 0) continue;
+
+            for (let tx = txMin; tx <= txMax; tx++) {
+                const tile = Game.getTileState(tx, ty);
+                if (!tile || tile.indestructible || !tile.destroyed) continue;
+
+                const tileX0 = tx;
+                const tileX1 = tx + 1;
+                const ix0 = Math.max(left, tileX0);
+                const ix1 = Math.min(right, tileX1);
+                const iw = ix1 - ix0;
+                if (iw <= 0) continue;
+
+                const overlapArea = iw * ih;
+                const ratio = overlapArea / footprintArea;
+                if (ratio > maxOverlap) maxOverlap = ratio;
             }
         }
-        
-        if (totalInBounds === 0) return 0;
-        
-        let maxOverlap = 0;
-        for (const [key, count] of counts.entries()) {
-            const [txStr, tyStr] = key.split(',');
-            const tx = Number(txStr);
-            const ty = Number(tyStr);
-            const tile = Game.getTileState(tx, ty);
-            if (!tile || tile.indestructible || !tile.destroyed) continue;
-            const ratio = count / totalInBounds;
-            if (ratio > maxOverlap) maxOverlap = ratio;
-        }
-        return maxOverlap;
+
+        return Math.max(0, Math.min(1, maxOverlap));
     },
     
     // Determine which tile the ball "landed on" by sampling points around the ball's footprint circle.

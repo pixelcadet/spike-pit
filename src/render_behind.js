@@ -29,10 +29,11 @@ const RenderBehind = {
     netScreenFrac: 0.60,
     depthPowNear: 0.78, // <1 stretches near side vertically
     depthPowFar: 1.35,  // >1 squeezes far side vertically (overall)
-    // Far-side shaping: the opponent row closest to the net can look too thin if we
-    // apply a single >1 exponent. Boost the first far tile row (NET_X..NET_X+1) a bit.
-    farFirstTileFrac: 0.32, // fraction of far-half vertical span allocated to the first far tile row
-    farFirstTilePow: 0.80,  // <1 = expands near-net far row
+    // Far-side shaping: distribute vertical space across the 4 far rows explicitly so
+    // they remain visually distinct (prevents the last row collapsing into the far edge).
+    // Values are relative weights; they get normalized at runtime.
+    // Index 0 is the opponent row closest to the net (NET_X..NET_X+1).
+    farRowWeights: [1.00, 0.92, 0.86, 0.80],
     zPixels: 90,        // pixels per world z at near end
 
     init() {
@@ -66,19 +67,25 @@ const RenderBehind = {
         } else {
             // Map [netT..1] -> [netS..1]
             const u = (1 - netT) <= 0 ? 1 : ((t - netT) / (1 - netT)); // 0..1
-            // Boost the first far tile row (closest to net) so it doesn't get too thin.
             const farTiles = Math.max(1, (Physics.COURT_WIDTH - Physics.NET_X));
-            const u1 = 1 / farTiles; // corresponds to exactly one tile depth on the far side
-            const firstFrac = Math.max(0.10, Math.min(0.70, this.farFirstTileFrac));
-            let s;
-            if (u <= u1) {
-                const uu = u1 <= 0 ? 0 : (u / u1); // 0..1
-                s = firstFrac * Math.pow(uu, this.farFirstTilePow);
+
+            // Prefer explicit per-row weights when we have the expected number of rows.
+            if (Array.isArray(this.farRowWeights) && this.farRowWeights.length === farTiles) {
+                const weights = this.farRowWeights.map(v => Math.max(0.0001, Number(v) || 0.0001));
+                const total = weights.reduce((a, b) => a + b, 0);
+                const seg = 1 / farTiles;
+                const idx = Math.min(farTiles - 1, Math.max(0, Math.floor(u / seg)));
+                const localU = (u - idx * seg) / seg; // 0..1 within row
+                let cum = 0;
+                for (let i = 0; i < idx; i++) cum += weights[i];
+                const start = cum / total;
+                const span = weights[idx] / total;
+                const s = start + localU * span;
+                tp = netS + (1 - netS) * s;
             } else {
-                const uu = (1 - u1) <= 0 ? 1 : ((u - u1) / (1 - u1)); // 0..1
-                s = firstFrac + (1 - firstFrac) * Math.pow(uu, this.depthPowFar);
+                // Fallback: single exponent mapping.
+                tp = netS + (1 - netS) * Math.pow(u, this.depthPowFar);
             }
-            tp = netS + (1 - netS) * s;
         }
 
         const yScreen = this.lerp(this.bottomY, this.topY, tp);

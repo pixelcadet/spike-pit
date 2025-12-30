@@ -5,105 +5,223 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Spike Pit</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            font-family: 'Arial', sans-serif;
+            color: #fff;
+        }
+        
+        .intro-container {
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .title {
+            font-size: 64px;
+            font-weight: bold;
+            margin-bottom: 60px;
+            text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.5);
+            letter-spacing: 4px;
+        }
+        
+        .button-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            align-items: center;
+        }
+        
+        .intro-button {
+            padding: 18px 50px;
+            font-size: 24px;
+            font-weight: bold;
+            border: 3px solid #fff;
+            background: transparent;
+            color: #fff;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            min-width: 200px;
+        }
+        
+        .intro-button:hover {
+            background: #fff;
+            color: #1a1a2e;
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(255, 255, 255, 0.3);
+        }
+        
+        .intro-button:active {
+            transform: scale(0.98);
+        }
+        
+        .play-button {
+            border-color: #4a9eff;
+            color: #4a9eff;
+        }
+        
+        .play-button:hover {
+            background: #4a9eff;
+            color: #fff;
+        }
+        
+        .how-to-play-button {
+            border-color: #ff4a4a;
+            color: #ff4a4a;
+        }
+        
+        .how-to-play-button:hover {
+            background: #ff4a4a;
+            color: #fff;
+        }
+        
+        .how-to-play-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .how-to-play-modal.active {
+            display: flex;
+        }
+        
+        .modal-content {
+            background: #1a1a2e;
+            padding: 40px;
+            border-radius: 12px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            border: 2px solid #fff;
+            position: relative;
+        }
+        
+        .modal-close {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: transparent;
+            border: 2px solid #fff;
+            color: #fff;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 20px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+        }
+        
+        .modal-close:hover {
+            background: #fff;
+            color: #1a1a2e;
+        }
+        
+        .modal-content h2 {
+            margin-top: 0;
+            margin-bottom: 20px;
+            color: #4a9eff;
+        }
+        
+        .modal-content p {
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+        
+        .modal-content ul {
+            text-align: left;
+            line-height: 1.8;
+        }
+        
+        .modal-content li {
+            margin-bottom: 10px;
+        }
+    </style>
 </head>
 <body>
-    <div id="game-container">
-        <canvas id="game-canvas"></canvas>
-        <div id="ui-overlay">
-            <div id="score">
-                <div>
-                    <span id="player-score">0</span> - <span id="ai-score">0</span>
-                </div>
-            </div>
-            <div id="game-status"></div>
-        </div>
-        <div id="controls-menu" class="collapsed">
-            <h3 id="controls-toggle">Settings <span id="toggle-icon">▼</span></h3>
-            <div id="controls-content">
-                <div class="controls-column">
-                    <h4>Zones</h4>
-                    <div class="control-group">
-                        <label for="receive-zone">Receive Zone Size: <span id="receive-zone-value">2</span></label>
-                        <input type="range" id="receive-zone" min="1" max="10" value="2" step="1">
-                    </div>
-                    <div class="control-group">
-                        <label for="receive-zone-core">Receive Core Size: <span id="receive-zone-core-value">8</span></label>
-                        <input type="range" id="receive-zone-core" min="1" max="10" value="8" step="1">
-                    </div>
-                    <div class="control-group">
-                        <label for="spike-zone">Spike Zone Size: <span id="spike-zone-value">2</span></label>
-                        <input type="range" id="spike-zone" min="1" max="10" value="2" step="1">
-                    </div>
-                </div>
-                <div class="controls-column">
-                    <h4>Physics</h4>
-                    <div class="control-group">
-                        <label for="movement-speed">Movement Speed: <span id="movement-speed-value">7</span></label>
-                        <input type="range" id="movement-speed" min="1" max="10" value="7" step="1">
-                    </div>
-                    <div class="control-group">
-                        <label for="jump-power">Jump Power: <span id="jump-power-value">5</span></label>
-                        <input type="range" id="jump-power" min="1" max="10" value="5" step="1">
-                    </div>
-                    <div class="control-group">
-                        <label for="gravity">Gravity: <span id="gravity-value">5</span></label>
-                        <input type="range" id="gravity" min="1" max="10" value="5" step="1">
-                    </div>
-                    <div class="control-group">
-                        <label for="air-time">Air Time: <span id="air-time-value">5</span></label>
-                        <input type="range" id="air-time" min="1" max="10" value="5" step="1">
-                    </div>
-                    <div class="control-group">
-                        <label for="ball-speed">Ball Movement Speed: <span id="ball-speed-value">8</span></label>
-                        <input type="range" id="ball-speed" min="1" max="10" value="8" step="1">
-                    </div>
-                    <div class="control-group">
-                        <label for="serve-horizontal">Serve Horizontal Power: <span id="serve-horizontal-value">5</span></label>
-                        <input type="range" id="serve-horizontal" min="1" max="10" value="5" step="1">
-                    </div>
-                    <div class="control-group">
-                        <label for="serve-vertical">Serve Vertical Power: <span id="serve-vertical-value">5</span></label>
-                        <input type="range" id="serve-vertical" min="1" max="10" value="5" step="1">
-                    </div>
-                </div>
-                <div class="controls-column">
-                    <h4>Options</h4>
-                    <div class="control-group">
-                        <label for="ai-active">
-                            <input type="checkbox" id="ai-active" checked>
-                            AI Active (chase ball)
-                        </label>
-                    </div>
-                    <div class="control-group">
-                        <label for="free-play">
-                            <input type="checkbox" id="free-play">
-                            Free Play (no match end)
-                        </label>
-                    </div>
-                    <div class="control-group">
-                        <label for="show-receive-zone">
-                            <input type="checkbox" id="show-receive-zone" checked>
-                            Show Receive Zone
-                        </label>
-                    </div>
-                    <div class="control-group">
-                        <label for="show-hitboxes">
-                            <input type="checkbox" id="show-hitboxes">
-                            Debug: Show Hitboxes (heavy)
-                        </label>
-                    </div>
-                </div>
-            </div>
+    <div class="intro-container">
+        <h1 class="title">SPIKE PIT</h1>
+        <div class="button-container">
+            <a href="game.html" class="intro-button play-button">PLAY</a>
+            <button class="intro-button how-to-play-button" onclick="showHowToPlay()">HOW TO PLAY</button>
         </div>
     </div>
-
-    <script src="src/input.js"></script>
-    <script src="src/physics.js"></script>
-    <script src="src/ai.js"></script>
-    <script src="src/game.js"></script>
-    <script src="src/render.js"></script>
-    <script src="src/controls.js"></script>
-    <script src="src/main.js"></script>
+    
+    <div id="how-to-play-modal" class="how-to-play-modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="hideHowToPlay()">×</button>
+            <h2>How to Play</h2>
+            <p><strong>Objective:</strong> Score points by making the ball fall through holes on your opponent's side, or by reducing their HP to zero.</p>
+            
+            <h3>Controls:</h3>
+            <ul>
+                <li><strong>W/A/S/D</strong> - Move character</li>
+                <li><strong>I</strong> - Serve/Spike/Receive (hold to charge serve)</li>
+                <li><strong>I + W/S</strong> - Aim serve/spike direction</li>
+                <li><strong>A + I</strong> - Spike serve (targets first lane)</li>
+                <li><strong>P</strong> - Reset game</li>
+            </ul>
+            
+            <h3>Gameplay:</h3>
+            <ul>
+                <li>Each character starts with 10 HP</li>
+                <li>Falling off the court reduces HP by 3</li>
+                <li>You have 5 touches per side before taking damage</li>
+                <li>Destroy tiles to create holes for scoring</li>
+                <li>First to 11 points or reduce opponent HP to 0 wins</li>
+            </ul>
+            
+            <h3>Tips:</h3>
+            <ul>
+                <li>Use spike serves (A+I) to target specific lanes</li>
+                <li>Watch your touch count - exceeding it costs HP</li>
+                <li>Destroy tiles strategically to create scoring opportunities</li>
+                <li>Use the receive zone to automatically position for returns</li>
+            </ul>
+        </div>
+    </div>
+    
+    <script>
+        function showHowToPlay() {
+            document.getElementById('how-to-play-modal').classList.add('active');
+        }
+        
+        function hideHowToPlay() {
+            document.getElementById('how-to-play-modal').classList.remove('active');
+        }
+        
+        // Close modal when clicking outside
+        document.getElementById('how-to-play-modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                hideHowToPlay();
+            }
+        });
+        
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                hideHowToPlay();
+            }
+        });
+    </script>
 </body>
 </html>
-

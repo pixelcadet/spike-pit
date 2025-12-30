@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spike Pit</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        <div id="ui-overlay">
+            <div id="score">
+                <div>
+                    <span id="player-score">0</span> - <span id="ai-score">0</span>
+                </div>
+            </div>
+            <div id="game-status"></div>
+        </div>
+        <div id="controls-menu" class="collapsed">
+            <h3 id="controls-toggle">Settings <span id="toggle-icon">▼</span></h3>
+            <div id="controls-content">
+                <div class="controls-column">
+                    <h4>Zones</h4>
+                    <div class="control-group">
+                        <label for="receive-zone">Receive Zone Size: <span id="receive-zone-value">2</span></label>
+                        <input type="range" id="receive-zone" min="1" max="10" value="2" step="1">
+                    </div>
+                    <div class="control-group">
+                        <label for="receive-zone-core">Receive Core Size: <span id="receive-zone-core-value">8</span></label>
+                        <input type="range" id="receive-zone-core" min="1" max="10" value="8" step="1">
+                    </div>
+                    <div class="control-group">
+                        <label for="spike-zone">Spike Zone Size: <span id="spike-zone-value">2</span></label>
+                        <input type="range" id="spike-zone" min="1" max="10" value="2" step="1">
+                    </div>
+                </div>
+                <div class="controls-column">
+                    <h4>Physics</h4>
+                    <div class="control-group">
+                        <label for="movement-speed">Movement Speed: <span id="movement-speed-value">7</span></label>
+                        <input type="range" id="movement-speed" min="1" max="10" value="7" step="1">
+                    </div>
+                    <div class="control-group">
+                        <label for="jump-power">Jump Power: <span id="jump-power-value">5</span></label>
+                        <input type="range" id="jump-power" min="1" max="10" value="5" step="1">
+                    </div>
+                    <div class="control-group">
+                        <label for="gravity">Gravity: <span id="gravity-value">5</span></label>
+                        <input type="range" id="gravity" min="1" max="10" value="5" step="1">
+                    </div>
+                    <div class="control-group">
+                        <label for="air-time">Air Time: <span id="air-time-value">5</span></label>
+                        <input type="range" id="air-time" min="1" max="10" value="5" step="1">
+                    </div>
+                    <div class="control-group">
+                        <label for="ball-speed">Ball Movement Speed: <span id="ball-speed-value">8</span></label>
+                        <input type="range" id="ball-speed" min="1" max="10" value="8" step="1">
+                    </div>
+                    <div class="control-group">
+                        <label for="serve-horizontal">Serve Horizontal Power: <span id="serve-horizontal-value">5</span></label>
+                        <input type="range" id="serve-horizontal" min="1" max="10" value="5" step="1">
+                    </div>
+                    <div class="control-group">
+                        <label for="serve-vertical">Serve Vertical Power: <span id="serve-vertical-value">5</span></label>
+                        <input type="range" id="serve-vertical" min="1" max="10" value="5" step="1">
+                    </div>
+                </div>
+                <div class="controls-column">
+                    <h4>Options</h4>
+                    <div class="control-group">
+                        <label for="ai-active">
+                            <input type="checkbox" id="ai-active" checked>
+                            AI Active (chase ball)
+                        </label>
+                    </div>
+                    <div class="control-group">
+                        <label for="free-play">
+                            <input type="checkbox" id="free-play">
+                            Free Play (no match end)
+                        </label>
+                    </div>
+                    <div class="control-group">
+                        <label for="show-receive-zone">
+                            <input type="checkbox" id="show-receive-zone" checked>
+                            Show Receive Zone
+                        </label>
+                    </div>
+                    <div class="control-group">
+                        <label for="show-hitboxes">
+                            <input type="checkbox" id="show-hitboxes">
+                            Debug: Show Hitboxes (heavy)
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="src/input.js"></script>
+    <script src="src/physics.js"></script>
+    <script src="src/ai.js"></script>
+    <script src="src/game.js"></script>
+    <script src="src/render.js"></script>
+    <script src="src/controls.js"></script>
+    <script src="src/main.js"></script>
+</body>
+</html>
+

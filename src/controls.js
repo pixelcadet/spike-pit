@@ -166,12 +166,12 @@ const Controls = {
         }
         
         // Initialize with default values
-        this.updateMovementSpeed(5);
+        this.updateMovementSpeed(6);
         this.updateJumpPower(5);
         this.updateGravity(5);
         this.updateAirTime(5);
-        // Ball speed default: 5 (recalibrated so 5 is slower than before)
-        this.updateBallMovementSpeed(5);
+        // Ball speed default: 8 (recalibrated so 5 is slower than before)
+        this.updateBallMovementSpeed(8);
         // Defaults (on refresh): receive zone = 3, receive core = 8, spike zone = 2
         // NOTE: zone size is a shared physics radius, so it affects BOTH the player and the AI.
         this.updateReceiveZoneSize(3);

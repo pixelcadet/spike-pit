@@ -145,17 +145,7 @@ const Controls = {
             });
         }
 
-        // Show/hide zone rings (receive/spike)
-        const showZonesToggle = document.getElementById('show-zones');
-        if (showZonesToggle) {
-            showZonesToggle.addEventListener('change', (e) => {
-                if (typeof Render !== 'undefined') {
-                    Render.showZones = e.target.checked;
-                }
-            });
-        }
-
-        // Show/hide receive zone visualization (ground ring + debug sphere)
+        // Show/hide receive zone visualization (ellipsoid ring)
         const showReceiveZoneToggle = document.getElementById('show-receive-zone');
         if (showReceiveZoneToggle) {
             showReceiveZoneToggle.addEventListener('change', (e) => {
@@ -198,9 +188,6 @@ const Controls = {
         }
 
         // Defaults for debug overlays (Render is loaded before controls.js in index.html)
-        if (showZonesToggle && typeof Render !== 'undefined') {
-            Render.showZones = showZonesToggle.checked;
-        }
         if (showReceiveZoneToggle && typeof Render !== 'undefined') {
             Render.showReceiveZone = showReceiveZoneToggle.checked;
         }

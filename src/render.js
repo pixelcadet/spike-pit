@@ -11,8 +11,7 @@ const Render = {
     aiReceivingHighlight: false,
 
     // Visualization toggles (wired via UI in `src/controls.js`)
-    showZones: true,       // spike/receive rings
-    showReceiveZone: true, // receive zone only (ring + debug sphere)
+    showReceiveZone: true, // receive zone ellipsoid ring
     showHitboxes: false,   // heavy debug overlays (hitboxes/footprints/zone spheres)
     
     // Canvas dimensions
@@ -899,7 +898,7 @@ const Render = {
         
         // If heavy debug hitboxes are enabled, hide the ground rings to avoid visual "double zones".
         // The gameplay-accurate visualization is the 3D zone sphere shown in `drawHitboxes()`.
-        if (this.showZones && !this.showHitboxes) {
+        if (!this.showHitboxes) {
             // Draw receiving zone ground rings (only visible when character is above ground and on court)
             if (this.showReceiveZone) {
                 entitiesOnCourt.forEach(entity => {
@@ -927,7 +926,7 @@ const Render = {
         });
 
         // Draw HP arcs on the ground above shadows but below bodies.
-        // Always show (independent of showZones/showHitboxes).
+        // Always show (independent of showReceiveZone/showHitboxes).
         const pMaxHp = Game?.state?.maxPlayerHp ?? 10;
         const aMaxHp = Game?.state?.maxAiHp ?? 10;
         this.drawHpArcGround(Physics.player, '#4a9eff', Game?.state?.playerHp ?? pMaxHp, pMaxHp, true);

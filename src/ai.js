@@ -268,10 +268,16 @@ const AI = {
                     const dyE = dyReceive * invSquash;
                     const distEllipsoid = Math.sqrt(dxReceive * dxReceive + dyE * dyE + dzReceive * dzReceive);
                     const coreRadius = effectiveReceiveRadius * (Physics.RECEIVE_ZONE_CORE_MULT ?? 0.55);
-                    const inCore = distSphere <= coreRadius;
+                    // Add small hysteresis buffer to prevent flickering at core boundary (matches player logic)
+                    const coreRadiusWithBuffer = coreRadius * 1.1; // 10% buffer
+                    const inCore = distSphere <= coreRadiusWithBuffer;
                     const inOuter = distEllipsoid <= effectiveReceiveRadius;
                     
-                    if (inOuter || inCore) {
+                    // Calculate horizontal distance to check if we should activate receive
+                    const horizontalDist = Math.sqrt(dxReceive * dxReceive + dyReceive * dyReceive);
+                    const minDist = Physics.RECEIVE_MOVE_MIN_DIST ?? 0.15;
+                    
+                    if ((inOuter || inCore) && horizontalDist > minDist) {
                         this.state.shouldSpike = false;
                         this.state.shouldReceive = true;
                     } else {
@@ -296,10 +302,16 @@ const AI = {
                 const dyE = dy * invSquash;
                 const distEllipsoid = Math.sqrt(dx * dx + dyE * dyE + dz * dz);
                 const coreRadius = effectiveReceiveRadius * (Physics.RECEIVE_ZONE_CORE_MULT ?? 0.55);
-                const inCore = distSphere <= coreRadius;
+                // Add small hysteresis buffer to prevent flickering at core boundary (matches player logic)
+                const coreRadiusWithBuffer = coreRadius * 1.1; // 10% buffer
+                const inCore = distSphere <= coreRadiusWithBuffer;
                 const inOuter = distEllipsoid <= effectiveReceiveRadius;
                 
-                if (inOuter || inCore) {
+                // Calculate horizontal distance to check if we should activate receive
+                const horizontalDist = Math.sqrt(dx * dx + dy * dy);
+                const minDist = Physics.RECEIVE_MOVE_MIN_DIST ?? 0.15;
+                
+                if ((inOuter || inCore) && horizontalDist > minDist) {
                     this.state.shouldReceive = true;
                 } else {
                     this.state.shouldReceive = false;

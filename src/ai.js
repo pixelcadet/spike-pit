@@ -268,12 +268,11 @@ const AI = {
                     const dzReceive = ball.z - receiveZoneZ;
                     
                     // Two-part receive zone (matches physics):
-                    // - Outer ellipsoid: x radius = R, y radius = R*squash, z radius = R (squash Y for perspective, but keep Z full for vertical reach)
+                    // - Outer ellipsoid: x radius = R, y radius = R*squash, z radius = R
                     // - Inner core sphere: smaller "normal circle" centered on character
                     const distSphere = Math.sqrt(dxReceive * dxReceive + dyReceive * dyReceive + dzReceive * dzReceive);
                     const invSquash = 1 / (Physics.RECEIVE_ZONE_Y_SQUASH || 1);
                     const dyE = dyReceive * invSquash;
-                    // Don't squash Z-axis - keep full vertical reach so balls above head can be received
                     const distEllipsoid = Math.sqrt(dxReceive * dxReceive + dyE * dyE + dzReceive * dzReceive);
                     const coreRadius = effectiveReceiveRadius * (Physics.RECEIVE_ZONE_CORE_MULT ?? 0.55);
                     // Add small hysteresis buffer to prevent flickering at core boundary (matches player logic)
@@ -303,12 +302,11 @@ const AI = {
                 const dz = ball.z - receiveZoneZ;
                 
                 // Two-part receive zone (matches physics):
-                // - Outer ellipsoid: x radius = R, y radius = R*squash, z radius = R (squash Y for perspective, but keep Z full for vertical reach)
+                // - Outer ellipsoid: x radius = R, y radius = R*squash, z radius = R
                 // - Inner core sphere: smaller "normal circle" centered on character
                 const distSphere = Math.sqrt(dx * dx + dy * dy + dz * dz);
                 const invSquash = 1 / (Physics.RECEIVE_ZONE_Y_SQUASH || 1);
                 const dyE = dy * invSquash;
-                // Don't squash Z-axis - keep full vertical reach so balls above head can be received
                 const distEllipsoid = Math.sqrt(dx * dx + dyE * dyE + dz * dz);
                 const coreRadius = effectiveReceiveRadius * (Physics.RECEIVE_ZONE_CORE_MULT ?? 0.55);
                 // Add small hysteresis buffer to prevent flickering at core boundary (matches player logic)

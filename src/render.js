@@ -699,12 +699,11 @@ const Render = {
                     const dzReceive = ball.z - receiveZoneZ;
                     
                     // Two-part receive zone (matches physics):
-                    // - Outer ellipsoid: x radius = R, y radius = R*squash, z radius = R (squash Y for perspective, but keep Z full for vertical reach)
+                    // - Outer ellipsoid: x radius = R, y radius = R*squash, z radius = R
                     // - Inner core sphere: smaller "normal circle" centered on character
                     const distSphere = Math.sqrt(dxReceive * dxReceive + dyReceive * dyReceive + dzReceive * dzReceive);
                     const invSquash = 1 / (Physics.RECEIVE_ZONE_Y_SQUASH || 1);
                     const dyE = dyReceive * invSquash;
-                    // Don't squash Z-axis - keep full vertical reach so balls above head can be received
                     const distEllipsoid = Math.sqrt(dxReceive * dxReceive + dyE * dyE + dzReceive * dzReceive);
                     const coreRadius = effectiveReceiveRadius * (Physics.RECEIVE_ZONE_CORE_MULT ?? 0.55);
                     const inCore = distSphere <= coreRadius;
@@ -1521,48 +1520,84 @@ const Render = {
         ctx.setLineDash([]); // Reset to solid
     },
     
-    // Draw receiving zone (3D sphere at character's center mass)
+    // Draw receiving zone (3D ellipsoid at character's center mass)
     drawReceivingZone(character, color, highlight = false) {
         const ctx = this.ctx;
         const receiveZoneZ = character.z; // At character's center mass (ground level)
         // Match physics: effective zone radius includes the ball radius
         const receiveZoneRadius = Physics.RECEIVING_ZONE_RADIUS + Physics.ball.radius;
         const minSize = 6;
+        const squash = Physics.RECEIVE_ZONE_Y_SQUASH ?? 0.55;
+        const invSquash = 1 / squash; // Physics uses invSquash for y-axis
 
-        // Pseudo-perspective ellipse: keep X radius, squash Y radius.
+        // Draw 3D ellipsoid visualization: show multiple cross-sections at different heights
+        // Physics ellipsoid: x-radius = R, y-radius = R*invSquash, z-radius = R
         const centerProj = this.project(character.x, character.y, receiveZoneZ);
         const yOffsetPx = 24; // push the ring slightly down so it reads as projected onto the floor
-        const r = Math.max(receiveZoneRadius * this.courtTileSize * centerProj.scale, minSize);
-        const squash = Physics.RECEIVE_ZONE_Y_SQUASH ?? 0.55;
-        const rx = r;
-        const ry = Math.max(r * squash, minSize);
         
-        // Fill with transparent color if highlighted
-        if (highlight) {
-            ctx.fillStyle = this.colorWithAlpha(color, 0.3);
+        // Draw ellipsoid cross-sections at different Z heights to show 3D shape
+        const numSlices = this.showHitboxes ? 5 : 1; // More slices in debug mode
+        for (let i = 0; i < numSlices; i++) {
+            const zOffset = (i / (numSlices - 1 || 1)) * receiveZoneRadius * 2 - receiveZoneRadius; // -R to +R
+            const sliceZ = receiveZoneZ + zOffset;
+            const sliceProj = this.project(character.x, character.y, sliceZ);
+            
+            // Calculate ellipse radii for this Z slice
+            // At z=0 (center): full size. At z=±R (top/bottom): smaller (ellipsoid cross-section)
+            const zRatio = Math.abs(zOffset) / receiveZoneRadius;
+            const sliceScale = Math.sqrt(1 - zRatio * zRatio); // Ellipsoid cross-section formula
+            const r = Math.max(receiveZoneRadius * this.courtTileSize * sliceProj.scale * sliceScale, minSize);
+            
+            // Ellipsoid: x-radius = R, y-radius = R*squash, z-radius = R
+            // Physics uses: sqrt(dx^2 + (dy*invSquash)^2 + dz^2) where invSquash = 1/squash
+            // This means dyE = dy/squash, so y-radius = R*squash (squashed in Y)
+            const rx = r;
+            const ry = Math.max(r * squash, minSize);
+            
+            // Alpha decreases for slices further from center
+            const alpha = 0.3 + (1 - zRatio) * 0.4;
+            
+            // Fill with transparent color if highlighted
+            if (highlight && i === Math.floor(numSlices / 2)) {
+                ctx.fillStyle = this.colorWithAlpha(color, alpha * 0.5);
+                ctx.beginPath();
+                ctx.ellipse(sliceProj.x, sliceProj.y + yOffsetPx, rx, ry, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            ctx.strokeStyle = this.colorWithAlpha(color, alpha);
+            ctx.lineWidth = i === Math.floor(numSlices / 2) ? 2 : 1.5;
+            ctx.setLineDash([4, 4]);
             ctx.beginPath();
-            ctx.ellipse(centerProj.x, centerProj.y + yOffsetPx, rx, ry, 0, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.ellipse(sliceProj.x, sliceProj.y + yOffsetPx, rx, ry, 0, 0, Math.PI * 2);
+            ctx.stroke();
         }
-        
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.setLineDash([4, 4]); // Different dash pattern for receiving zone
-        ctx.beginPath();
-        ctx.ellipse(centerProj.x, centerProj.y + yOffsetPx, rx, ry, 0, 0, Math.PI * 2);
-        ctx.stroke();
 
-        // Debug-only: show the inner core "normal circle" so players can verify the core slider is working.
-        // Keep the default visualization clean (ellipsoid only).
+        // Debug-only: show the inner core sphere (true 3D sphere, not ellipsoid)
         if (this.showHitboxes) {
             const coreMult = Physics.RECEIVE_ZONE_CORE_MULT ?? 0.55;
-            const rCore = Math.max(r * coreMult, minSize);
-            ctx.setLineDash([2, 3]);
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            // Core is a true sphere/circle centered on the character (no squash, no y-offset).
-            ctx.arc(centerProj.x, centerProj.y, rCore, 0, Math.PI * 2);
-            ctx.stroke();
+            const coreRadius = receiveZoneRadius * coreMult;
+            
+            // Draw core sphere cross-sections at different Z heights
+            const numCoreSlices = 3;
+            for (let i = 0; i < numCoreSlices; i++) {
+                const zOffset = (i / (numCoreSlices - 1 || 1)) * coreRadius * 2 - coreRadius;
+                const sliceZ = receiveZoneZ + zOffset;
+                const sliceProj = this.project(character.x, character.y, sliceZ);
+                
+                const zRatio = Math.abs(zOffset) / coreRadius;
+                const sliceScale = Math.sqrt(1 - zRatio * zRatio);
+                const rCore = Math.max(coreRadius * this.courtTileSize * sliceProj.scale * sliceScale, minSize);
+                
+                const alpha = 0.4 + (1 - zRatio) * 0.3;
+                ctx.setLineDash([2, 3]);
+                ctx.lineWidth = 1.5;
+                ctx.strokeStyle = this.colorWithAlpha(color, alpha);
+                ctx.beginPath();
+                // Core is a true sphere (circular cross-section, no squash)
+                ctx.arc(sliceProj.x, sliceProj.y, rCore, 0, Math.PI * 2);
+                ctx.stroke();
+            }
         }
         ctx.setLineDash([]); // Reset to solid
     },

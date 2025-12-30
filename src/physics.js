@@ -841,23 +841,75 @@ const Physics = {
     updatePlayerTeammate(teammate, input, deltaTime = 1/60) {
         if (!teammate || !this.controlledCharacter) return;
         
+        // Prevent teammate from getting too close to controlled character (maintain separation)
+        const minSeparation = 0.8; // Minimum distance between characters
+        const dxToControlled = this.controlledCharacter.x - teammate.x;
+        const dyToControlled = this.controlledCharacter.y - teammate.y;
+        const distToControlled = Math.sqrt(dxToControlled * dxToControlled + dyToControlled * dyToControlled);
+        
         // Simple positioning: move toward ball if on player side, otherwise cover court
         const b = this.ball;
         const ballOnPlayerSide = b.x < this.NET_X;
         
+        let targetX = teammate.x;
+        let targetY = teammate.y;
+        
         if (ballOnPlayerSide && b.z > b.groundLevel) {
-            // Ball is on our side and in air - move toward it
-            const dx = b.x - teammate.x;
-            const dy = b.y - teammate.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist > 0.1) {
+            // Ball is on our side and in air - move toward it, but avoid controlled character
+            const dxToBall = b.x - teammate.x;
+            const dyToBall = b.y - teammate.y;
+            const distToBall = Math.sqrt(dxToBall * dxToBall + dyToBall * dyToBall);
+            
+            if (distToBall > 0.1) {
+                // Move toward ball, but push away from controlled character if too close
+                let moveX = (dxToBall / distToBall);
+                let moveY = (dyToBall / distToBall);
+                
+                // If too close to controlled character, add separation force
+                if (distToControlled < minSeparation && distToControlled > 0.01) {
+                    const separationForce = (minSeparation - distToControlled) / minSeparation;
+                    moveX -= (dxToControlled / distToControlled) * separationForce * 0.5;
+                    moveY -= (dyToControlled / distToControlled) * separationForce * 0.5;
+                    // Normalize
+                    const moveLen = Math.sqrt(moveX * moveX + moveY * moveY);
+                    if (moveLen > 0.01) {
+                        moveX /= moveLen;
+                        moveY /= moveLen;
+                    }
+                }
+                
                 const moveSpeed = teammate.speed * 0.8; // Slightly slower than controlled
-                teammate.vx = (dx / dist) * moveSpeed;
-                teammate.vy = (dy / dist) * moveSpeed;
+                teammate.vx = moveX * moveSpeed;
+                teammate.vy = moveY * moveSpeed;
+            } else {
+                teammate.vx = 0;
+                teammate.vy = 0;
             }
         } else {
-            // Cover court - position between net and back
-            const targetY = this.COURT_LENGTH * 0.5;
+            // Cover court - position away from controlled character
+            // If controlled is front, teammate goes back, and vice versa
+            const controlledY = this.controlledCharacter.y;
+            const teammateY = teammate.y;
+            
+            // Try to maintain opposite positions (one front, one back)
+            let targetY = controlledY < this.COURT_LENGTH * 0.5 
+                ? this.COURT_LENGTH * 0.75  // Controlled is front, teammate goes back
+                : this.COURT_LENGTH * 0.25; // Controlled is back, teammate goes front
+            
+            // But also avoid getting too close
+            if (distToControlled < minSeparation) {
+                // Push away from controlled character
+                if (Math.abs(dyToControlled) < 0.1) {
+                    // Same Y, push to opposite side
+                    targetY = controlledY < this.COURT_LENGTH * 0.5 
+                        ? this.COURT_LENGTH * 0.75
+                        : this.COURT_LENGTH * 0.25;
+                } else {
+                    // Already separated in Y, just maintain position
+                    targetY = teammateY;
+                }
+            }
+            
             const dy = targetY - teammate.y;
             if (Math.abs(dy) > 0.1) {
                 teammate.vy = Math.sign(dy) * teammate.speed * 0.6;

@@ -35,57 +35,46 @@ const Physics = {
     RECEIVE_POWER: 0.12,         // Power for receiving hit (weaker than spike, arching trajectory)
     RECEIVE_ARCH_HEIGHT: 0.4,    // Upward component for arching trajectory (higher arc)
     
-    // Player character
-    player: {
-        x: 1.0,          // Serve position: further from net (closer to left edge)
-        y: 2.0,           // Middle depth
-        z: 0,            // On ground
-        vx: 0,
-        vy: 0,
-        vz: 0,
-        speed: 0.15,
-        jumpPower: 0.3,
-        radius: 0.414,   // Size (20% bigger: 0.345 * 1.2)
-        onGround: true,
-        hasSpiked: false, // Spike cooldown flag (reset when landing)
-        hasReceived: false, // Receive cooldown flag (reset when landing)
-        justAttemptedAction: false, // Flag to prevent collision bounce when action was just attempted
-        isFalling: false, // Falling state
-        fallTimer: 0, // Timer for falling duration (1 second)
-        fallEdge: null, // Which edge they fell from ('A', 'B', or 'C')
-        fellFromHole: false, // True if the fall was triggered by a destroyed tile overlap (no grace slide)
-        isBlinking: false, // Blinking state after respawn
-        blinkTimer: 0, // Timer for blinking duration (1 second)
-        // Blink briefly when taking touch-limit damage (separate from respawn blink).
-        damageBlinkTimeLeft: 0,
-        damageBlinkDuration: 0
+    // Helper function to create a character object
+    createCharacter(x, y, speed, isPlayerTeam) {
+        return {
+            x: x,
+            y: y,
+            z: 0,
+            vx: 0,
+            vy: 0,
+            vz: 0,
+            speed: speed,
+            jumpPower: 0.3,
+            radius: 0.414,   // Size (20% bigger: 0.345 * 1.2)
+            onGround: true,
+            hasSpiked: false, // Spike cooldown flag (reset when landing)
+            hasReceived: false, // Receive cooldown flag (reset when landing)
+            justAttemptedAction: false, // Flag to prevent collision bounce when action was just attempted
+            isFalling: false, // Falling state
+            fallTimer: 0, // Timer for falling duration (1 second)
+            fallEdge: null, // Which edge they fell from ('A', 'B', or 'C')
+            fellFromHole: false, // True if the fall was triggered by a destroyed tile overlap (no grace slide)
+            isBlinking: false, // Blinking state after respawn
+            blinkTimer: 0, // Timer for blinking duration (1 second)
+            // Blink briefly when taking touch-limit damage (separate from respawn blink).
+            damageBlinkTimeLeft: 0,
+            damageBlinkDuration: 0,
+            isPlayerTeam: isPlayerTeam // true for player team, false for AI team
+        };
     },
     
-    // AI character
-    ai: {
-        x: 7.0,          // Serve position: further from net (closer to right edge)
-        y: 2.0,           // Middle depth
-        z: 0,
-        vx: 0,
-        vy: 0,
-        vz: 0,
-        speed: 0.12,
-        jumpPower: 0.3,
-        radius: 0.414,   // Size (20% bigger: 0.345 * 1.2)
-        onGround: true,
-        hasSpiked: false, // Spike cooldown flag (reset when landing)
-        hasReceived: false, // Receive cooldown flag (reset when landing)
-        justAttemptedAction: false, // Flag to prevent collision bounce when action was just attempted
-        isFalling: false, // Falling state
-        fallTimer: 0, // Timer for falling duration (1 second)
-        fallEdge: null, // Which edge they fell from ('A', 'B', or 'C')
-        fellFromHole: false, // True if the fall was triggered by a destroyed tile overlap (no grace slide)
-        isBlinking: false, // Blinking state after respawn
-        blinkTimer: 0, // Timer for blinking duration (1 second)
-        // Blink briefly when taking touch-limit damage (separate from respawn blink).
-        damageBlinkTimeLeft: 0,
-        damageBlinkDuration: 0
-    },
+    // Player team (left side) - 2 characters
+    playerTeam: [],
+    
+    // AI team (right side) - 2 characters
+    aiTeam: [],
+    
+    // Currently controlled character (player always controls one character from playerTeam)
+    controlledCharacter: null,
+    
+    // Auto-switch threshold to prevent flickering (minimum distance difference to switch)
+    AUTO_SWITCH_THRESHOLD: 0.3,
     
     // Ball
     ball: {
@@ -113,14 +102,71 @@ const Physics = {
     },
     
     init() {
-        // Initialize ball position above player
+        // Initialize teams
+        this.playerTeam = [
+            this.createCharacter(1.0, 1.5, 0.15, true),  // Player 1: left side, front
+            this.createCharacter(1.0, 2.5, 0.15, true)   // Player 2: left side, back
+        ];
+        this.aiTeam = [
+            this.createCharacter(7.0, 1.5, 0.12, false),  // AI 1: right side, front
+            this.createCharacter(7.0, 2.5, 0.12, false)   // AI 2: right side, back
+        ];
+        
+        // Set initial controlled character (closest to ball or first character)
+        this.controlledCharacter = this.playerTeam[0];
+        
+        // Initialize ball position above first player character
         this.resetBall();
     },
     
+    // Find which player team character is closest to the ball
+    findClosestPlayerToBall() {
+        const b = this.ball;
+        let closest = this.playerTeam[0];
+        let minDist = Infinity;
+        
+        for (const char of this.playerTeam) {
+            const dx = b.x - char.x;
+            const dy = b.y - char.y;
+            const dz = b.z - char.z;
+            const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            if (dist < minDist) {
+                minDist = dist;
+                closest = char;
+            }
+        }
+        
+        return closest;
+    },
+    
+    // Auto-switch controlled character if another is significantly closer to ball
+    updateControlledCharacter() {
+        const closest = this.findClosestPlayerToBall();
+        if (closest === this.controlledCharacter) return;
+        
+        // Only switch if the new character is significantly closer (prevent flickering)
+        const b = this.ball;
+        const currentDist = Math.sqrt(
+            Math.pow(b.x - this.controlledCharacter.x, 2) +
+            Math.pow(b.y - this.controlledCharacter.y, 2) +
+            Math.pow(b.z - this.controlledCharacter.z, 2)
+        );
+        const closestDist = Math.sqrt(
+            Math.pow(b.x - closest.x, 2) +
+            Math.pow(b.y - closest.y, 2) +
+            Math.pow(b.z - closest.z, 2)
+        );
+        
+        if (currentDist - closestDist > this.AUTO_SWITCH_THRESHOLD) {
+            this.controlledCharacter = closest;
+        }
+    },
+    
     resetBall() {
-        // Position ball above player character
-        this.ball.x = this.player.x;
-        this.ball.y = this.player.y;
+        // Position ball above controlled character (or first player if none controlled)
+        const targetChar = this.controlledCharacter || this.playerTeam[0];
+        this.ball.x = targetChar.x;
+        this.ball.y = targetChar.y;
         this.ball.z = 2.0; // Above character
         this.ball.vx = 0;
         this.ball.vy = 0;
@@ -175,44 +221,51 @@ const Physics = {
         }
     },
     
+    // Helper getters for backward compatibility (return controlled character for player, first AI for ai)
+    get player() {
+        return this.controlledCharacter || (this.playerTeam && this.playerTeam[0]) || null;
+    },
+    
+    get ai() {
+        return (this.aiTeam && this.aiTeam[0]) || null;
+    },
+    
+    // Reset all characters to initial positions
+    resetCharacter(char, x, y) {
+        char.x = x;
+        char.y = y;
+        char.z = 0;
+        char.vx = 0;
+        char.vy = 0;
+        char.vz = 0;
+        char.onGround = true;
+        char.hasSpiked = false;
+        char.hasReceived = false;
+        char.isFalling = false;
+        char.fallTimer = 0;
+        char.fallEdge = null;
+        char.fellFromHole = false;
+        char.isBlinking = false;
+        char.blinkTimer = 0;
+        char.damageBlinkTimeLeft = 0;
+        char.damageBlinkDuration = 0;
+    },
+    
     reset() {
-        // Reset player to serve position: further from net
-        this.player.x = 1.0; // Further from net (closer to left edge)
-        this.player.y = 2.0; // Middle depth
-        this.player.z = 0;
-        this.player.vx = 0;
-        this.player.vy = 0;
-        this.player.vz = 0;
-        this.player.onGround = true;
-        this.player.hasSpiked = false;
-        this.player.hasReceived = false;
-        this.player.isFalling = false;
-        this.player.fallTimer = 0;
-        this.player.fallEdge = null;
-        this.player.fellFromHole = false;
-        this.player.isBlinking = false;
-        this.player.blinkTimer = 0;
-        this.player.damageBlinkTimeLeft = 0;
-        this.player.damageBlinkDuration = 0;
+        // Reset player team
+        if (this.playerTeam && this.playerTeam.length >= 2) {
+            this.resetCharacter(this.playerTeam[0], 1.0, 1.5); // Front
+            this.resetCharacter(this.playerTeam[1], 1.0, 2.5); // Back
+        }
         
-        // Reset AI to serve position: further from net
-        this.ai.x = 7.0; // Further from net (closer to right edge)
-        this.ai.y = 2.0; // Middle depth
-        this.ai.z = 0;
-        this.ai.vx = 0;
-        this.ai.vy = 0;
-        this.ai.vz = 0;
-        this.ai.onGround = true;
-        this.ai.hasSpiked = false;
-        this.ai.hasReceived = false;
-        this.ai.isFalling = false;
-        this.ai.fallTimer = 0;
-        this.ai.fallEdge = null;
-        this.ai.fellFromHole = false;
-        this.ai.isBlinking = false;
-        this.ai.blinkTimer = 0;
-        this.ai.damageBlinkTimeLeft = 0;
-        this.ai.damageBlinkDuration = 0;
+        // Reset AI team
+        if (this.aiTeam && this.aiTeam.length >= 2) {
+            this.resetCharacter(this.aiTeam[0], 7.0, 1.5); // Front
+            this.resetCharacter(this.aiTeam[1], 7.0, 2.5); // Back
+        }
+        
+        // Set controlled character to first player
+        this.controlledCharacter = this.playerTeam[0];
         
         // Reset game state to starting state (scores, serving)
         Game.init();
@@ -238,7 +291,7 @@ const Physics = {
         let edgeB_Outside = 0; // Left side of screen (opposite from net)
         let edgeC_Outside = 0; // Bottom side of screen (front of court, y = 0)
         
-        if (character === this.player) {
+        if (character.isPlayerTeam) {
             // Player side: x from 0 to NET_X, y from 0 to COURT_LENGTH
             // EDGE A: Top side of screen (back of court, y = COURT_LENGTH) - threshold 70%
             const backOutside = Math.max(0, footprintBack - this.COURT_LENGTH);
@@ -530,7 +583,10 @@ const Physics = {
     },
     
     updatePlayer(input, deltaTime = 1/60) {
-        const p = this.player;
+        // Update controlled character switching
+        this.updateControlledCharacter();
+        const p = this.controlledCharacter;
+        if (!p) return;
         
         // SIMPLE FALLING/RESPAWN SYSTEM
         // Only trigger falling when character is actually falling (on ground and off court, or z < -2)
@@ -781,8 +837,66 @@ const Physics = {
         }
     },
     
-    updateAI(aiInput, deltaTime = 1/60) {
-        const ai = this.ai;
+    // Update player teammate (simple AI: positioning + toss to controlled player if receiving)
+    updatePlayerTeammate(teammate, input, deltaTime = 1/60) {
+        if (!teammate || !this.controlledCharacter) return;
+        
+        // Simple positioning: move toward ball if on player side, otherwise cover court
+        const b = this.ball;
+        const ballOnPlayerSide = b.x < this.NET_X;
+        
+        if (ballOnPlayerSide && b.z > b.groundLevel) {
+            // Ball is on our side and in air - move toward it
+            const dx = b.x - teammate.x;
+            const dy = b.y - teammate.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist > 0.1) {
+                const moveSpeed = teammate.speed * 0.8; // Slightly slower than controlled
+                teammate.vx = (dx / dist) * moveSpeed;
+                teammate.vy = (dy / dist) * moveSpeed;
+            }
+        } else {
+            // Cover court - position between net and back
+            const targetY = this.COURT_LENGTH * 0.5;
+            const dy = targetY - teammate.y;
+            if (Math.abs(dy) > 0.1) {
+                teammate.vy = Math.sign(dy) * teammate.speed * 0.6;
+            } else {
+                teammate.vy = 0;
+            }
+            teammate.vx = 0;
+        }
+        
+        // Apply gravity and update position (same as normal character)
+        if (!teammate.onGround) {
+            const absVz = Math.abs(teammate.vz);
+            if (absVz < this.peakVelocityThreshold) {
+                teammate.vz -= this.GRAVITY * this.peakHangMultiplier;
+            } else {
+                teammate.vz -= this.GRAVITY;
+            }
+        }
+        
+        teammate.x += teammate.vx;
+        teammate.y += teammate.vy;
+        teammate.z += teammate.vz;
+        
+        // Ground collision
+        if (teammate.z <= 0) {
+            if (this.isFootprintOnCourt(teammate) && !teammate.isFalling) {
+                teammate.z = 0;
+                teammate.vz = 0;
+                teammate.onGround = true;
+                teammate.hasSpiked = false;
+                teammate.hasReceived = false;
+            } else {
+                teammate.onGround = false;
+            }
+        }
+    },
+    
+    updateAI(ai, aiInput, deltaTime = 1/60) {
+        if (!ai) return;
         
         // SIMPLE FALLING/RESPAWN SYSTEM
         // Only trigger falling when character is actually falling (on ground and off court, or z < -2)
@@ -1071,7 +1185,7 @@ const Physics = {
         // Calculate spike zone center (at character's center mass, offset forward and upward)
         // Offset forward so character can't spike balls behind them
         let forwardOffset = this.SPIKE_ZONE_FORWARD_OFFSET;
-        if (character === this.ai) {
+        if (!character.isPlayerTeam) {
             // AI is on right side, forward is toward left (decreasing x)
             forwardOffset = -forwardOffset;
         }
@@ -1100,7 +1214,7 @@ const Physics = {
             // LOB: Arching trajectory (slow, high arc)
             // Determine target (opponent's side)
             let targetX, targetY;
-            if (character === this.player) {
+            if (character.isPlayerTeam) {
                 // Player hits toward AI side (right side, x > NET_X)
                 targetX = this.COURT_WIDTH * 0.75; // 75% across court (AI side)
                 // Allow aiming with buffered W/S input (doesn't require perfect simultaneous press)
@@ -1212,7 +1326,7 @@ const Physics = {
         character.justAttemptedAction = true; // Flag to prevent collision bounce this frame
         
         // Track who last touched the ball
-        b.lastTouchedBy = (character === this.player) ? 'player' : 'ai';
+        b.lastTouchedBy = character.isPlayerTeam ? 'player' : 'ai';
         b.hasScored = false; // Reset score flag on new touch
 
         // Touch counter decrement (action touch). Also prevents immediate body-collision decrement this frame.
@@ -1311,14 +1425,32 @@ const Physics = {
             b.tileDamageBounces = 0;
             b.fallingThroughHole = false;
             
-            // Only the player can aim tosses. AI toss aiming should not be affected by player key state.
-            const aim = (character === this.player) ? (Input.getAim2D?.() ?? { x: 0, y: 0 }) : { x: 0, y: 0 };
+            // Determine toss direction:
+            // - Controlled player: can aim with WASD
+            // - Player teammate: toss toward controlled player
+            // - AI: no aiming
+            let aim = { x: 0, y: 0 };
+            if (character === this.controlledCharacter) {
+                // Controlled player can aim
+                aim = Input.getAim2D?.() ?? { x: 0, y: 0 };
+            } else if (character.isPlayerTeam && this.controlledCharacter) {
+                // Teammate: toss toward controlled player
+                const dx = this.controlledCharacter.x - character.x;
+                const dy = this.controlledCharacter.y - character.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist > 0.1) {
+                    // Normalize and scale to reasonable toss distance
+                    aim.x = (dx / dist) * 0.5;
+                    aim.y = (dy / dist) * 0.5;
+                }
+            }
+            
             // Disallow "back toss" (away from the net) so ground receives stay simple and forward-oriented.
             // If a back component is present, cancel ALL aiming (including diagonal back aims) → straight up.
             // Player (left side): back = negative x (A). AI (right side): back = positive x.
             const rawAx = aim.x ?? 0;
             const rawAy = aim.y ?? 0;
-            const hasBackComponent = (character === this.player) ? (rawAx < -0.01) : (rawAx > 0.01);
+            const hasBackComponent = character.isPlayerTeam ? (rawAx < -0.01) : (rawAx > 0.01);
             
             let ax = rawAx;
             let ay = rawAy;
@@ -1327,7 +1459,7 @@ const Physics = {
                 ay = 0;
             } else {
                 // Still prevent tiny numerical back drift; allow only forward-or-neutral x.
-                if (character === this.player) {
+                if (character.isPlayerTeam) {
                     ax = Math.max(0, ax);
                 } else {
                     ax = Math.min(0, ax);
@@ -1354,7 +1486,7 @@ const Physics = {
                 
                 const distToEdgeC = footprintFront; // y=0
                 const distToEdgeA = this.COURT_LENGTH - footprintBack; // y=COURT_LENGTH
-                const distToEdgeB = (character === this.player)
+                const distToEdgeB = character.isPlayerTeam
                     ? footprintLeft // x=0 (player side outer edge)
                     : (this.COURT_WIDTH - footprintRight); // x=COURT_WIDTH (ai side outer edge)
                 
@@ -1454,7 +1586,7 @@ const Physics = {
         character.justAttemptedAction = true; // Flag to prevent collision bounce this frame
         
         // Track who last touched the ball
-        b.lastTouchedBy = (character === this.player) ? 'player' : 'ai';
+        b.lastTouchedBy = character.isPlayerTeam ? 'player' : 'ai';
         b.hasScored = false; // Reset score flag on new touch
 
         // Touch counter decrement (action touch).
@@ -1584,9 +1716,10 @@ const Physics = {
         const velocitiesBeforeCollisionCheck = { vx: b.vx, vy: b.vy, vz: b.vz };
         
         if (!b.justServed) {
-            const playerCollision = this.checkBallCharacterCollision(this.player);
-            const aiCollision = this.checkBallCharacterCollision(this.ai);
-            
+            // Check collisions with all characters
+            for (const char of this.getAllCharacters()) {
+                this.checkBallCharacterCollision(char);
+            }
         } else {
         }
         
@@ -1747,7 +1880,7 @@ const Physics = {
     // Called when character falls out of court OR falls into a destroyed tile (hole).
     // Both cases trigger the same falling/respawn flow, so blinking works for both.
     respawnCharacter(character) {
-        const side = (character === this.player) ? 'player' : 'ai';
+        const side = character.isPlayerTeam ? 'player' : 'ai';
         
         let preferredTx, preferredTy;
         if (character.fallEdge === 'A') {
@@ -1792,52 +1925,60 @@ const Physics = {
         character.blinkTimer = 0;
     },
     
+    // Get all characters (for collision detection, rendering, etc.)
+    getAllCharacters() {
+        return [...(this.playerTeam || []), ...(this.aiTeam || [])];
+    },
+    
     update(input, aiInput, deltaTime = 1/60) {
-        // Update fall timers with actual deltaTime
-        if (this.player.isFalling) {
-            this.player.fallTimer += deltaTime;
-        }
-        if (this.ai.isFalling) {
-            this.ai.fallTimer += deltaTime;
-        }
-        
-        // Update blink timers with actual deltaTime
-        if (this.player.isBlinking) {
-            this.player.blinkTimer += deltaTime;
-            if (this.player.blinkTimer >= 1.0) {
-                this.player.isBlinking = false;
-                this.player.blinkTimer = 0;
+        // Update fall/blink timers for all characters
+        for (const char of this.getAllCharacters()) {
+            if (char.isFalling) {
+                char.fallTimer += deltaTime;
             }
-        }
-        if (this.ai.isBlinking) {
-            this.ai.blinkTimer += deltaTime;
-            if (this.ai.blinkTimer >= 1.0) {
-                this.ai.isBlinking = false;
-                this.ai.blinkTimer = 0;
+            if (char.isBlinking) {
+                char.blinkTimer += deltaTime;
+                if (char.blinkTimer >= 1.0) {
+                    char.isBlinking = false;
+                    char.blinkTimer = 0;
+                }
             }
-        }
-
-        // Update damage blink timers (touch-limit HP penalty)
-        if ((this.player.damageBlinkTimeLeft ?? 0) > 0) {
-            this.player.damageBlinkTimeLeft = Math.max(0, (this.player.damageBlinkTimeLeft ?? 0) - deltaTime);
-            if (this.player.damageBlinkTimeLeft <= 0) {
-                this.player.damageBlinkDuration = 0;
-            }
-        }
-        if ((this.ai.damageBlinkTimeLeft ?? 0) > 0) {
-            this.ai.damageBlinkTimeLeft = Math.max(0, (this.ai.damageBlinkTimeLeft ?? 0) - deltaTime);
-            if (this.ai.damageBlinkTimeLeft <= 0) {
-                this.ai.damageBlinkDuration = 0;
+            if ((char.damageBlinkTimeLeft ?? 0) > 0) {
+                char.damageBlinkTimeLeft = Math.max(0, (char.damageBlinkTimeLeft ?? 0) - deltaTime);
+                if (char.damageBlinkTimeLeft <= 0) {
+                    char.damageBlinkDuration = 0;
+                }
             }
         }
         
+        // Update controlled player character
         this.updatePlayer(input, deltaTime);
-        this.updateAI(aiInput, deltaTime);
+        
+        // Update AI team (both AI opponents)
+        for (const ai of this.aiTeam || []) {
+            this.updateAI(ai, aiInput, deltaTime);
+        }
+        
+        // Update player teammate (non-controlled character) with simple AI
+        for (const teammate of this.playerTeam || []) {
+            if (teammate !== this.controlledCharacter) {
+                this.updatePlayerTeammate(teammate, input, deltaTime);
+            }
+        }
         
         // If serving, keep ball "held" by serving character
         // Do this AFTER character movement so ball follows character if they move
         if (Game.state.isServing) {
-            const servingChar = Game.state.servingPlayer === 'player' ? this.player : this.ai;
+            // Find serving character based on servingPlayer and serveIndex
+            let servingChar = null;
+            if (Game.state.servingPlayer === 'player') {
+                const serveIndex = Game.state.playerServeIndex ?? 0;
+                servingChar = (this.playerTeam && this.playerTeam[serveIndex]) || this.controlledCharacter || this.playerTeam[0];
+            } else {
+                const serveIndex = Game.state.aiServeIndex ?? 0;
+                servingChar = (this.aiTeam && this.aiTeam[serveIndex]) || this.aiTeam[0];
+            }
+            if (!servingChar) return;
             // Keep ball at character position (held)
             // Ball follows character's position, including z (for jump)
             this.ball.x = servingChar.x;
@@ -1855,12 +1996,13 @@ const Physics = {
             this.updateBall();
         }
 
-        // Reset action flags at end of frame.
+        // Reset action flags at end of frame for all characters.
         // IMPORTANT: Actions (spike/receive) are triggered in main.js BEFORE Physics.update().
         // We must keep justAttemptedAction=true through this update so collision bounce doesn't override the action,
         // then clear it after collisions/physics have run.
-        this.player.justAttemptedAction = false;
-        this.ai.justAttemptedAction = false;
+        for (const char of this.getAllCharacters()) {
+            char.justAttemptedAction = false;
+        }
     }
 };
 

@@ -469,72 +469,67 @@ const Render = {
         ctx.globalAlpha = 1.0;
     },
 
-    // Draw a semicircle HP bar on the ground at the character position.
+    // Draw an ellipsoid HP bar on the ground at the character position (matches receive zone shape).
     // Uses Game.state.playerHp/aiHp and max HP; purely visual.
     drawHpArcGround(character, color, hp, maxHp, drainFromRight = false) {
         const ctx = this.ctx;
         if (hp == null || maxHp == null || maxHp <= 0) return;
         if (character.z < 0) return; // don't draw while falling under floor
 
-        const proj = this.project(character.x, character.y, character.z);
         const groundProj = this.project(character.x, character.y, 0);
-        // Scale with perspective; keep minimum readable size.
-        const base = character.radius * this.courtTileSize * groundProj.scale;
-        const radius = Math.max(14, base * 1.35);
-        const lineWidth = Math.max(2.5, radius * 0.18);
-
         const ratio = Math.max(0, Math.min(1, hp / maxHp));
         
-        // Anchor the bar BELOW the sprite, at the same ground reference used by the shadow.
-        // This prevents it reading as "overhead" on the character.
-        const charSize = character.radius * this.courtTileSize * proj.scale;
-        const minSize = 8;
-        const finalSize = Math.max(charSize, minSize);
-        const rectHeight = finalSize * 1.5;
-        const scaleRatio = groundProj.scale / proj.scale;
-        const shadowY = groundProj.y + (rectHeight / 2) * scaleRatio;
+        // Match receive zone ellipse shape and position
+        const receiveZoneRadius = Physics.RECEIVING_ZONE_RADIUS + Physics.ball.radius;
+        const minSize = 6;
+        const r = Math.max(receiveZoneRadius * this.courtTileSize * groundProj.scale, minSize);
+        const squash = Physics.RECEIVE_ZONE_Y_SQUASH ?? 0.55;
+        const rx = r;
+        const ry = Math.max(r * squash, minSize);
         
+        // Position: same as receive zone (slightly down from character center)
+        const yOffsetPx = 24;
         const centerX = groundProj.x;
-        // Place the arc right under the character feet. For a "bottom" arc centered at 90° (down),
-        // the arc sits roughly at centerY + radius, so we offset centerY upward by ~radius.
-        const feetGap = Math.max(2, lineWidth * 0.6);
-        const extraDown = 16; // nudge down a few pixels so the arc doesn't overlap the sprite
-        const centerY = shadowY - radius + feetGap + extraDown;
+        const centerY = groundProj.y + yOffsetPx;
         
-        // Draw only a ~100° arc on the FRONT/BOTTOM side of the ring (vertical flip vs the back/top arc).
-        // 90° is "down" in canvas-angle space (with y-down coords), so center the arc there.
-        // Per-character asymmetry:
-        // - Player: shorten LEFT side (keep right long) to match "drain from right" feel.
-        // - AI: shorten RIGHT side (keep left long).
-        const arcCenter = Math.PI * 0.5; // 90°
-        const longSpan = (Math.PI / 180) * 50;
-        const shortSpan = (Math.PI / 180) * 35;
-        const leftSpan = drainFromRight ? shortSpan : longSpan;
-        const rightSpan = drainFromRight ? longSpan : shortSpan;
-        const startAngle = arcCenter - leftSpan;
-        const endAngle = arcCenter + rightSpan;
+        // Make HP bar slightly thicker than receive zone
+        const receiveZoneLineWidth = 1;
+        const lineWidth = receiveZoneLineWidth * 2.5; // 2.5x thicker
 
         ctx.save();
         ctx.lineWidth = lineWidth;
         ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
 
-        // Background track
+        // Background track (full ellipse outline)
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
         ctx.beginPath();
-        ctx.arc(centerX, centerY, radius, startAngle, endAngle, false);
+        ctx.ellipse(centerX, centerY, rx, ry, 0, 0, Math.PI * 2);
         ctx.stroke();
 
-        // Filled portion
+        // Filled portion (partial ellipse arc based on HP)
         if (ratio > 0) {
-            const span = (endAngle - startAngle);
-            // Default: fill grows leftward from the right end (startAngle).
-            // Player option: drain from the RIGHT means the LEFT stays filled as HP drops,
-            // so we anchor the fill at the left end (endAngle).
-            const filledStart = drainFromRight ? (endAngle - span * ratio) : startAngle;
-            const filledEnd = drainFromRight ? endAngle : (startAngle + span * ratio);
+            // Draw arc from 0° to (360° * ratio), starting from the right side
+            // For player (drainFromRight=true): fill drains from right, so start from left and fill clockwise
+            // For AI (drainFromRight=false): fill drains from left, so start from right and fill counter-clockwise
+            const totalAngle = Math.PI * 2;
+            let startAngle, endAngle;
+            
+            if (drainFromRight) {
+                // Player: left side stays filled, drain from right
+                // Start from left (180°) and fill clockwise
+                startAngle = Math.PI; // 180° (left)
+                endAngle = Math.PI + (totalAngle * ratio);
+            } else {
+                // AI: right side stays filled, drain from left
+                // Start from right (0°) and fill counter-clockwise
+                startAngle = 0; // 0° (right)
+                endAngle = -(totalAngle * ratio); // negative for counter-clockwise
+            }
+            
             ctx.strokeStyle = this.colorWithAlpha(color, 0.9);
             ctx.beginPath();
-            ctx.arc(centerX, centerY, radius, filledStart, filledEnd, false);
+            ctx.ellipse(centerX, centerY, rx, ry, 0, startAngle, endAngle);
             ctx.stroke();
         }
 

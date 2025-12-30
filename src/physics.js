@@ -841,6 +841,12 @@ const Physics = {
     updatePlayerTeammate(teammate, input, deltaTime = 1/60) {
         if (!teammate || !this.controlledCharacter) return;
         
+        // Determine teammate's "home" position based on which player they are
+        // Player 1 (index 0) = front, Player 2 (index 1) = back
+        const teammateIndex = this.playerTeam.indexOf(teammate);
+        const homeY = teammateIndex === 0 ? 1.0 : 3.0; // Fixed home position
+        const homeX = 1.0;
+        
         // Prevent teammate from getting too close to controlled character (maintain separation)
         const minSeparation = 1.2; // Minimum distance between characters (increased)
         const dxToControlled = this.controlledCharacter.x - teammate.x;
@@ -916,35 +922,44 @@ const Physics = {
                 teammate.vy = 0;
             }
         } else {
-            // Cover court - position away from controlled character
-            // If controlled is front, teammate goes back, and vice versa
-            const controlledY = this.controlledCharacter.y;
+            // Cover court - return to home position
+            // Use fixed home position to prevent bouncing
+            const dx = homeX - teammate.x;
+            const dy = homeY - teammate.y;
+            const distToHome = Math.sqrt(dx * dx + dy * dy);
             
-            // Try to maintain opposite positions (one front, one back)
-            // Use a stable target based on initial position to prevent bouncing
-            const teammateInitialY = teammate.y < this.COURT_LENGTH * 0.5 ? 1.0 : 3.0;
-            let targetY;
+            // Large dead zone to prevent micro-movements and bouncing
+            const deadZone = 0.5; // Don't move if within 0.5 units of home
             
-            // If controlled character is in front half, teammate should be in back half
-            if (controlledY < this.COURT_LENGTH * 0.5) {
-                targetY = 3.0; // Back position
+            if (distToHome > deadZone) {
+                // Smooth movement toward home, but also check if we're too close to controlled
+                let moveX = dx / distToHome;
+                let moveY = dy / distToHome;
+                
+                // If moving toward home would bring us too close to controlled, adjust
+                if (distToControlled < minSeparation * 1.5) {
+                    // Blend: 70% toward home, 30% away from controlled
+                    const pushAwayX = -(dxToControlled / distToControlled) * 0.3;
+                    const pushAwayY = -(dyToControlled / distToControlled) * 0.3;
+                    moveX = moveX * 0.7 + pushAwayX;
+                    moveY = moveY * 0.7 + pushAwayY;
+                    // Normalize
+                    const moveLen = Math.sqrt(moveX * moveX + moveY * moveY);
+                    if (moveLen > 0.01) {
+                        moveX /= moveLen;
+                        moveY /= moveLen;
+                    }
+                }
+                
+                // Speed scaling - slower as we approach home
+                const moveSpeed = teammate.speed * 0.4 * Math.min(1.0, distToHome / 1.5);
+                teammate.vx = moveX * moveSpeed;
+                teammate.vy = moveY * moveSpeed;
             } else {
-                targetY = 1.0; // Front position
-            }
-            
-            // Add dead zone to prevent micro-movements and bouncing
-            const dy = targetY - teammate.y;
-            const deadZone = 0.3; // Don't move if within 0.3 units of target
-            
-            if (Math.abs(dy) > deadZone) {
-                // Smooth movement with speed scaling based on distance
-                const moveSpeed = teammate.speed * 0.5 * Math.min(1.0, Math.abs(dy) / 1.0);
-                teammate.vy = Math.sign(dy) * moveSpeed;
-            } else {
-                // In dead zone - stop moving to prevent bouncing
+                // In dead zone - stop moving completely to prevent bouncing
+                teammate.vx = 0;
                 teammate.vy = 0;
             }
-            teammate.vx = 0;
         }
         
         // Apply gravity and update position (same as normal character)

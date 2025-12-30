@@ -1228,24 +1228,35 @@ const Render = {
     drawHitboxes() {
         if (!this.showHitboxes) return;
 
-        // Character hitboxes (3D spheres)
-        this.drawCharacterHitbox(Physics.player, '#4a9eff');
-        this.drawCharacterHitbox(Physics.ai, '#ff4a4a');
-
-        // Footprints (edge vs hole footprint sizes are drawn distinctly)
-        this.drawCharacterFootprint(Physics.player, '#00ff00');
-        this.drawCharacterFootprint(Physics.ai, '#00ff00');
+        // Character hitboxes (3D spheres) - all characters
+        const allChars = Physics.getAllCharacters ? Physics.getAllCharacters() : [];
+        for (const char of allChars) {
+            const color = char.isPlayerTeam ? '#4a9eff' : '#ff4a4a';
+            this.drawCharacterHitbox(char, color);
+            this.drawCharacterFootprint(char, '#00ff00');
+        }
 
         // Ball + net hitboxes
         this.drawBallHitbox();
         this.drawNetHitbox();
 
         // Zone spheres (use effective radius = zone + ball radius)
-        this.drawSpikeZone(Physics.player, '#4a9eff', this.playerSpikeHighlight);
-        this.drawSpikeZone(Physics.ai, '#ff4a4a', this.aiSpikeHighlight);
-        if (this.showReceiveZone) {
-            this.drawReceivingZone(Physics.player, '#4a9eff', this.playerReceivingHighlight);
-            this.drawReceivingZone(Physics.ai, '#ff4a4a', this.aiReceivingHighlight);
+        const controlledChar = Physics.controlledCharacter;
+        if (controlledChar) {
+            this.drawSpikeZone(controlledChar, '#4a9eff', this.playerSpikeHighlight);
+            if (this.showReceiveZone) {
+                this.drawReceivingZone(controlledChar, '#4a9eff', this.playerReceivingHighlight);
+            }
+        }
+        
+        // AI team zones
+        if (Physics.aiTeam) {
+            for (const ai of Physics.aiTeam) {
+                this.drawSpikeZone(ai, '#ff4a4a', this.aiSpikeHighlight);
+                if (this.showReceiveZone) {
+                    this.drawReceivingZone(ai, '#ff4a4a', this.aiReceivingHighlight);
+                }
+            }
         }
     },
     

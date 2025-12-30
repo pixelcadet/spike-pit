@@ -20,8 +20,8 @@ function gameLoop(currentTime) {
     const deltaTime = currentTime - lastTime;
     lastTime = currentTime;
     
-    // Check for reset (P key)
-    if (Input.isResetPressed()) {
+    // Check for reset (P key) - only allowed when match is over
+    if (Input.isResetPressed() && Game.state.matchOver) {
         Physics.reset();
     }
     

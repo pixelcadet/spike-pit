@@ -188,10 +188,53 @@
             margin-bottom: 8px;
             font-size: 14px;
         }
+        
+        .back-to-intro-button {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: transparent;
+            border: 2px solid #fff;
+            color: #fff;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 24px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            z-index: 1000;
+            font-weight: bold;
+            pointer-events: auto;
+        }
+        
+        .back-to-intro-button:hover {
+            background: #fff;
+            color: #1a1a1a;
+            transform: scale(1.1);
+        }
+        
+        .back-to-intro-button.hidden {
+            display: none;
+        }
+        
+        #reset-game-button:hover {
+            background: #ff4a4a;
+            color: #fff;
+            transform: scale(1.05);
+        }
+        
+        #reset-game-button:active {
+            transform: scale(0.98);
+        }
     </style>
 </head>
 <body>
     <div id="game-container">
+        <button id="back-to-intro-button" class="back-to-intro-button" onclick="showIntroModal()" title="Back to Menu">×</button>
         <canvas id="game-canvas"></canvas>
         <div id="ui-overlay">
             <div id="score">
@@ -276,6 +319,11 @@
                             Debug: Show Hitboxes (heavy)
                         </label>
                     </div>
+                    <div class="control-group">
+                        <button id="reset-game-button" style="padding: 10px 20px; font-size: 14px; font-weight: bold; border: 2px solid #ff4a4a; background: transparent; color: #ff4a4a; cursor: pointer; border-radius: 6px; transition: all 0.3s ease; width: 100%; font-family: 'Courier New', monospace;">
+                            Reset Game
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -338,6 +386,14 @@
     <script>
         function startGame() {
             document.getElementById('intro-modal').classList.add('hidden');
+            document.getElementById('back-to-intro-button').classList.remove('hidden');
+        }
+        
+        function showIntroModal() {
+            document.getElementById('intro-modal').classList.remove('hidden');
+            document.getElementById('back-to-intro-button').classList.add('hidden');
+            // Also hide how-to-play modal if it's open
+            document.getElementById('how-to-play-modal').classList.remove('active');
         }
         
         function showHowToPlay() {
@@ -368,6 +424,9 @@
                 }
             }
         });
+        
+        // Hide back button initially (when intro modal is showing)
+        document.getElementById('back-to-intro-button').classList.add('hidden');
     </script>
 </body>
 </html>

@@ -165,6 +165,14 @@ const Controls = {
             });
         }
         
+        // Set up reset game button
+        const resetGameButton = document.getElementById('reset-game-button');
+        if (resetGameButton) {
+            resetGameButton.addEventListener('click', () => {
+                Physics.reset();
+            });
+        }
+        
         // Initialize with default values
         this.updateMovementSpeed(7);
         this.updateJumpPower(5);

@@ -686,14 +686,24 @@ const Render = {
                     this.playerSpikeHighlight = true;
                     this.playerReceivingHighlight = false;
                 } else {
-                    // Check receiving zone
+                    // Check receiving zone (using ellipsoid + core logic to match physics)
                     const receiveZoneZ = Physics.player.z;
                     const dxReceive = ball.x - Physics.player.x;
                     const dyReceive = ball.y - Physics.player.y;
                     const dzReceive = ball.z - receiveZoneZ;
-                    const distToReceiveZone = Math.sqrt(dxReceive * dxReceive + dyReceive * dyReceive + dzReceive * dzReceive);
                     
-                    if (distToReceiveZone < effectiveReceiveRadius) {
+                    // Two-part receive zone (matches physics):
+                    // - Outer ellipsoid: x radius = R, y radius = R*squash, z radius = R
+                    // - Inner core sphere: smaller "normal circle" centered on character
+                    const distSphere = Math.sqrt(dxReceive * dxReceive + dyReceive * dyReceive + dzReceive * dzReceive);
+                    const invSquash = 1 / (Physics.RECEIVE_ZONE_Y_SQUASH || 1);
+                    const dyE = dyReceive * invSquash;
+                    const distEllipsoid = Math.sqrt(dxReceive * dxReceive + dyE * dyE + dzReceive * dzReceive);
+                    const coreRadius = effectiveReceiveRadius * (Physics.RECEIVE_ZONE_CORE_MULT ?? 0.55);
+                    const inCore = distSphere <= coreRadius;
+                    const inOuter = distEllipsoid <= effectiveReceiveRadius;
+                    
+                    if (inOuter || inCore) {
                         this.playerSpikeHighlight = false;
                         this.playerReceivingHighlight = true;
                     } else {

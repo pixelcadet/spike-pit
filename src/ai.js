@@ -254,14 +254,24 @@ const AI = {
                         this.state.spikeCooldown = 0.6; // small cooldown between spikes
                     }
                 } else {
-                    // Check receiving zone if not in spike zone
+                    // Check receiving zone if not in spike zone (using ellipsoid + core logic)
                     const receiveZoneZ = ai.z;
                     const dxReceive = ball.x - ai.x;
                     const dyReceive = ball.y - ai.y;
                     const dzReceive = ball.z - receiveZoneZ;
-                    const distToReceiveZone = Math.sqrt(dxReceive * dxReceive + dyReceive * dyReceive + dzReceive * dzReceive);
                     
-                    if (distToReceiveZone < effectiveReceiveRadius) {
+                    // Two-part receive zone (matches physics):
+                    // - Outer ellipsoid: x radius = R, y radius = R*squash, z radius = R
+                    // - Inner core sphere: smaller "normal circle" centered on character
+                    const distSphere = Math.sqrt(dxReceive * dxReceive + dyReceive * dyReceive + dzReceive * dzReceive);
+                    const invSquash = 1 / (Physics.RECEIVE_ZONE_Y_SQUASH || 1);
+                    const dyE = dyReceive * invSquash;
+                    const distEllipsoid = Math.sqrt(dxReceive * dxReceive + dyE * dyE + dzReceive * dzReceive);
+                    const coreRadius = effectiveReceiveRadius * (Physics.RECEIVE_ZONE_CORE_MULT ?? 0.55);
+                    const inCore = distSphere <= coreRadius;
+                    const inOuter = distEllipsoid <= effectiveReceiveRadius;
+                    
+                    if (inOuter || inCore) {
                         this.state.shouldSpike = false;
                         this.state.shouldReceive = true;
                     } else {
@@ -270,16 +280,26 @@ const AI = {
                     }
                 }
             } else if (ai.onGround && !ai.hasReceived) {
-                // On ground: check receiving zone
+                // On ground: check receiving zone (using ellipsoid + core logic)
                 const receiveZoneX = ai.x;
                 const receiveZoneY = ai.y;
                 const receiveZoneZ = ai.z;
                 const dx = ball.x - receiveZoneX;
                 const dy = ball.y - receiveZoneY;
                 const dz = ball.z - receiveZoneZ;
-                const distToReceiveZone = Math.sqrt(dx * dx + dy * dy + dz * dz);
                 
-                if (distToReceiveZone < effectiveReceiveRadius) {
+                // Two-part receive zone (matches physics):
+                // - Outer ellipsoid: x radius = R, y radius = R*squash, z radius = R
+                // - Inner core sphere: smaller "normal circle" centered on character
+                const distSphere = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                const invSquash = 1 / (Physics.RECEIVE_ZONE_Y_SQUASH || 1);
+                const dyE = dy * invSquash;
+                const distEllipsoid = Math.sqrt(dx * dx + dyE * dyE + dz * dz);
+                const coreRadius = effectiveReceiveRadius * (Physics.RECEIVE_ZONE_CORE_MULT ?? 0.55);
+                const inCore = distSphere <= coreRadius;
+                const inOuter = distEllipsoid <= effectiveReceiveRadius;
+                
+                if (inOuter || inCore) {
                     this.state.shouldReceive = true;
                 } else {
                     this.state.shouldReceive = false;

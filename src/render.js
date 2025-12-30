@@ -1517,9 +1517,13 @@ const Render = {
         const centerProj = this.project(character.x, character.y, receiveZoneZ);
         const yOffsetPx = 24; // push the ring slightly down so it reads as projected onto the floor
         const r = Math.max(receiveZoneRadius * this.courtTileSize * centerProj.scale, minSize);
-        const squash = 0.55;
+        const squash = Physics.RECEIVE_ZONE_Y_SQUASH ?? 0.55;
         const rx = r;
         const ry = Math.max(r * squash, minSize);
+        
+        // Inner core: smaller "normal circle" centered on character (no squash, no y-offset).
+        const coreMult = Physics.RECEIVE_ZONE_CORE_MULT ?? 0.55;
+        const rCore = Math.max(r * coreMult, minSize);
         
         // Fill with transparent color if highlighted
         if (highlight) {
@@ -1534,6 +1538,13 @@ const Render = {
         ctx.setLineDash([4, 4]); // Different dash pattern for receiving zone
         ctx.beginPath();
         ctx.ellipse(centerProj.x, centerProj.y + yOffsetPx, rx, ry, 0, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Core ring (small normal circle)
+        ctx.setLineDash([2, 3]);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(centerProj.x, centerProj.y, rCore, 0, Math.PI * 2);
         ctx.stroke();
         ctx.setLineDash([]); // Reset to solid
     },
@@ -1551,15 +1562,26 @@ const Render = {
         const groundProj = this.project(character.x, character.y, 0);
         const yOffsetPx = 24; // push the ring slightly down so it reads as projected onto the floor
         const r = Math.max(receiveZoneRadius * this.courtTileSize * groundProj.scale, minSize);
-        const squash = 0.55;
+        const squash = Physics.RECEIVE_ZONE_Y_SQUASH ?? 0.55;
         const rx = r;
         const ry = Math.max(r * squash, minSize);
+        
+        // Inner core: smaller "normal circle" centered on character (no squash, no y-offset).
+        const coreMult = Physics.RECEIVE_ZONE_CORE_MULT ?? 0.55;
+        const rCore = Math.max(r * coreMult, minSize);
         
         // Draw ring on ground (visual cue, keep subtle + distinct from debug)
         ctx.strokeStyle = this.colorWithAlpha(color, 0.55);
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.ellipse(groundProj.x, groundProj.y + yOffsetPx, rx, ry, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        
+        // Core ring (small normal circle)
+        ctx.setLineDash([2, 3]);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(groundProj.x, groundProj.y, rCore, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
     },

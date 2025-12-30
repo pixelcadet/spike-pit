@@ -24,6 +24,12 @@ const Physics = {
     
     // Receiving zone parameters
     RECEIVING_ZONE_RADIUS: 1.2,  // Radius of receiving zone (bigger than spike zone)
+    // Pseudo-perspective shaping (to match the squashed-ellipse visualization):
+    // Outer receive zone is treated like an ellipsoid in world space: x radius = R, y radius = R * squash, z radius = R.
+    RECEIVE_ZONE_Y_SQUASH: 0.55,
+    // Inner "core" zone is a smaller true sphere (normal circle) centered on the character.
+    // Used as the "centered" region (no auto-correct / more precise).
+    RECEIVE_ZONE_CORE_MULT: 0.55,
     RECEIVE_MOVE_SPEED: 0.25,    // Speed boost when moving toward ball to receive
     RECEIVE_POWER: 0.12,         // Power for receiving hit (weaker than spike, arching trajectory)
     RECEIVE_ARCH_HEIGHT: 0.4,    // Upward component for arching trajectory (higher arc)
@@ -613,16 +619,23 @@ const Physics = {
             const dx = b.x - receiveZoneX;
             const dy = b.y - receiveZoneY;
             const dz = b.z - receiveZoneZ;
-            const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
             const effectiveRadius = this.RECEIVING_ZONE_RADIUS + b.radius;
             
-            if (dist <= effectiveRadius && b.z > b.groundLevel) {
-                // Ball is in receiving zone and mid-air
-                const horizontalDist = Math.sqrt(dx * dx + dy * dy);
-                const centerThreshold = this.RECEIVING_ZONE_RADIUS * 0.3;
+            if (b.z > b.groundLevel) {
+                // Two-part receive zone:
+                // - Outer ellipsoid (matches squashed ellipse visualization)
+                // - Inner core sphere (smaller "normal circle" centered on character)
+                const distSphere = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                const invSquash = 1 / (this.RECEIVE_ZONE_Y_SQUASH || 1);
+                const dyE = dy * invSquash;
+                const distEllipsoid = Math.sqrt(dx * dx + dyE * dyE + dz * dz);
                 
-                // If not close to center, we're in receiving mode (automatic movement active)
-                if (horizontalDist > centerThreshold) {
+                const coreRadius = effectiveRadius * (this.RECEIVE_ZONE_CORE_MULT ?? 0.55);
+                const inCore = distSphere <= coreRadius;
+                const inOuter = distEllipsoid <= effectiveRadius;
+                
+                // If ball is in the receive zone but NOT in the core, we're in receiving mode (auto movement).
+                if ((inOuter || inCore) && !inCore) {
                     isReceiving = true;
                 }
             }
@@ -1231,23 +1244,33 @@ const Physics = {
         const dx = b.x - receiveZoneX;
         const dy = b.y - receiveZoneY;
         const dz = b.z - receiveZoneZ;
-        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
         const effectiveRadius = this.RECEIVING_ZONE_RADIUS + b.radius;
+
+        // Two-part receive zone (matches visualization intent):
+        // - Outer ellipsoid: x radius = R, y radius = R*squash, z radius = R
+        // - Inner core sphere: smaller "normal circle" centered on character
+        const distSphere = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const invSquash = 1 / (this.RECEIVE_ZONE_Y_SQUASH || 1);
+        const dyE = dy * invSquash;
+        const distEllipsoid = Math.sqrt(dx * dx + dyE * dyE + dz * dz);
+        const coreRadius = effectiveRadius * (this.RECEIVE_ZONE_CORE_MULT ?? 0.55);
+        const inCore = distSphere <= coreRadius;
+        const inOuter = distEllipsoid <= effectiveRadius;
         
-        if (dist > effectiveRadius) {
+        if (!inOuter && !inCore) {
             return false; // Ball not in receiving zone
         }
         
         // Calculate distance from ball to center of receiving zone (horizontal)
         const horizontalDist = Math.sqrt(dx * dx + dy * dy);
-        const centerThreshold = this.RECEIVING_ZONE_RADIUS * 0.3; // 30% of zone radius from center
         
         // If ball is not close enough to center, move character toward ball first
         // BUT only if character is on the ground (no automatic chasing mid-air)
-        if (horizontalDist > centerThreshold && character.onGround) {
+        if (!inCore && character.onGround) {
             // Move character toward ball to get it closer to center
-            const moveDirX = dx / horizontalDist;
-            const moveDirY = dy / horizontalDist;
+            const invH = 1 / Math.max(1e-6, horizontalDist);
+            const moveDirX = dx * invH;
+            const moveDirY = dy * invH;
             
             // Apply movement boost toward ball
             character.vx = moveDirX * this.RECEIVE_MOVE_SPEED;
@@ -1259,7 +1282,7 @@ const Physics = {
         }
         
         // If mid-air and ball not centered, don't attempt receive (need to be more precise mid-air)
-        if (!character.onGround && horizontalDist > centerThreshold) {
+        if (!character.onGround && !inCore) {
             return false; // Can't receive if ball not centered and mid-air
         }
         

@@ -763,7 +763,7 @@ const Render = {
         // Separate entities into those behind the court (off EDGE A or EDGE B) and those on/in front of the court
         // Build entities array from all characters (playerTeam + aiTeam)
         const entities = [];
-        const controlledChar = Physics.controlledCharacter;
+        const controlledChar = Physics.controlledCharacter; // Declare once at top of render()
         
         // Add player team characters
         if (Physics.playerTeam) {
@@ -963,7 +963,7 @@ const Render = {
         // Always show (independent of showReceiveZone/showHitboxes).
         const pMaxHp = Game?.state?.maxPlayerHp ?? 10;
         const aMaxHp = Game?.state?.maxAiHp ?? 10;
-        const controlledChar = Physics.controlledCharacter;
+        // controlledChar already declared at top of render()
         
         // Draw HP for all characters with opacity for non-controlled
         if (Physics.playerTeam) {

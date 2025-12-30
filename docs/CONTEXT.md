@@ -330,6 +330,31 @@ The MVP must remain minimal and shippable.
 **Debug tooling (temporary):**
 - `Physics.DEBUG_LOGS` can print collision / dt diagnostics to the browser console for tuning and validation. Keep it off for shipping.
 
+### Future note: Online multiplayer considerations
+If Spike Pit is ever expanded into **online multiplayer**, the current hybrid approach (time-scaled integration + sub-stepping) is great for single-player feel but is **not sufficient on its own** for multiplayer determinism.
+
+**Minimum requirements to revisit:**
+- **Simulation model**:
+  - Prefer **server-authoritative** simulation for simplicity and cheat resistance, or
+  - Use **rollback netcode** (client prediction + reconciliation) if you want a snappy feel under latency.
+- **Determinism**:
+  - Run physics on a **fixed timestep** (e.g. 60Hz) everywhere.
+  - Remove or strictly control sources of nondeterminism (randomness, timer ordering, floating-point drift).
+  - Centralize/seed RNG (or keep RNG server-side only).
+- **State synchronization**:
+  - Decide what is input-synced vs state-synced (e.g., send inputs each tick; server sends periodic authoritative snapshots).
+  - Add reconciliation for divergence (especially for ball collisions, which are highly sensitive to tiny numeric differences).
+- **Collision stability**:
+  - Keep sub-stepping (or CCD if needed), but make it deterministic (same number of substeps per tick).
+- **Architecture changes**:
+  - Separate “simulation step” from rendering and UI.
+  - Ensure all gameplay outcomes derive from simulation state + inputs only (no render-dependent logic).
+
+**What we have today (Option A):**
+- Good cross-refresh-rate consistency for local play.
+- Sub-stepping reduces missed collisions during frame hitches.
+- Still uses floating-point + hybrid scaling, so different machines can diverge over long runs—fine for itch.io, risky for multiplayer.
+
 ### Canvas artifacts across monitors / DPI scaling
 **Observed behavior:** “Ghost” dashed lines / ring artifacts can appear on one monitor but disappear when moving the tab to another.
 

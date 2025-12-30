@@ -31,8 +31,6 @@ const Game = {
         aiServeTimer: 0,
         isServing: true, // Game starts with serving state
         servingPlayer: 'player', // Who is currently serving ('player' or 'ai')
-        playerServeIndex: 0, // Which player character is serving (0 or 1)
-        aiServeIndex: 0, // Which AI character is serving (0 or 1)
         serveMovementLock: 0, // Timer to lock movement briefly after serving (prevents W/S from moving character)
         isChargingServe: false, // True when I key is held down during serving
         serveChargeTimer: 0, // How long I has been held (0.0 to maxChargeTime)
@@ -101,8 +99,6 @@ const Game = {
         this.state.aiServeTimer = 0;
         this.state.isServing = true;
         this.state.servingPlayer = 'player';
-        this.state.playerServeIndex = 0;
-        this.state.aiServeIndex = 0;
         this.state.serveMovementLock = 0;
         this.state.isChargingServe = false;
         this.state.serveChargeTimer = 0;
@@ -399,8 +395,7 @@ const Game = {
         
         // Check for spike serve at jump peak
         if (this.state.spikeServePending && this.state.servingPlayer === 'player') {
-            const serveIndex = this.state.playerServeIndex ?? 0;
-            const servingChar = (Physics.playerTeam && Physics.playerTeam[serveIndex]) || Physics.controlledCharacter || Physics.playerTeam[0];
+            const servingChar = Physics.player;
             // Check if character is at jump peak (vz is near 0 or negative, and not on ground)
             // Peak is when upward velocity becomes zero or negative
             if (!servingChar.onGround && servingChar.vz <= 0.01) {
@@ -456,53 +451,40 @@ const Game = {
     
     resetAfterScore() {
         if (this.state.matchOver) return;
-        // Reset all character positions
-        // Player team - use fixed positions to ensure they're always different
-        if (Physics.playerTeam && Physics.playerTeam.length >= 2) {
-            // Try to find intact tiles, but ensure different positions
-            const p1Preferred = this.findNearestIntactTileCenter(1, 1, 'player');
-            let p2Preferred = this.findNearestIntactTileCenter(1, 3, 'player');
-            
-            // If both found the same position, offset the second one
-            if (Math.abs(p1Preferred.x - p2Preferred.x) < 0.1 && Math.abs(p1Preferred.y - p2Preferred.y) < 0.1) {
-                // They're at the same spot, force different position
-                p2Preferred = this.findNearestIntactTileCenter(1, 2, 'player');
-                // If still same, use fixed offset
-                if (Math.abs(p1Preferred.x - p2Preferred.x) < 0.1 && Math.abs(p1Preferred.y - p2Preferred.y) < 0.1) {
-                    p2Preferred = { x: p1Preferred.x, y: p1Preferred.y + 1.0 };
-                }
-            }
-            
-            Physics.resetCharacter(Physics.playerTeam[0], p1Preferred.x, p1Preferred.y);
-            Physics.resetCharacter(Physics.playerTeam[1], p2Preferred.x, p2Preferred.y);
-        }
+        // Reset character positions - serve position: further from net
+        const pSpawn = this.findNearestIntactTileCenter(1, 2, 'player');
+        Physics.player.x = pSpawn.x;
+        Physics.player.y = pSpawn.y;
+        Physics.player.z = 0;
+        Physics.player.vx = 0;
+        Physics.player.vy = 0;
+        Physics.player.vz = 0;
+        Physics.player.onGround = true;
+        Physics.player.hasSpiked = false;
+        Physics.player.hasReceived = false;
+        // CRITICAL: scoring reset must override falling/respawn mechanics
+        Physics.player.isFalling = false;
+        Physics.player.fallTimer = 0;
+        Physics.player.fallEdge = null;
+        Physics.player.isBlinking = false;
+        Physics.player.blinkTimer = 0;
         
-        // AI team - use fixed positions to ensure they're always different
-        if (Physics.aiTeam && Physics.aiTeam.length >= 2) {
-            const a1Preferred = this.findNearestIntactTileCenter(7, 1, 'ai');
-            let a2Preferred = this.findNearestIntactTileCenter(7, 3, 'ai');
-            
-            // If both found the same position, offset the second one
-            if (Math.abs(a1Preferred.x - a2Preferred.x) < 0.1 && Math.abs(a1Preferred.y - a2Preferred.y) < 0.1) {
-                // They're at the same spot, force different position
-                a2Preferred = this.findNearestIntactTileCenter(7, 2, 'ai');
-                // If still same, use fixed offset
-                if (Math.abs(a1Preferred.x - a2Preferred.x) < 0.1 && Math.abs(a1Preferred.y - a2Preferred.y) < 0.1) {
-                    a2Preferred = { x: a1Preferred.x, y: a1Preferred.y + 1.0 };
-                }
-            }
-            
-            Physics.resetCharacter(Physics.aiTeam[0], a1Preferred.x, a1Preferred.y);
-            Physics.resetCharacter(Physics.aiTeam[1], a2Preferred.x, a2Preferred.y);
-        }
-        
-        // Set controlled character to serving character
-        if (this.state.servingPlayer === 'player' && Physics.playerTeam) {
-            const serveIndex = this.state.playerServeIndex ?? 0;
-            Physics.controlledCharacter = Physics.playerTeam[serveIndex];
-        } else {
-            Physics.controlledCharacter = Physics.playerTeam?.[0];
-        }
+        const aiSpawn = this.findNearestIntactTileCenter(7, 2, 'ai');
+        Physics.ai.x = aiSpawn.x;
+        Physics.ai.y = aiSpawn.y;
+        Physics.ai.z = 0;
+        Physics.ai.vx = 0;
+        Physics.ai.vy = 0;
+        Physics.ai.vz = 0;
+        Physics.ai.onGround = true;
+        Physics.ai.hasSpiked = false;
+        Physics.ai.hasReceived = false;
+        // CRITICAL: scoring reset must override falling/respawn mechanics
+        Physics.ai.isFalling = false;
+        Physics.ai.fallTimer = 0;
+        Physics.ai.fallEdge = null;
+        Physics.ai.isBlinking = false;
+        Physics.ai.blinkTimer = 0;
         
         // Reset transient serve state (in case a point happens mid-charge or mid-spike-serve jump)
         this.state.serveMovementLock = 0;
@@ -518,36 +500,13 @@ const Game = {
         // Alternate serve based on total points
         this.state.isServing = true;
         const totalPoints = this.state.playerScore + this.state.aiScore;
-        const wasPlayerServing = this.state.servingPlayer === 'player';
         this.state.servingPlayer = (totalPoints % 2 === 0) ? 'player' : 'ai';
-        
-        // Rotate serve: alternate between team members
-        if (this.state.servingPlayer === 'player') {
-            // Rotate player serve
-            this.state.playerServeIndex = (this.state.playerServeIndex + 1) % 2;
-        } else {
-            // Rotate AI serve
-            this.state.aiServeIndex = (this.state.aiServeIndex + 1) % 2;
-        }
-        
         this.setupServe();
     },
     
     setupServe() {
         // Position ball "held" by the serving character
-        let servingChar = null;
-        if (this.state.servingPlayer === 'player') {
-            const serveIndex = this.state.playerServeIndex ?? 0;
-            servingChar = (Physics.playerTeam && Physics.playerTeam[serveIndex]) || Physics.controlledCharacter || Physics.playerTeam[0];
-            // Set controlled character to serving character
-            if (servingChar) {
-                Physics.controlledCharacter = servingChar;
-            }
-        } else {
-            const serveIndex = this.state.aiServeIndex ?? 0;
-            servingChar = (Physics.aiTeam && Physics.aiTeam[serveIndex]) || Physics.aiTeam[0];
-        }
-        if (!servingChar) return;
+        const servingChar = this.state.servingPlayer === 'player' ? Physics.player : Physics.ai;
         
         // Ball is held at character position, slightly above ground
         Physics.ball.x = servingChar.x;
@@ -645,6 +604,12 @@ const Game = {
             
             let targetX, targetY;
             if (this.state.servingPlayer === 'player') {
+                // Spike-serve lane selection (player only):
+                // - A+I: target the first destructible lane after the indestructible net-adjacent column on opponent side (tx=5, center x=5.5)
+                // - I alone: middle lane (tx=6, center x=6.5)
+                // - D+I: "bad zone" → spike-serve lands before the net (fault), instead of hitting indestructible tiles
+                const aimX = Input.getAimXDirection?.() ?? 0; // -1 (A), 0, +1 (D)
+
                 // Determine target based on whether it's overcharged or normal spike serve
                 if (isOverchargedSpikeServe) {
                     // Overcharged spike serve (85-100%): lands out of court
@@ -652,8 +617,18 @@ const Game = {
                     targetX = Physics.COURT_WIDTH * 1.05; // Beyond court edge (8 * 1.05 = 8.4, out of bounds)
                 } else {
                     // Normal spike serve (75-85%): lands inside court
-                    // Keep targetX fixed at high x (right side) but inside court
-                    targetX = 5.5; // Right side (AI side), high but inside court (COURT_WIDTH = 8)
+                    // Choose lane on opponent side. Indestructible net-adjacent tiles are tx=4 (AI side).
+                    // First destructible lane after that is tx=5 (center x=5.5).
+                    if (aimX < -0.01) {
+                        // A+I: first destructible lane after indestructible
+                        targetX = 5.5; // tx=5 center
+                    } else if (aimX > 0.01) {
+                        // D+I: "bad zone" → land before the net (fault)
+                        targetX = Physics.NET_X - 0.35; // player side, just before net
+                    } else {
+                        // I alone: middle lane
+                        targetX = 6.5; // tx=6 center
+                    }
                 }
                 
                 // W/S controls y (front/back) like normal serve

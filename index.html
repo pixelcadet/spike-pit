@@ -6,6 +6,13 @@
     <title>Spike Pit</title>
     <link rel="stylesheet" href="style.css">
     <style>
+        @font-face {
+            font-family: 'Metal Vengeance';
+            src: url('assets/fonts/Metal Vengeance.ttf') format('truetype');
+            font-weight: normal;
+            font-style: normal;
+        }
+        
         .intro-modal {
             display: flex;
             position: fixed;
@@ -34,13 +41,14 @@
             padding: 20px;
             box-sizing: border-box;
             position: relative;
-            background-color: #2a2a2a;
-            border: 2px solid #fff;
+            background-color: #1a0a1a;
+            border: 2px solid #000;
             border-radius: 12px;
         }
         
         .title {
-            font-size: 48px;
+            font-family: 'Metal Vengeance', sans-serif;
+            font-size: 72px;
             font-weight: bold;
             margin-bottom: 40px;
             text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.5);
@@ -56,25 +64,30 @@
         }
         
         .intro-button {
+            font-family: sans-serif;
             padding: 15px 40px;
             font-size: 20px;
             font-weight: bold;
-            border: 3px solid #fff;
-            background: transparent;
-            color: #fff;
+            border: 3px solid #000;
+            background: #4f865d;
+            color: #1a0a1a;
             cursor: pointer;
             border-radius: 8px;
             transition: all 0.3s ease;
             text-decoration: none;
-            display: inline-block;
-            min-width: 180px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 200px;
+            white-space: nowrap;
+            text-align: center;
         }
         
         .intro-button:hover {
-            background: #fff;
-            color: #1a1a1a;
+            background: #5a9668;
+            color: #1a0a1a;
             transform: scale(1.05);
-            box-shadow: 0 5px 15px rgba(255, 255, 255, 0.3);
+            box-shadow: 0 5px 15px rgba(79, 134, 93, 0.3);
         }
         
         .intro-button:active {
@@ -82,23 +95,23 @@
         }
         
         .play-button {
-            border-color: #4a9eff;
-            color: #4a9eff;
+            border-color: #000;
+            color: #1a0a1a;
         }
         
         .play-button:hover {
-            background: #4a9eff;
-            color: #fff;
+            background: #5a9668;
+            color: #1a0a1a;
         }
         
         .how-to-play-button {
-            border-color: #ff4a4a;
-            color: #ff4a4a;
+            border-color: #000;
+            color: #1a0a1a;
         }
         
         .how-to-play-button:hover {
-            background: #ff4a4a;
-            color: #fff;
+            background: #5a9668;
+            color: #1a0a1a;
         }
         
         .how-to-play-modal {
@@ -119,13 +132,13 @@
         }
         
         .modal-content {
-            background-color: #2a2a2a;
+            background-color: #1a0a1a;
             padding: 30px;
             border-radius: 12px;
             width: 700px;
             height: 500px;
             overflow-y: auto;
-            border: 2px solid #fff;
+            border: 2px solid #000;
             position: relative;
             box-sizing: border-box;
         }
@@ -156,20 +169,23 @@
         }
         
         .modal-content h2 {
+            font-family: sans-serif;
             margin-top: 0;
             margin-bottom: 15px;
-            color: #4a9eff;
+            color: #4f865d;
             font-size: 24px;
         }
         
         .modal-content h3 {
+            font-family: sans-serif;
             margin-top: 20px;
             margin-bottom: 10px;
-            color: #ff4a4a;
+            color: #4f865d;
             font-size: 18px;
         }
         
         .modal-content p {
+            font-family: sans-serif;
             line-height: 1.5;
             margin-bottom: 12px;
             font-size: 14px;
@@ -177,6 +193,7 @@
         }
         
         .modal-content ul {
+            font-family: sans-serif;
             text-align: left;
             line-height: 1.6;
             margin-bottom: 15px;
@@ -185,6 +202,7 @@
         }
         
         .modal-content li {
+            font-family: sans-serif;
             margin-bottom: 8px;
             font-size: 14px;
         }
@@ -250,8 +268,8 @@
                 <div class="controls-column">
                     <h4>Zones</h4>
                     <div class="control-group">
-                        <label for="receive-zone">Receive Zone Size: <span id="receive-zone-value">2</span></label>
-                        <input type="range" id="receive-zone" min="1" max="10" value="2" step="1">
+                        <label for="receive-zone">Receive Zone Size: <span id="receive-zone-value">3</span></label>
+                        <input type="range" id="receive-zone" min="1" max="10" value="3" step="1">
                     </div>
                     <div class="control-group">
                         <label for="receive-zone-core">Receive Core Size: <span id="receive-zone-core-value">8</span></label>
@@ -320,7 +338,7 @@
                         </label>
                     </div>
                     <div class="control-group">
-                        <button id="reset-game-button" style="padding: 10px 20px; font-size: 14px; font-weight: bold; border: 2px solid #ff4a4a; background: transparent; color: #ff4a4a; cursor: pointer; border-radius: 6px; transition: all 0.3s ease; width: 100%; font-family: 'Courier New', monospace;">
+                        <button id="reset-game-button" style="padding: 10px 20px; font-size: 14px; font-weight: bold; border: 2px solid #ff4a4a; background: transparent; color: #ff4a4a; cursor: pointer; border-radius: 6px; transition: all 0.3s ease; width: 100%; font-family: sans-serif;">
                             Reset Game
                         </button>
                     </div>
@@ -345,7 +363,7 @@
         <div class="modal-content">
             <button class="modal-close" onclick="hideHowToPlay()">×</button>
             <h2>How to Play</h2>
-            <p><strong>Objective:</strong> Score points by making the ball fall through holes on your opponent's side, or by reducing their HP to zero.</p>
+            <p><strong>Objective:</strong> Win by reaching 11 points, destroying all opponent's tiles, or reducing their HP to zero.</p>
             
             <h3>Controls:</h3>
             <ul>
@@ -353,7 +371,6 @@
                 <li><strong>I</strong> - Serve/Spike/Receive (hold to charge serve)</li>
                 <li><strong>I + W/S</strong> - Aim serve/spike direction</li>
                 <li><strong>A + I</strong> - Spike serve (targets first lane)</li>
-                <li><strong>P</strong> - Reset game</li>
             </ul>
             
             <h3>Gameplay:</h3>
@@ -387,6 +404,10 @@
         function startGame() {
             document.getElementById('intro-modal').classList.add('hidden');
             document.getElementById('back-to-intro-button').classList.remove('hidden');
+            // Reset the game when starting from intro modal
+            if (typeof Physics !== 'undefined') {
+                Physics.reset();
+            }
         }
         
         function showIntroModal() {
@@ -404,9 +425,11 @@
         
         function hideHowToPlay() {
             document.getElementById('how-to-play-modal').classList.remove('active');
+            // Show intro modal when closing how-to-play modal
+            document.getElementById('intro-modal').classList.remove('hidden');
         }
         
-        // Close modal when clicking outside
+        // Close modal when clicking outside (hideHowToPlay already shows intro modal)
         document.getElementById('how-to-play-modal').addEventListener('click', function(e) {
             if (e.target === this) {
                 hideHowToPlay();
@@ -416,10 +439,13 @@
         // Close modal with Escape key
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
-                hideHowToPlay();
-                // Also close intro modal if open
+                const howToPlayModal = document.getElementById('how-to-play-modal');
                 const introModal = document.getElementById('intro-modal');
-                if (!introModal.classList.contains('hidden')) {
+                // If how-to-play modal is open, close it and show intro
+                if (howToPlayModal.classList.contains('active')) {
+                    hideHowToPlay();
+                } else if (!introModal.classList.contains('hidden')) {
+                    // If intro modal is open, start game
                     startGame();
                 }
             }

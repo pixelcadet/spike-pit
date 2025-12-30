@@ -1040,14 +1040,14 @@ const Render = {
         // Text
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.font = 'bold 72px sans-serif';
+        ctx.font = 'bold 72px "Metal Vengeance", sans-serif';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
         ctx.fillText('SCORED!', this.width / 2, this.height / 2);
         
         // Optional smaller subtext (who scored)
         if (Game.state.lastPointWinner) {
             const who = Game.state.lastPointWinner === 'player' ? 'PLAYER' : 'AI';
-            ctx.font = 'bold 20px sans-serif';
+            ctx.font = 'normal 20px sans-serif';
             ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
             ctx.fillText(`${who} SCORED`, this.width / 2, this.height / 2 + 60);
         }
@@ -1078,15 +1078,15 @@ const Render = {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        ctx.font = 'bold 64px sans-serif';
+        ctx.font = 'bold 64px "Metal Vengeance", sans-serif';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
         ctx.fillText('MATCH OVER', this.width / 2, this.height / 2 - 30);
 
-        ctx.font = 'bold 22px sans-serif';
+        ctx.font = 'normal 22px sans-serif';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
         ctx.fillText(`${who} WINS`, this.width / 2, this.height / 2 + 30);
 
-        ctx.font = 'bold 14px sans-serif';
+        ctx.font = 'normal 14px sans-serif';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.70)';
         ctx.fillText(`(${reason})  Press P to reset`, this.width / 2, this.height / 2 + 62);
 

@@ -39,6 +39,11 @@ const Physics = {
     DEBUG_LOGS: true, // set true to emit collision/dt logs to console
     DEBUG_MAX_LOGS_PER_FRAME: 10,
     _debugLogCount: 0,
+
+    // Hybrid time-step controls
+    // We integrate using real deltaTime, but sub-step when frames are long to keep collisions stable.
+    MAX_DELTA_TIME: 0.10,     // clamp huge hitches (tab switching, etc.)
+    FIXED_STEP: 1 / 60,       // max step size; dt is split into <= this
     
     debugLog(tag, payload) {
         if (!this.DEBUG_LOGS) return;
@@ -1852,66 +1857,70 @@ const Physics = {
     update(input, aiInput, deltaTime = 1/60) {
         // Reset per-frame debug log budget
         this._debugLogCount = 0;
-        // Update fall timers with actual deltaTime
-        if (this.player.isFalling) {
-            this.player.fallTimer += deltaTime;
-        }
-        if (this.ai.isFalling) {
-            this.ai.fallTimer += deltaTime;
-        }
-        
-        // Update blink timers with actual deltaTime
-        if (this.player.isBlinking) {
-            this.player.blinkTimer += deltaTime;
-            if (this.player.blinkTimer >= 1.0) {
-                this.player.isBlinking = false;
-                this.player.blinkTimer = 0;
-            }
-        }
-        if (this.ai.isBlinking) {
-            this.ai.blinkTimer += deltaTime;
-            if (this.ai.blinkTimer >= 1.0) {
-                this.ai.isBlinking = false;
-                this.ai.blinkTimer = 0;
-            }
-        }
+        // Clamp + substep large dt to reduce tunneling / missed collisions.
+        const dtTotal = Math.max(0, Math.min(this.MAX_DELTA_TIME, deltaTime));
+        const steps = Math.max(1, Math.ceil(dtTotal / this.FIXED_STEP));
+        const dt = dtTotal / steps;
 
-        // Update damage blink timers (touch-limit HP penalty)
-        if ((this.player.damageBlinkTimeLeft ?? 0) > 0) {
-            this.player.damageBlinkTimeLeft = Math.max(0, (this.player.damageBlinkTimeLeft ?? 0) - deltaTime);
-            if (this.player.damageBlinkTimeLeft <= 0) {
-                this.player.damageBlinkDuration = 0;
+        for (let i = 0; i < steps; i++) {
+            // Update fall timers with actual dt
+            if (this.player.isFalling) {
+                this.player.fallTimer += dt;
             }
-        }
-        if ((this.ai.damageBlinkTimeLeft ?? 0) > 0) {
-            this.ai.damageBlinkTimeLeft = Math.max(0, (this.ai.damageBlinkTimeLeft ?? 0) - deltaTime);
-            if (this.ai.damageBlinkTimeLeft <= 0) {
-                this.ai.damageBlinkDuration = 0;
+            if (this.ai.isFalling) {
+                this.ai.fallTimer += dt;
             }
-        }
-        
-        this.updatePlayer(input, deltaTime);
-        this.updateAI(aiInput, deltaTime);
-        
-        // If serving, keep ball "held" by serving character
-        // Do this AFTER character movement so ball follows character if they move
-        if (Game.state.isServing) {
-            const servingChar = Game.state.servingPlayer === 'player' ? this.player : this.ai;
-            // Keep ball at character position (held)
-            // Ball follows character's position, including z (for jump)
-            this.ball.x = servingChar.x;
-            this.ball.y = servingChar.y;
-            this.ball.z = servingChar.z + servingChar.radius * 1.5; // Slightly above character (follows z position)
-            this.ball.vx = 0;
-            this.ball.vy = 0;
-            this.ball.vz = 0;
-        } else {
-            // Update ball after character movement (so collisions work correctly)
-            // Only update ball physics if not serving
-            const velocitiesBeforeUpdate = { vx: this.ball.vx, vy: this.ball.vy, vz: this.ball.vz };
-            const posBeforeUpdate = { x: this.ball.x, y: this.ball.y, z: this.ball.z };
             
-            this.updateBall(deltaTime);
+            // Update blink timers with actual dt
+            if (this.player.isBlinking) {
+                this.player.blinkTimer += dt;
+                if (this.player.blinkTimer >= 1.0) {
+                    this.player.isBlinking = false;
+                    this.player.blinkTimer = 0;
+                }
+            }
+            if (this.ai.isBlinking) {
+                this.ai.blinkTimer += dt;
+                if (this.ai.blinkTimer >= 1.0) {
+                    this.ai.isBlinking = false;
+                    this.ai.blinkTimer = 0;
+                }
+            }
+
+            // Update damage blink timers (touch-limit HP penalty)
+            if ((this.player.damageBlinkTimeLeft ?? 0) > 0) {
+                this.player.damageBlinkTimeLeft = Math.max(0, (this.player.damageBlinkTimeLeft ?? 0) - dt);
+                if (this.player.damageBlinkTimeLeft <= 0) {
+                    this.player.damageBlinkDuration = 0;
+                }
+            }
+            if ((this.ai.damageBlinkTimeLeft ?? 0) > 0) {
+                this.ai.damageBlinkTimeLeft = Math.max(0, (this.ai.damageBlinkTimeLeft ?? 0) - dt);
+                if (this.ai.damageBlinkTimeLeft <= 0) {
+                    this.ai.damageBlinkDuration = 0;
+                }
+            }
+            
+            this.updatePlayer(input, dt);
+            this.updateAI(aiInput, dt);
+            
+            // If serving, keep ball "held" by serving character
+            // Do this AFTER character movement so ball follows character if they move
+            if (Game.state.isServing) {
+                const servingChar = Game.state.servingPlayer === 'player' ? this.player : this.ai;
+                // Keep ball at character position (held)
+                // Ball follows character's position, including z (for jump)
+                this.ball.x = servingChar.x;
+                this.ball.y = servingChar.y;
+                this.ball.z = servingChar.z + servingChar.radius * 1.5; // Slightly above character (follows z position)
+                this.ball.vx = 0;
+                this.ball.vy = 0;
+                this.ball.vz = 0;
+            } else {
+                // Update ball after character movement (so collisions work correctly)
+                // Only update ball physics if not serving
+                this.updateBall(dt);
+            }
         }
         
         if (this.DEBUG_LOGS && deltaTime > 0.04) { // flag large dt spikes (~25fps or lower)

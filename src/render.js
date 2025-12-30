@@ -500,11 +500,14 @@ const Render = {
         
         // Draw only a ~100° arc on the FRONT/BOTTOM side of the ring (vertical flip vs the back/top arc).
         // 90° is "down" in canvas-angle space (with y-down coords), so center the arc there.
-        // Reduce arc length from the LEFT side only (keep right side the same).
-        // Left span: 35°, right span: 50° => ~85° total.
+        // Per-character asymmetry:
+        // - Player: shorten LEFT side (keep right long) to match "drain from right" feel.
+        // - AI: shorten RIGHT side (keep left long).
         const arcCenter = Math.PI * 0.5; // 90°
-        const leftSpan = (Math.PI / 180) * 35;
-        const rightSpan = (Math.PI / 180) * 50;
+        const longSpan = (Math.PI / 180) * 50;
+        const shortSpan = (Math.PI / 180) * 35;
+        const leftSpan = drainFromRight ? shortSpan : longSpan;
+        const rightSpan = drainFromRight ? longSpan : shortSpan;
         const startAngle = arcCenter - leftSpan;
         const endAngle = arcCenter + rightSpan;
 

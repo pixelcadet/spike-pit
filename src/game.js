@@ -457,20 +457,43 @@ const Game = {
     resetAfterScore() {
         if (this.state.matchOver) return;
         // Reset all character positions
-        // Player team
+        // Player team - use fixed positions to ensure they're always different
         if (Physics.playerTeam && Physics.playerTeam.length >= 2) {
-            const p1Spawn = this.findNearestIntactTileCenter(1, 1, 'player');
-            const p2Spawn = this.findNearestIntactTileCenter(1, 3, 'player');
-            Physics.resetCharacter(Physics.playerTeam[0], p1Spawn.x, p1Spawn.y);
-            Physics.resetCharacter(Physics.playerTeam[1], p2Spawn.x, p2Spawn.y);
+            // Try to find intact tiles, but ensure different positions
+            const p1Preferred = this.findNearestIntactTileCenter(1, 1, 'player');
+            let p2Preferred = this.findNearestIntactTileCenter(1, 3, 'player');
+            
+            // If both found the same position, offset the second one
+            if (Math.abs(p1Preferred.x - p2Preferred.x) < 0.1 && Math.abs(p1Preferred.y - p2Preferred.y) < 0.1) {
+                // They're at the same spot, force different position
+                p2Preferred = this.findNearestIntactTileCenter(1, 2, 'player');
+                // If still same, use fixed offset
+                if (Math.abs(p1Preferred.x - p2Preferred.x) < 0.1 && Math.abs(p1Preferred.y - p2Preferred.y) < 0.1) {
+                    p2Preferred = { x: p1Preferred.x, y: p1Preferred.y + 1.0 };
+                }
+            }
+            
+            Physics.resetCharacter(Physics.playerTeam[0], p1Preferred.x, p1Preferred.y);
+            Physics.resetCharacter(Physics.playerTeam[1], p2Preferred.x, p2Preferred.y);
         }
         
-        // AI team
+        // AI team - use fixed positions to ensure they're always different
         if (Physics.aiTeam && Physics.aiTeam.length >= 2) {
-            const a1Spawn = this.findNearestIntactTileCenter(7, 1, 'ai');
-            const a2Spawn = this.findNearestIntactTileCenter(7, 3, 'ai');
-            Physics.resetCharacter(Physics.aiTeam[0], a1Spawn.x, a1Spawn.y);
-            Physics.resetCharacter(Physics.aiTeam[1], a2Spawn.x, a2Spawn.y);
+            const a1Preferred = this.findNearestIntactTileCenter(7, 1, 'ai');
+            let a2Preferred = this.findNearestIntactTileCenter(7, 3, 'ai');
+            
+            // If both found the same position, offset the second one
+            if (Math.abs(a1Preferred.x - a2Preferred.x) < 0.1 && Math.abs(a1Preferred.y - a2Preferred.y) < 0.1) {
+                // They're at the same spot, force different position
+                a2Preferred = this.findNearestIntactTileCenter(7, 2, 'ai');
+                // If still same, use fixed offset
+                if (Math.abs(a1Preferred.x - a2Preferred.x) < 0.1 && Math.abs(a1Preferred.y - a2Preferred.y) < 0.1) {
+                    a2Preferred = { x: a1Preferred.x, y: a1Preferred.y + 1.0 };
+                }
+            }
+            
+            Physics.resetCharacter(Physics.aiTeam[0], a1Preferred.x, a1Preferred.y);
+            Physics.resetCharacter(Physics.aiTeam[1], a2Preferred.x, a2Preferred.y);
         }
         
         // Set controlled character to serving character

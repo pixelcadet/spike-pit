@@ -1521,9 +1521,11 @@ const Render = {
         const minSize = 6;
 
         // Projected ellipse on the ground plane for pseudo-perspective.
+        // NOTE: getProjectedEllipse already returns pixel radii (projection includes courtTileSize),
+        // so we must NOT multiply by courtTileSize again.
         const e = this.getProjectedEllipse(character.x, character.y, receiveZoneZ, receiveZoneRadius);
-        const rx = Math.max(e.rx * this.courtTileSize, minSize);
-        const ry = Math.max(e.ry * this.courtTileSize, minSize);
+        const rx = Math.max(e.rx, minSize);
+        const ry = Math.max(e.ry, minSize);
         
         // Fill with transparent color if highlighted
         if (highlight) {
@@ -1552,9 +1554,11 @@ const Render = {
 
         // Projected ellipse on ground plane for pseudo-perspective.
         const minSize = 6;
+        // NOTE: getProjectedEllipse already returns pixel radii (projection includes courtTileSize),
+        // so we must NOT multiply by courtTileSize again.
         const e = this.getProjectedEllipse(character.x, character.y, 0, receiveZoneRadius);
-        const rx = Math.max(e.rx * this.courtTileSize, minSize);
-        const ry = Math.max(e.ry * this.courtTileSize, minSize);
+        const rx = Math.max(e.rx, minSize);
+        const ry = Math.max(e.ry, minSize);
         
         // Draw ring on ground (visual cue, keep subtle + distinct from debug)
         ctx.strokeStyle = this.colorWithAlpha(color, 0.55);

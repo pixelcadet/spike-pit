@@ -621,9 +621,12 @@ const Game = {
                     if (aimX < -0.01) {
                         // A+I: first destructible lane after indestructible
                         targetX = 5.5; // tx=5 center
-                    } else {
-                        // I alone: middle lane
+                    } else if (aimX > 0.01) {
+                        // D+I: middle lane (optional)
                         targetX = 6.5; // tx=6 center
+                    } else {
+                        // I alone: deepest lane (furthest from opponent net)
+                        targetX = 7.5; // tx=7 center
                     }
                 }
                 

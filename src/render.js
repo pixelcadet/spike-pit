@@ -141,16 +141,9 @@ const Render = {
         };
     },
 
-    // Compute a screen-space ellipse that approximates a world-space circle under our perspective projection.
-    // Returns center projection plus radii (rx/ry) in pixels.
-    getProjectedEllipse(x, y, z, radiusWorld) {
-        const center = this.project(x, y, z);
-        const px = this.project(x + radiusWorld, y, z);
-        const py = this.project(x, y + radiusWorld, z);
-        const rx = Math.abs(px.x - center.x);
-        const ry = Math.abs(py.y - center.y);
-        return { center, rx, ry };
-    },
+    // NOTE: Our current projection preserves local aspect ratio on the ground plane (tiles stay square),
+    // so a true world-circle remains visually circular. For "pseudo perspective" ground rings (like a
+    // top-down circle projected onto a tilted plane), we intentionally squash Y when drawing.
     
     // Draw court (8 cells wide, 4 cells long - rotated 90 degrees)
     // Draw purple background (always at the back)
@@ -1520,18 +1513,18 @@ const Render = {
         const receiveZoneRadius = Physics.RECEIVING_ZONE_RADIUS + Physics.ball.radius;
         const minSize = 6;
 
-        // Projected ellipse on the ground plane for pseudo-perspective.
-        // NOTE: getProjectedEllipse already returns pixel radii (projection includes courtTileSize),
-        // so we must NOT multiply by courtTileSize again.
-        const e = this.getProjectedEllipse(character.x, character.y, receiveZoneZ, receiveZoneRadius);
-        const rx = Math.max(e.rx, minSize);
-        const ry = Math.max(e.ry, minSize);
+        // Pseudo-perspective ellipse: keep X radius, squash Y radius.
+        const centerProj = this.project(character.x, character.y, receiveZoneZ);
+        const r = Math.max(receiveZoneRadius * this.courtTileSize * centerProj.scale, minSize);
+        const squash = 0.55;
+        const rx = r;
+        const ry = Math.max(r * squash, minSize);
         
         // Fill with transparent color if highlighted
         if (highlight) {
             ctx.fillStyle = this.colorWithAlpha(color, 0.3);
             ctx.beginPath();
-            ctx.ellipse(e.center.x, e.center.y, rx, ry, 0, 0, Math.PI * 2);
+            ctx.ellipse(centerProj.x, centerProj.y, rx, ry, 0, 0, Math.PI * 2);
             ctx.fill();
         }
         
@@ -1539,7 +1532,7 @@ const Render = {
         ctx.lineWidth = 2;
         ctx.setLineDash([4, 4]); // Different dash pattern for receiving zone
         ctx.beginPath();
-        ctx.ellipse(e.center.x, e.center.y, rx, ry, 0, 0, Math.PI * 2);
+        ctx.ellipse(centerProj.x, centerProj.y, rx, ry, 0, 0, Math.PI * 2);
         ctx.stroke();
         ctx.setLineDash([]); // Reset to solid
     },
@@ -1552,19 +1545,19 @@ const Render = {
         // Match physics: effective zone radius includes the ball radius
         const receiveZoneRadius = Physics.RECEIVING_ZONE_RADIUS + Physics.ball.radius;
 
-        // Projected ellipse on ground plane for pseudo-perspective.
+        // Pseudo-perspective ellipse: keep X radius, squash Y radius.
         const minSize = 6;
-        // NOTE: getProjectedEllipse already returns pixel radii (projection includes courtTileSize),
-        // so we must NOT multiply by courtTileSize again.
-        const e = this.getProjectedEllipse(character.x, character.y, 0, receiveZoneRadius);
-        const rx = Math.max(e.rx, minSize);
-        const ry = Math.max(e.ry, minSize);
+        const groundProj = this.project(character.x, character.y, 0);
+        const r = Math.max(receiveZoneRadius * this.courtTileSize * groundProj.scale, minSize);
+        const squash = 0.55;
+        const rx = r;
+        const ry = Math.max(r * squash, minSize);
         
         // Draw ring on ground (visual cue, keep subtle + distinct from debug)
         ctx.strokeStyle = this.colorWithAlpha(color, 0.55);
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.ellipse(e.center.x, e.center.y, rx, ry, 0, 0, Math.PI * 2);
+        ctx.ellipse(groundProj.x, groundProj.y, rx, ry, 0, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
     },

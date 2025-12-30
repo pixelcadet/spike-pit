@@ -80,6 +80,21 @@ const Controls = {
             receiveZoneValue.textContent = value;
             this.updateReceiveZoneSize(value);
         });
+
+        // Set up receive core size slider (inner "normal circle" inside the ellipsoid)
+        const receiveZoneCoreSlider = document.getElementById('receive-zone-core');
+        const receiveZoneCoreValue = document.getElementById('receive-zone-core-value');
+        // Sync displayed value to HTML default
+        if (receiveZoneCoreSlider && receiveZoneCoreValue) {
+            receiveZoneCoreValue.textContent = receiveZoneCoreSlider.value;
+        }
+        if (receiveZoneCoreSlider) {
+            receiveZoneCoreSlider.addEventListener('input', (e) => {
+                const value = parseInt(e.target.value);
+                if (receiveZoneCoreValue) receiveZoneCoreValue.textContent = value;
+                this.updateReceiveZoneCoreSize(value);
+            });
+        }
         
         // Set up spike zone size slider
         const spikeZoneSlider = document.getElementById('spike-zone');
@@ -170,6 +185,8 @@ const Controls = {
         // Defaults (on refresh): receive zone = 4, spike zone = 2
         // NOTE: zone size is a shared physics radius, so it affects BOTH the player and the AI.
         this.updateReceiveZoneSize(4);
+        // Default core size = 5 (maps to 0.55 multiplier)
+        this.updateReceiveZoneCoreSize(5);
         this.updateSpikeZoneSize(2);
         this.updateServeHorizontal(5);
         this.updateServeVertical(5);
@@ -289,6 +306,24 @@ const Controls = {
         
         // Apply to physics system (shared by both player + AI)
         Physics.RECEIVING_ZONE_RADIUS = radius;
+    },
+
+    // Convert 1-10 scale to receive core multiplier (inner "normal circle" inside the ellipsoid).
+    // Piecewise mapping so slider 5 == 0.55 exactly.
+    // - Slider 1  = 0.35 (small core)
+    // - Slider 5  = 0.55 (default)
+    // - Slider 10 = 0.80 (large core)
+    updateReceiveZoneCoreSize(scale) {
+        let mult;
+        if (scale <= 5) {
+            // Map 1-5 to 0.35-0.55
+            mult = 0.35 + (0.55 - 0.35) * ((scale - 1) / (5 - 1));
+        } else {
+            // Map 5-10 to 0.55-0.80
+            mult = 0.55 + (0.80 - 0.55) * ((scale - 5) / (10 - 5));
+        }
+        // Apply to physics system (shared by both player + AI)
+        Physics.RECEIVE_ZONE_CORE_MULT = mult;
     },
     
     // Convert 1-10 scale to spike zone radius (0.42 to 1.26, with 5 = 0.96)

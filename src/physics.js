@@ -108,8 +108,8 @@ const Physics = {
             this.createCharacter(1.0, 3.0, 0.15, true)   // Player 2: left side, back (y=3.0)
         ];
         this.aiTeam = [
-            this.createCharacter(7.0, 1.0, 0.12, false),  // AI 1: right side, front (y=1.0)
-            this.createCharacter(7.0, 3.0, 0.12, false)   // AI 2: right side, back (y=3.0)
+            this.createCharacter(7.0, 1.5, 0.12, false),  // AI 1: right side, front (y=1.5)
+            this.createCharacter(7.0, 2.5, 0.12, false)   // AI 2: right side, back (y=2.5)
         ];
         
         // Set initial controlled character (closest to ball or first character)
@@ -258,10 +258,10 @@ const Physics = {
             this.resetCharacter(this.playerTeam[1], 1.0, 3.0); // Back (y=3.0)
         }
         
-        // Reset AI team - ensure clearly different positions
+        // Reset AI team
         if (this.aiTeam && this.aiTeam.length >= 2) {
-            this.resetCharacter(this.aiTeam[0], 7.0, 1.0); // Front (y=1.0)
-            this.resetCharacter(this.aiTeam[1], 7.0, 3.0); // Back (y=3.0)
+            this.resetCharacter(this.aiTeam[0], 7.0, 1.5); // Front (y=1.5)
+            this.resetCharacter(this.aiTeam[1], 7.0, 2.5); // Back (y=2.5)
         }
         
         // Set controlled character to first player
@@ -842,7 +842,7 @@ const Physics = {
         if (!teammate || !this.controlledCharacter) return;
         
         // Prevent teammate from getting too close to controlled character (maintain separation)
-        const minSeparation = 0.8; // Minimum distance between characters
+        const minSeparation = 1.2; // Minimum distance between characters (increased)
         const dxToControlled = this.controlledCharacter.x - teammate.x;
         const dyToControlled = this.controlledCharacter.y - teammate.y;
         const distToControlled = Math.sqrt(dxToControlled * dxToControlled + dyToControlled * dyToControlled);
@@ -851,36 +851,66 @@ const Physics = {
         const b = this.ball;
         const ballOnPlayerSide = b.x < this.NET_X;
         
-        let targetX = teammate.x;
-        let targetY = teammate.y;
-        
-        if (ballOnPlayerSide && b.z > b.groundLevel) {
-            // Ball is on our side and in air - move toward it, but avoid controlled character
-            const dxToBall = b.x - teammate.x;
-            const dyToBall = b.y - teammate.y;
-            const distToBall = Math.sqrt(dxToBall * dxToBall + dyToBall * dyToBall);
+        // If too close to controlled character, prioritize separation over ball chasing
+        if (distToControlled < minSeparation) {
+            // Push away from controlled character first
+            const separationForce = (minSeparation - distToControlled) / minSeparation;
+            const pushAwayX = -(dxToControlled / distToControlled) * separationForce;
+            const pushAwayY = -(dyToControlled / distToControlled) * separationForce;
             
-            if (distToBall > 0.1) {
-                // Move toward ball, but push away from controlled character if too close
-                let moveX = (dxToBall / distToBall);
-                let moveY = (dyToBall / distToBall);
+            // Only move toward ball if we're not too close to controlled character
+            if (ballOnPlayerSide && b.z > b.groundLevel && distToControlled > minSeparation * 0.8) {
+                const dxToBall = b.x - teammate.x;
+                const dyToBall = b.y - teammate.y;
+                const distToBall = Math.sqrt(dxToBall * dxToBall + dyToBall * dyToBall);
                 
-                // If too close to controlled character, add separation force
-                if (distToControlled < minSeparation && distToControlled > 0.01) {
-                    const separationForce = (minSeparation - distToControlled) / minSeparation;
-                    moveX -= (dxToControlled / distToControlled) * separationForce * 0.5;
-                    moveY -= (dyToControlled / distToControlled) * separationForce * 0.5;
+                if (distToBall > 0.1) {
+                    // Blend separation force with ball movement
+                    let moveX = (dxToBall / distToBall) * 0.3 + pushAwayX * 0.7;
+                    let moveY = (dyToBall / distToBall) * 0.3 + pushAwayY * 0.7;
+                    
                     // Normalize
                     const moveLen = Math.sqrt(moveX * moveX + moveY * moveY);
                     if (moveLen > 0.01) {
                         moveX /= moveLen;
                         moveY /= moveLen;
                     }
+                    
+                    const moveSpeed = teammate.speed * 0.6; // Slower when too close
+                    teammate.vx = moveX * moveSpeed;
+                    teammate.vy = moveY * moveSpeed;
+                } else {
+                    // Just push away
+                    const moveLen = Math.sqrt(pushAwayX * pushAwayX + pushAwayY * pushAwayY);
+                    if (moveLen > 0.01) {
+                        teammate.vx = (pushAwayX / moveLen) * teammate.speed * 0.8;
+                        teammate.vy = (pushAwayY / moveLen) * teammate.speed * 0.8;
+                    } else {
+                        teammate.vx = 0;
+                        teammate.vy = 0;
+                    }
                 }
-                
+            } else {
+                // Just push away from controlled character
+                const moveLen = Math.sqrt(pushAwayX * pushAwayX + pushAwayY * pushAwayY);
+                if (moveLen > 0.01) {
+                    teammate.vx = (pushAwayX / moveLen) * teammate.speed * 0.8;
+                    teammate.vy = (pushAwayY / moveLen) * teammate.speed * 0.8;
+                } else {
+                    teammate.vx = 0;
+                    teammate.vy = 0;
+                }
+            }
+        } else if (ballOnPlayerSide && b.z > b.groundLevel) {
+            // Ball is on our side and in air - move toward it (we're far enough from controlled)
+            const dxToBall = b.x - teammate.x;
+            const dyToBall = b.y - teammate.y;
+            const distToBall = Math.sqrt(dxToBall * dxToBall + dyToBall * dyToBall);
+            
+            if (distToBall > 0.1) {
                 const moveSpeed = teammate.speed * 0.8; // Slightly slower than controlled
-                teammate.vx = moveX * moveSpeed;
-                teammate.vy = moveY * moveSpeed;
+                teammate.vx = (dxToBall / distToBall) * moveSpeed;
+                teammate.vy = (dyToBall / distToBall) * moveSpeed;
             } else {
                 teammate.vx = 0;
                 teammate.vy = 0;
@@ -889,26 +919,11 @@ const Physics = {
             // Cover court - position away from controlled character
             // If controlled is front, teammate goes back, and vice versa
             const controlledY = this.controlledCharacter.y;
-            const teammateY = teammate.y;
             
             // Try to maintain opposite positions (one front, one back)
             let targetY = controlledY < this.COURT_LENGTH * 0.5 
                 ? this.COURT_LENGTH * 0.75  // Controlled is front, teammate goes back
                 : this.COURT_LENGTH * 0.25; // Controlled is back, teammate goes front
-            
-            // But also avoid getting too close
-            if (distToControlled < minSeparation) {
-                // Push away from controlled character
-                if (Math.abs(dyToControlled) < 0.1) {
-                    // Same Y, push to opposite side
-                    targetY = controlledY < this.COURT_LENGTH * 0.5 
-                        ? this.COURT_LENGTH * 0.75
-                        : this.COURT_LENGTH * 0.25;
-                } else {
-                    // Already separated in Y, just maintain position
-                    targetY = teammateY;
-                }
-            }
             
             const dy = targetY - teammate.y;
             if (Math.abs(dy) > 0.1) {

@@ -31,6 +31,7 @@ const Physics = {
     // Used as the "centered" region (no auto-correct / more precise).
     RECEIVE_ZONE_CORE_MULT: 0.55,
     RECEIVE_MOVE_SPEED: 0.25,    // Speed boost when moving toward ball to receive
+    RECEIVE_MOVE_MIN_DIST: 0.15,  // Minimum horizontal distance before auto-move activates (prevents jitter when ball is directly overhead)
     RECEIVE_POWER: 0.12,         // Power for receiving hit (weaker than spike, arching trajectory)
     RECEIVE_ARCH_HEIGHT: 0.4,    // Upward component for arching trajectory (higher arc)
     
@@ -631,11 +632,16 @@ const Physics = {
                 const distEllipsoid = Math.sqrt(dx * dx + dyE * dyE + dz * dz);
                 
                 const coreRadius = effectiveRadius * (this.RECEIVE_ZONE_CORE_MULT ?? 0.55);
-                const inCore = distSphere <= coreRadius;
+                // Add small hysteresis buffer to prevent flickering at core boundary
+                const coreRadiusWithBuffer = coreRadius * 1.1; // 10% buffer
+                const inCore = distSphere <= coreRadiusWithBuffer;
                 const inOuter = distEllipsoid <= effectiveRadius;
                 
-                // If ball is in the receive zone but NOT in the core, we're in receiving mode (auto movement).
-                if ((inOuter || inCore) && !inCore) {
+                // Calculate horizontal distance to check if we should activate auto-move
+                const horizontalDist = Math.sqrt(dx * dx + dy * dy);
+                
+                // If ball is in the receive zone but NOT in the core (with buffer), and far enough horizontally, we're in receiving mode (auto movement).
+                if ((inOuter || inCore) && !inCore && horizontalDist > this.RECEIVE_MOVE_MIN_DIST) {
                     isReceiving = true;
                 }
             }
@@ -1266,15 +1272,22 @@ const Physics = {
         
         // If ball is not close enough to center, move character toward ball first
         // BUT only if character is on the ground (no automatic chasing mid-air)
-        if (!inCore && character.onGround) {
+        // Also require minimum horizontal distance to prevent jitter when ball is directly overhead
+        if (!inCore && character.onGround && horizontalDist > this.RECEIVE_MOVE_MIN_DIST) {
             // Move character toward ball to get it closer to center
             const invH = 1 / Math.max(1e-6, horizontalDist);
             const moveDirX = dx * invH;
             const moveDirY = dy * invH;
             
+            // Scale movement speed based on distance from core (smoother approach when close)
+            // When very close to core, reduce speed to prevent overshooting
+            const distFromCore = horizontalDist - (coreRadius * 0.8); // Distance beyond 80% of core radius
+            const speedScale = distFromCore > 0 ? Math.min(1.0, distFromCore / (this.RECEIVE_MOVE_MIN_DIST * 2)) : 0.3;
+            const moveSpeed = this.RECEIVE_MOVE_SPEED * Math.max(0.3, speedScale);
+            
             // Apply movement boost toward ball
-            character.vx = moveDirX * this.RECEIVE_MOVE_SPEED;
-            character.vy = moveDirY * this.RECEIVE_MOVE_SPEED;
+            character.vx = moveDirX * moveSpeed;
+            character.vy = moveDirY * moveSpeed;
             
             // Don't hit yet, just move closer
             // Don't set justAttemptedAction here - we want collision to still work while moving

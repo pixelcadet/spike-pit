@@ -140,6 +140,17 @@ const Render = {
             scale: scale
         };
     },
+
+    // Compute a screen-space ellipse that approximates a world-space circle under our perspective projection.
+    // Returns center projection plus radii (rx/ry) in pixels.
+    getProjectedEllipse(x, y, z, radiusWorld) {
+        const center = this.project(x, y, z);
+        const px = this.project(x + radiusWorld, y, z);
+        const py = this.project(x, y + radiusWorld, z);
+        const rx = Math.abs(px.x - center.x);
+        const ry = Math.abs(py.y - center.y);
+        return { center, rx, ry };
+    },
     
     // Draw court (8 cells wide, 4 cells long - rotated 90 degrees)
     // Draw purple background (always at the back)
@@ -1508,17 +1519,17 @@ const Render = {
         // Match physics: effective zone radius includes the ball radius
         const receiveZoneRadius = Physics.RECEIVING_ZONE_RADIUS + Physics.ball.radius;
         const minSize = 6;
-        
-        // Single circle at center (ground level) - properly scaled with perspective
-        const centerProj = this.project(character.x, character.y, receiveZoneZ);
-        const mainSize = receiveZoneRadius * this.courtTileSize * centerProj.scale;
-        const finalMainSize = Math.max(mainSize, minSize);
+
+        // Projected ellipse on the ground plane for pseudo-perspective.
+        const e = this.getProjectedEllipse(character.x, character.y, receiveZoneZ, receiveZoneRadius);
+        const rx = Math.max(e.rx * this.courtTileSize, minSize);
+        const ry = Math.max(e.ry * this.courtTileSize, minSize);
         
         // Fill with transparent color if highlighted
         if (highlight) {
             ctx.fillStyle = this.colorWithAlpha(color, 0.3);
             ctx.beginPath();
-            ctx.arc(centerProj.x, centerProj.y, finalMainSize, 0, Math.PI * 2);
+            ctx.ellipse(e.center.x, e.center.y, rx, ry, 0, 0, Math.PI * 2);
             ctx.fill();
         }
         
@@ -1526,7 +1537,7 @@ const Render = {
         ctx.lineWidth = 2;
         ctx.setLineDash([4, 4]); // Different dash pattern for receiving zone
         ctx.beginPath();
-        ctx.arc(centerProj.x, centerProj.y, finalMainSize, 0, Math.PI * 2);
+        ctx.ellipse(e.center.x, e.center.y, rx, ry, 0, 0, Math.PI * 2);
         ctx.stroke();
         ctx.setLineDash([]); // Reset to solid
     },
@@ -1538,20 +1549,18 @@ const Render = {
         ctx.setLineDash([]); // solid (distinct from debug overlays)
         // Match physics: effective zone radius includes the ball radius
         const receiveZoneRadius = Physics.RECEIVING_ZONE_RADIUS + Physics.ball.radius;
-        
-        // Project character position at ground level (z=0)
-        const groundProj = this.project(character.x, character.y, 0);
-        
-        // Calculate ring size with perspective scaling
-        const ringSize = receiveZoneRadius * this.courtTileSize * groundProj.scale;
+
+        // Projected ellipse on ground plane for pseudo-perspective.
         const minSize = 6;
-        const finalRingSize = Math.max(ringSize, minSize);
+        const e = this.getProjectedEllipse(character.x, character.y, 0, receiveZoneRadius);
+        const rx = Math.max(e.rx * this.courtTileSize, minSize);
+        const ry = Math.max(e.ry * this.courtTileSize, minSize);
         
         // Draw ring on ground (visual cue, keep subtle + distinct from debug)
         ctx.strokeStyle = this.colorWithAlpha(color, 0.55);
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.arc(groundProj.x, groundProj.y, finalRingSize, 0, Math.PI * 2);
+        ctx.ellipse(e.center.x, e.center.y, rx, ry, 0, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
     },

@@ -166,7 +166,7 @@ const Controls = {
         }
         
         // Initialize with default values
-        this.updateMovementSpeed(6);
+        this.updateMovementSpeed(7);
         this.updateJumpPower(5);
         this.updateGravity(5);
         this.updateAirTime(5);

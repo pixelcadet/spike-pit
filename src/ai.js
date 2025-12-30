@@ -57,9 +57,7 @@ const AI = {
     },
     
     update(deltaTime = 1/60) {
-        // Use first AI character for decision-making (all AI characters share the same logic for now)
-        const ai = (Physics.aiTeam && Physics.aiTeam[0]) || Physics.ai;
-        if (!ai) return;
+        const ai = Physics.ai;
         const ball = Physics.ball;
         const netX = Physics.NET_X;
         this.state.spikeCooldown = Math.max(0, this.state.spikeCooldown - deltaTime);
@@ -235,6 +233,12 @@ const AI = {
             const ballRadius = Physics.ball.radius;
             const effectiveSpikeRadius = Physics.SPIKE_ZONE_RADIUS + ballRadius;
             const effectiveReceiveRadius = Physics.RECEIVING_ZONE_RADIUS + ballRadius;
+            const touches = Physics.ball.touchesRemaining ?? 0;
+            const isAiSide = ball.x >= Physics.NET_X;
+            // Touch-count awareness (imperfect on purpose):
+            // When touches are low and the ball is on AI side, prefer sending it over the net instead of stalling.
+            // Keep it only ~50% reliable so AI isn't always "optimal".
+            const touchAware = isAiSide && touches <= 1 && Math.random() < 0.5;
             
             if (!ai.onGround && !ai.hasSpiked && !ai.hasReceived) {
                 // Mid-air: check both zones, prioritize spike zone
@@ -249,7 +253,8 @@ const AI = {
                 if (distToSpikeZone < effectiveSpikeRadius) {
                     // AI can spike, but not always (keeps it beatable)
                     const canSpikeNow = this.state.spikeCooldown <= 0;
-                    const willSpike = canSpikeNow && Math.random() < 0.35; // occasional spike
+                    const baseSpikeChance = 0.35;
+                    const willSpike = canSpikeNow && (touchAware || Math.random() < baseSpikeChance);
                     this.state.shouldSpike = willSpike;
                     this.state.shouldReceive = false;
                     if (willSpike) {

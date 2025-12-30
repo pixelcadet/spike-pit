@@ -1339,6 +1339,37 @@ const Physics = {
         // If on ground, just bounce ball upward (for testing spikes)
         // If mid-air, lob to opponent's side
         if (character.onGround) {
+            // AI touch-count awareness (imperfect on purpose):
+            // If touches are low on the current side, avoid doing a straight-up ground toss (which can stall and
+            // burn touches). Instead, sometimes "clear" it over the net like a normal receive.
+            const touches = b.touchesRemaining ?? 0;
+            const isAi = character === this.ai;
+            const isAiSide = b.x >= this.NET_X;
+            if (isAi && isAiSide && touches <= 1 && Math.random() < 0.5) {
+                // Clear to opponent side (player side)
+                const targetX = this.COURT_WIDTH * 0.25;
+                const targetY = this.COURT_LENGTH * 0.5;
+                
+                const dirX = targetX - b.x;
+                const dirY = targetY - b.y;
+                const dirLength = Math.sqrt(dirX * dirX + dirY * dirY) || 0.0001;
+                const normDirX = dirX / dirLength;
+                const normDirY = dirY / dirLength;
+                
+                // Slightly stronger horizontal than mid-air receive so it reliably crosses from ground.
+                const horizontalPower = this.RECEIVE_POWER * 0.95;
+                b.vx = normDirX * horizontalPower * this.ballMovementSpeed;
+                b.vy = normDirY * horizontalPower * this.ballMovementSpeed;
+                b.vz = this.RECEIVE_ARCH_HEIGHT * this.ballMovementSpeed;
+                
+                b.vx += character.vx * 0.05;
+                b.vy += character.vy * 0.05;
+                
+                b.lastHitType = 'receive';
+                b.tileDamageBounces = 0;
+                b.fallingThroughHole = false;
+                character.justAttemptedAction = true;
+            } else {
             // Ground receive = "toss" (for future teammates/sets).
             // Keep it short (clamped distance) but allow aiming with buffered WASD (supports diagonals).
             const vz0 = this.RECEIVE_ARCH_HEIGHT * 0.7 * this.ballMovementSpeed; // Reduced upward toss (70% of normal)
@@ -1442,6 +1473,7 @@ const Physics = {
                 b.vy += character.vy * 0.02;
             }
             character.justAttemptedAction = true; // Flag to prevent collision bounce this frame
+            }
         } else {
             // Mid-air: lob to opponent's side
             // Determine target (opponent's side)

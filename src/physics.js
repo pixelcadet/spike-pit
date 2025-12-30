@@ -1286,17 +1286,19 @@ const Physics = {
         
         // Check if ball is within receiving zone (3D distance)
         // Account for ball's radius - if any part of ball overlaps zone, it's in
-        const dx = b.x - receiveZoneX;
-        const dy = b.y - receiveZoneY;
-        const dz = b.z - receiveZoneZ;
+        let dx = b.x - receiveZoneX;
+        let dy = b.y - receiveZoneY;
+        let dz = b.z - receiveZoneZ;
         const effectiveRadius = this.RECEIVING_ZONE_RADIUS + b.radius;
 
         // Two-part receive zone (matches visualization intent):
-        // - Outer ellipsoid: x radius = R, y radius = R*squash, z radius = R
+        // - Outer ellipsoid: x radius = R, y radius = R*squash, z radius = R (squash Y for perspective, but keep Z full for vertical reach)
         // - Inner core sphere: smaller "normal circle" centered on character
         const distSphere = Math.sqrt(dx * dx + dy * dy + dz * dz);
         const invSquash = 1 / (this.RECEIVE_ZONE_Y_SQUASH || 1);
         const dyE = dy * invSquash;
+        // Don't squash Z-axis - keep full vertical reach so balls above head can be received
+        // (Visualization squashes Z for ground projection, but physics needs full 3D reach)
         const distEllipsoid = Math.sqrt(dx * dx + dyE * dyE + dz * dz);
         const coreRadius = effectiveRadius * (this.RECEIVE_ZONE_CORE_MULT ?? 0.55);
         const inCore = distSphere <= coreRadius;
@@ -1306,12 +1308,19 @@ const Physics = {
             return false; // Ball not in receiving zone
         }
         
+        // IMPORTANT: Allow receive even if ball is currently touching/overlapping the body
+        // This allows receiving even after body collision has started bouncing the ball
+        // The receive will override the bounce velocity with the toss/receive velocity
+        // Don't push ball away - just set justAttemptedAction to prevent body collision from interfering
+        // The receive velocity will override any bounce that already happened
+        
         // Calculate distance from ball to center of receiving zone (horizontal)
         const horizontalDist = Math.sqrt(dx * dx + dy * dy);
         
         // If ball is not close enough to center, move character toward ball first
         // BUT only if character is on the ground (no automatic chasing mid-air)
         // Also require minimum horizontal distance to prevent jitter when ball is directly overhead
+        // Ball must be in core OR outer zone to be received (matches visualization exactly)
         if (!inCore && character.onGround && horizontalDist > this.RECEIVE_MOVE_MIN_DIST) {
             // Move character toward ball to get it closer to center
             const invH = 1 / Math.max(1e-6, horizontalDist);

@@ -921,14 +921,27 @@ const Physics = {
             const controlledY = this.controlledCharacter.y;
             
             // Try to maintain opposite positions (one front, one back)
-            let targetY = controlledY < this.COURT_LENGTH * 0.5 
-                ? this.COURT_LENGTH * 0.75  // Controlled is front, teammate goes back
-                : this.COURT_LENGTH * 0.25; // Controlled is back, teammate goes front
+            // Use a stable target based on initial position to prevent bouncing
+            const teammateInitialY = teammate.y < this.COURT_LENGTH * 0.5 ? 1.0 : 3.0;
+            let targetY;
             
-            const dy = targetY - teammate.y;
-            if (Math.abs(dy) > 0.1) {
-                teammate.vy = Math.sign(dy) * teammate.speed * 0.6;
+            // If controlled character is in front half, teammate should be in back half
+            if (controlledY < this.COURT_LENGTH * 0.5) {
+                targetY = 3.0; // Back position
             } else {
+                targetY = 1.0; // Front position
+            }
+            
+            // Add dead zone to prevent micro-movements and bouncing
+            const dy = targetY - teammate.y;
+            const deadZone = 0.3; // Don't move if within 0.3 units of target
+            
+            if (Math.abs(dy) > deadZone) {
+                // Smooth movement with speed scaling based on distance
+                const moveSpeed = teammate.speed * 0.5 * Math.min(1.0, Math.abs(dy) / 1.0);
+                teammate.vy = Math.sign(dy) * moveSpeed;
+            } else {
+                // In dead zone - stop moving to prevent bouncing
                 teammate.vy = 0;
             }
             teammate.vx = 0;

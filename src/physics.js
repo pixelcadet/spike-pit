@@ -34,6 +34,9 @@ const Physics = {
     RECEIVE_MOVE_MIN_DIST: 0.15,  // Minimum horizontal distance before auto-move activates (prevents jitter when ball is directly overhead)
     RECEIVE_POWER: 0.12,         // Power for receiving hit (weaker than spike, arching trajectory)
     RECEIVE_ARCH_HEIGHT: 0.4,    // Upward component for arching trajectory (higher arc)
+
+    // Debug
+    DEBUG_LOGS: false,
     
     // Player character
     player: {
@@ -1000,6 +1003,15 @@ const Physics = {
             const pushDirX = dx / dist;
             const pushDirY = dy / dist;
             const pushDirZ = dz / dist;
+            if (this.DEBUG_LOGS) {
+                console.log('[Ball-Char Collision]', {
+                    who: character === this.player ? 'player' : 'ai',
+                    ball: { x: b.x.toFixed(3), y: b.y.toFixed(3), z: b.z.toFixed(3) },
+                    char: { x: character.x.toFixed(3), y: character.y.toFixed(3), z: character.z.toFixed(3) },
+                    dist: dist.toFixed(4),
+                    collisionDist: collisionDist.toFixed(4)
+                });
+            }
             
             // Move ball to just outside character
             b.x = character.x + pushDirX * (collisionDist + 0.05);
@@ -1491,6 +1503,14 @@ const Physics = {
                 // Main net collision - ball hits the net below the top
                 const ballOnLeftSide = b.x < netX;
                 const side = ballOnLeftSide ? 'player' : 'ai';
+                if (this.DEBUG_LOGS) {
+                    console.log('[Net Collision]', {
+                        zone: 'below',
+                        side,
+                        ball: { x: b.x.toFixed(3), y: b.y.toFixed(3), z: b.z.toFixed(3) },
+                        distToNet: distToNet.toFixed(4)
+                    });
+                }
                 
                 // Push ball away from net
                 if (ballOnLeftSide) {
@@ -1521,6 +1541,14 @@ const Physics = {
                 // Top edge collision - ball hits the tape/rope at top of net
                 const ballOnLeftSide = b.x < netX;
                 const side = ballOnLeftSide ? 'player' : 'ai';
+                if (this.DEBUG_LOGS) {
+                    console.log('[Net Collision]', {
+                        zone: 'topEdge',
+                        side,
+                        ball: { x: b.x.toFixed(3), y: b.y.toFixed(3), z: b.z.toFixed(3) },
+                        distToNet: distToNet.toFixed(4)
+                    });
+                }
                 
                 // Push ball away from net
                 if (ballOnLeftSide) {
@@ -1856,6 +1884,10 @@ const Physics = {
             const posBeforeUpdate = { x: this.ball.x, y: this.ball.y, z: this.ball.z };
             
             this.updateBall(deltaTime);
+        }
+        
+        if (this.DEBUG_LOGS && deltaTime > 0.04) { // flag large dt spikes (~25fps or lower)
+            console.log('[DT Spike]', { deltaTime: deltaTime.toFixed(4) });
         }
 
         // Reset action flags at end of frame.

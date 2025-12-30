@@ -1515,7 +1515,7 @@ const Render = {
 
         // Pseudo-perspective ellipse: keep X radius, squash Y radius.
         const centerProj = this.project(character.x, character.y, receiveZoneZ);
-        const yOffsetPx = 16; // push the ring slightly down so it reads as projected onto the floor
+        const yOffsetPx = 24; // push the ring slightly down so it reads as projected onto the floor
         const r = Math.max(receiveZoneRadius * this.courtTileSize * centerProj.scale, minSize);
         const squash = 0.55;
         const rx = r;
@@ -1549,7 +1549,7 @@ const Render = {
         // Pseudo-perspective ellipse: keep X radius, squash Y radius.
         const minSize = 6;
         const groundProj = this.project(character.x, character.y, 0);
-        const yOffsetPx = 16; // push the ring slightly down so it reads as projected onto the floor
+        const yOffsetPx = 24; // push the ring slightly down so it reads as projected onto the floor
         const r = Math.max(receiveZoneRadius * this.courtTileSize * groundProj.scale, minSize);
         const squash = 0.55;
         const rx = r;

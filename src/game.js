@@ -944,8 +944,8 @@ const Game = {
             // Big upward pop so it arcs high (untouchable) then falls out.
             const vz = vertical * Physics.ballMovementSpeed * 2.0;
             // Horizontal is strong so it leaves court quickly (but keep it reasonable).
-            const vx = nx * horizontal * Physics.ballMovementSpeed * 1.1;
-            const vy = ny * horizontal * Physics.ballMovementSpeed * 1.1;
+            const vx = nx * horizontal * Physics.ballMovementSpeed * 0.6;
+            const vy = ny * horizontal * Physics.ballMovementSpeed * 0.6;
 
             Physics.ball.vx = vx + servingChar.vx * 0.02;
             Physics.ball.vy = vy + servingChar.vy * 0.02;

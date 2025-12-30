@@ -31,6 +31,8 @@ const Game = {
         aiServeTimer: 0,
         isServing: true, // Game starts with serving state
         servingPlayer: 'player', // Who is currently serving ('player' or 'ai')
+        playerServeIndex: 0, // Which player character is serving (0 or 1)
+        aiServeIndex: 0, // Which AI character is serving (0 or 1)
         serveMovementLock: 0, // Timer to lock movement briefly after serving (prevents W/S from moving character)
         isChargingServe: false, // True when I key is held down during serving
         serveChargeTimer: 0, // How long I has been held (0.0 to maxChargeTime)
@@ -99,6 +101,8 @@ const Game = {
         this.state.aiServeTimer = 0;
         this.state.isServing = true;
         this.state.servingPlayer = 'player';
+        this.state.playerServeIndex = 0;
+        this.state.aiServeIndex = 0;
         this.state.serveMovementLock = 0;
         this.state.isChargingServe = false;
         this.state.serveChargeTimer = 0;
@@ -395,7 +399,8 @@ const Game = {
         
         // Check for spike serve at jump peak
         if (this.state.spikeServePending && this.state.servingPlayer === 'player') {
-            const servingChar = Physics.player;
+            const serveIndex = this.state.playerServeIndex ?? 0;
+            const servingChar = (Physics.playerTeam && Physics.playerTeam[serveIndex]) || Physics.controlledCharacter || Physics.playerTeam[0];
             // Check if character is at jump peak (vz is near 0 or negative, and not on ground)
             // Peak is when upward velocity becomes zero or negative
             if (!servingChar.onGround && servingChar.vz <= 0.01) {
@@ -451,40 +456,30 @@ const Game = {
     
     resetAfterScore() {
         if (this.state.matchOver) return;
-        // Reset character positions - serve position: further from net
-        const pSpawn = this.findNearestIntactTileCenter(1, 2, 'player');
-        Physics.player.x = pSpawn.x;
-        Physics.player.y = pSpawn.y;
-        Physics.player.z = 0;
-        Physics.player.vx = 0;
-        Physics.player.vy = 0;
-        Physics.player.vz = 0;
-        Physics.player.onGround = true;
-        Physics.player.hasSpiked = false;
-        Physics.player.hasReceived = false;
-        // CRITICAL: scoring reset must override falling/respawn mechanics
-        Physics.player.isFalling = false;
-        Physics.player.fallTimer = 0;
-        Physics.player.fallEdge = null;
-        Physics.player.isBlinking = false;
-        Physics.player.blinkTimer = 0;
+        // Reset all character positions
+        // Player team
+        if (Physics.playerTeam && Physics.playerTeam.length >= 2) {
+            const p1Spawn = this.findNearestIntactTileCenter(1, 1, 'player');
+            const p2Spawn = this.findNearestIntactTileCenter(1, 3, 'player');
+            Physics.resetCharacter(Physics.playerTeam[0], p1Spawn.x, p1Spawn.y);
+            Physics.resetCharacter(Physics.playerTeam[1], p2Spawn.x, p2Spawn.y);
+        }
         
-        const aiSpawn = this.findNearestIntactTileCenter(7, 2, 'ai');
-        Physics.ai.x = aiSpawn.x;
-        Physics.ai.y = aiSpawn.y;
-        Physics.ai.z = 0;
-        Physics.ai.vx = 0;
-        Physics.ai.vy = 0;
-        Physics.ai.vz = 0;
-        Physics.ai.onGround = true;
-        Physics.ai.hasSpiked = false;
-        Physics.ai.hasReceived = false;
-        // CRITICAL: scoring reset must override falling/respawn mechanics
-        Physics.ai.isFalling = false;
-        Physics.ai.fallTimer = 0;
-        Physics.ai.fallEdge = null;
-        Physics.ai.isBlinking = false;
-        Physics.ai.blinkTimer = 0;
+        // AI team
+        if (Physics.aiTeam && Physics.aiTeam.length >= 2) {
+            const a1Spawn = this.findNearestIntactTileCenter(7, 1, 'ai');
+            const a2Spawn = this.findNearestIntactTileCenter(7, 3, 'ai');
+            Physics.resetCharacter(Physics.aiTeam[0], a1Spawn.x, a1Spawn.y);
+            Physics.resetCharacter(Physics.aiTeam[1], a2Spawn.x, a2Spawn.y);
+        }
+        
+        // Set controlled character to serving character
+        if (this.state.servingPlayer === 'player' && Physics.playerTeam) {
+            const serveIndex = this.state.playerServeIndex ?? 0;
+            Physics.controlledCharacter = Physics.playerTeam[serveIndex];
+        } else {
+            Physics.controlledCharacter = Physics.playerTeam?.[0];
+        }
         
         // Reset transient serve state (in case a point happens mid-charge or mid-spike-serve jump)
         this.state.serveMovementLock = 0;
@@ -500,13 +495,36 @@ const Game = {
         // Alternate serve based on total points
         this.state.isServing = true;
         const totalPoints = this.state.playerScore + this.state.aiScore;
+        const wasPlayerServing = this.state.servingPlayer === 'player';
         this.state.servingPlayer = (totalPoints % 2 === 0) ? 'player' : 'ai';
+        
+        // Rotate serve: alternate between team members
+        if (this.state.servingPlayer === 'player') {
+            // Rotate player serve
+            this.state.playerServeIndex = (this.state.playerServeIndex + 1) % 2;
+        } else {
+            // Rotate AI serve
+            this.state.aiServeIndex = (this.state.aiServeIndex + 1) % 2;
+        }
+        
         this.setupServe();
     },
     
     setupServe() {
         // Position ball "held" by the serving character
-        const servingChar = this.state.servingPlayer === 'player' ? Physics.player : Physics.ai;
+        let servingChar = null;
+        if (this.state.servingPlayer === 'player') {
+            const serveIndex = this.state.playerServeIndex ?? 0;
+            servingChar = (Physics.playerTeam && Physics.playerTeam[serveIndex]) || Physics.controlledCharacter || Physics.playerTeam[0];
+            // Set controlled character to serving character
+            if (servingChar) {
+                Physics.controlledCharacter = servingChar;
+            }
+        } else {
+            const serveIndex = this.state.aiServeIndex ?? 0;
+            servingChar = (Physics.aiTeam && Physics.aiTeam[serveIndex]) || Physics.aiTeam[0];
+        }
+        if (!servingChar) return;
         
         // Ball is held at character position, slightly above ground
         Physics.ball.x = servingChar.x;

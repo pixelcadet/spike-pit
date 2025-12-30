@@ -57,7 +57,9 @@ const AI = {
     },
     
     update(deltaTime = 1/60) {
-        const ai = Physics.ai;
+        // Use first AI character for decision-making (all AI characters share the same logic for now)
+        const ai = (Physics.aiTeam && Physics.aiTeam[0]) || Physics.ai;
+        if (!ai) return;
         const ball = Physics.ball;
         const netX = Physics.NET_X;
         this.state.spikeCooldown = Math.max(0, this.state.spikeCooldown - deltaTime);

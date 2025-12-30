@@ -326,20 +326,16 @@ const Controls = {
         Physics.RECEIVE_ZONE_CORE_MULT = mult;
     },
     
-    // Convert 1-10 scale to spike zone radius (0.42 to 1.26, with 5 = 0.96)
-    // Recalibrated: slider 5 = 0.96 (new standard/default)
+    // Convert 1-10 scale to spike zone radius.
+    // Recalibrated so the old "Spike Zone Size" 4 becomes the new max (10).
+    // Old mapping had 4 ≈ 0.825, so we cap at ~0.825 now to avoid overly huge zones.
     updateSpikeZoneSize(scale) {
-        // Map scale 1-10 to radius range, with scale 5 = 0.96
-        // We want: scale 1 = 0.42, scale 5 = 0.96, scale 10 = 1.26
-        // Using piecewise linear mapping to ensure scale 5 = 0.96
-        let radius;
-        if (scale <= 5) {
-            // Map 1-5 to 0.42-0.96
-            radius = 0.42 + (0.96 - 0.42) * ((scale - 1) / (5 - 1));
-        } else {
-            // Map 5-10 to 0.96-1.26
-            radius = 0.96 + (1.26 - 0.96) * ((scale - 5) / (10 - 5));
-        }
+        // Linear interpolation: min + (max - min) * ((scale - 1) / 9)
+        // Slider 1  = 0.30 (intentionally small; may not cover entire body)
+        // Slider 10 = 0.825 (previously ≈ slider 4)
+        const minRadius = 0.30;
+        const maxRadius = 0.825;
+        const radius = minRadius + (maxRadius - minRadius) * ((scale - 1) / 9);
         
         // Apply to physics system (shared by both player + AI)
         Physics.SPIKE_ZONE_RADIUS = radius;

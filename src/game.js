@@ -924,35 +924,57 @@ const Game = {
         this.state.isServing = false;
         
         const servingChar = this.state.servingPlayer === 'player' ? Physics.player : Physics.ai;
-        const { vertical } = this.state.spikeServePower;
+        const { horizontal, vertical } = this.state.spikeServePower;
         const { x: targetX, y: targetY } = this.state.spikeServeTarget;
         
-        // Downward spike trajectory (negative vz for downward)
-        // Steeper angle for normal spike serve, less steep for overcharged (goes out of court)
-        const downwardMultiplier = this.state.isOverchargedSpikeServe ? 0.8 : 1.5; // Even less steep for overcharged (0.8 instead of 1.0)
-        const vz = -vertical * Physics.ballMovementSpeed * downwardMultiplier;
-
-        // Target-driven horizontal velocity:
-        // Previous implementation used a fixed horizontal "power", which could overshoot the intended lane.
-        // Instead, estimate airtime (in 60fps frames) and choose vx/vy so the ball lands near (targetX,targetY).
         const b = Physics.ball;
+        const isOvercharged = !!this.state.isOverchargedSpikeServe;
         const gEff = Physics.GRAVITY * Physics.ballMovementSpeed; // per-60fps-frame accel
-        const z0 = Math.max(0.001, b.z - b.groundLevel);
-        const disc = (vz * vz) + 2 * gEff * z0;
-        const flightFrames = disc > 0 ? (vz + Math.sqrt(disc)) / gEff : 8;
-        const tFrames = Math.max(3, flightFrames);
-        const vx = (targetX - b.x) / tFrames;
-        const vy = (targetY - b.y) / tFrames;
+
+        // Overcharged spike serve should read as a true "bad zone":
+        // launch upward (NOT downward toward court) and fly out-of-bounds clearly so AI can’t realistically touch it.
+        if (isOvercharged) {
+            // Strong forward + upward launch
+            const dirX = targetX - b.x;
+            const dirY = targetY - b.y;
+            const dirLen = Math.sqrt(dirX * dirX + dirY * dirY) || 0.0001;
+            const nx = dirX / dirLen;
+            const ny = dirY / dirLen;
+
+            // Big upward pop so it arcs high (untouchable) then falls out.
+            const vz = vertical * Physics.ballMovementSpeed * 2.0;
+            // Horizontal is strong so it leaves court quickly.
+            const vx = nx * horizontal * Physics.ballMovementSpeed * 2.2;
+            const vy = ny * horizontal * Physics.ballMovementSpeed * 2.2;
+
+            Physics.ball.vx = vx + servingChar.vx * 0.02;
+            Physics.ball.vy = vy + servingChar.vy * 0.02;
+            Physics.ball.vz = vz;
+        } else {
+            // Normal spike serve: downward spike trajectory (negative vz for downward)
+            const downwardMultiplier = 1.5;
+            const vz = -vertical * Physics.ballMovementSpeed * downwardMultiplier;
+
+            // Target-driven horizontal velocity:
+            // Estimate airtime (in 60fps frames) and choose vx/vy so the ball lands near (targetX,targetY).
+            const z0 = Math.max(0.001, b.z - b.groundLevel);
+            const disc = (vz * vz) + 2 * gEff * z0;
+            const flightFrames = disc > 0 ? (vz + Math.sqrt(disc)) / gEff : 8;
+            const tFrames = Math.max(3, flightFrames);
+            const vx = (targetX - b.x) / tFrames;
+            const vy = (targetY - b.y) / tFrames;
+
+            Physics.ball.vx = vx + servingChar.vx * 0.02;
+            Physics.ball.vy = vy + servingChar.vy * 0.02;
+            Physics.ball.vz = vz;
+        }
         
         // Set ball velocities
         const timestamp = performance.now();
-        Physics.ball.vx = vx + servingChar.vx * 0.02;
-        Physics.ball.vy = vy + servingChar.vy * 0.02;
-        Physics.ball.vz = vz;
         
         // Store timestamp for debugging
         Physics.ball._lastVelocitySetTime = timestamp;
-        Physics.ball._lastVelocitySetValues = { vx: Physics.ball.vx, vy: Physics.ball.vy, vz };
+        Physics.ball._lastVelocitySetValues = { vx: Physics.ball.vx, vy: Physics.ball.vy, vz: Physics.ball.vz };
         
         // CRITICAL: If player keeps holding 'I' after spike serve executes, main.js would treat it as a hit
         // and call Physics.attemptSpike(), overwriting these velocities (matches your log: vx=0.2497, vz=-0.0907).

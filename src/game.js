@@ -925,44 +925,35 @@ const Game = {
         this.state.isServing = false;
         
         const servingChar = this.state.servingPlayer === 'player' ? Physics.player : Physics.ai;
-        const { horizontal, vertical } = this.state.spikeServePower;
+        const { vertical } = this.state.spikeServePower;
         const { x: targetX, y: targetY } = this.state.spikeServeTarget;
-        
-        // Calculate direction to target
-        const dirX = targetX - Physics.ball.x;
-        const dirY = targetY - Physics.ball.y;
-        const dirLength = Math.sqrt(dirX * dirX + dirY * dirY);
-        
-        // Calculate velocities
-        let vx, vy;
-        if (dirLength < 0.01) {
-            if (this.state.servingPlayer === 'player') {
-                vx = horizontal * Physics.ballMovementSpeed;
-            } else {
-                vx = -horizontal * Physics.ballMovementSpeed;
-            }
-            vy = 0;
-        } else {
-            const normDirX = dirX / dirLength;
-            const normDirY = dirY / dirLength;
-            vx = normDirX * horizontal * Physics.ballMovementSpeed;
-            vy = normDirY * horizontal * Physics.ballMovementSpeed;
-        }
         
         // Downward spike trajectory (negative vz for downward)
         // Steeper angle for normal spike serve, less steep for overcharged (goes out of court)
         const downwardMultiplier = this.state.isOverchargedSpikeServe ? 0.8 : 1.5; // Even less steep for overcharged (0.8 instead of 1.0)
         const vz = -vertical * Physics.ballMovementSpeed * downwardMultiplier;
+
+        // Target-driven horizontal velocity:
+        // Previous implementation used a fixed horizontal "power", which could overshoot the intended lane.
+        // Instead, estimate airtime (in 60fps frames) and choose vx/vy so the ball lands near (targetX,targetY).
+        const b = Physics.ball;
+        const gEff = Physics.GRAVITY * Physics.ballMovementSpeed; // per-60fps-frame accel
+        const z0 = Math.max(0.001, b.z - b.groundLevel);
+        const disc = (vz * vz) + 2 * gEff * z0;
+        const flightFrames = disc > 0 ? (vz + Math.sqrt(disc)) / gEff : 8;
+        const tFrames = Math.max(3, flightFrames);
+        const vx = (targetX - b.x) / tFrames;
+        const vy = (targetY - b.y) / tFrames;
         
         // Set ball velocities
         const timestamp = performance.now();
-        Physics.ball.vx = vx;
-        Physics.ball.vy = vy;
+        Physics.ball.vx = vx + servingChar.vx * 0.02;
+        Physics.ball.vy = vy + servingChar.vy * 0.02;
         Physics.ball.vz = vz;
         
         // Store timestamp for debugging
         Physics.ball._lastVelocitySetTime = timestamp;
-        Physics.ball._lastVelocitySetValues = { vx, vy, vz };
+        Physics.ball._lastVelocitySetValues = { vx: Physics.ball.vx, vy: Physics.ball.vy, vz };
         
         // CRITICAL: If player keeps holding 'I' after spike serve executes, main.js would treat it as a hit
         // and call Physics.attemptSpike(), overwriting these velocities (matches your log: vx=0.2497, vz=-0.0907).

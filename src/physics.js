@@ -102,14 +102,14 @@ const Physics = {
     },
     
     init() {
-        // Initialize teams
+        // Initialize teams - ensure clearly different positions
         this.playerTeam = [
-            this.createCharacter(1.0, 1.5, 0.15, true),  // Player 1: left side, front
-            this.createCharacter(1.0, 2.5, 0.15, true)   // Player 2: left side, back
+            this.createCharacter(1.0, 1.0, 0.15, true),  // Player 1: left side, front (y=1.0)
+            this.createCharacter(1.0, 3.0, 0.15, true)   // Player 2: left side, back (y=3.0)
         ];
         this.aiTeam = [
-            this.createCharacter(7.0, 1.5, 0.12, false),  // AI 1: right side, front
-            this.createCharacter(7.0, 2.5, 0.12, false)   // AI 2: right side, back
+            this.createCharacter(7.0, 1.0, 0.12, false),  // AI 1: right side, front (y=1.0)
+            this.createCharacter(7.0, 3.0, 0.12, false)   // AI 2: right side, back (y=3.0)
         ];
         
         // Set initial controlled character (closest to ball or first character)
@@ -252,16 +252,16 @@ const Physics = {
     },
     
     reset() {
-        // Reset player team
+        // Reset player team - ensure clearly different positions
         if (this.playerTeam && this.playerTeam.length >= 2) {
-            this.resetCharacter(this.playerTeam[0], 1.0, 1.5); // Front
-            this.resetCharacter(this.playerTeam[1], 1.0, 2.5); // Back
+            this.resetCharacter(this.playerTeam[0], 1.0, 1.0); // Front (y=1.0)
+            this.resetCharacter(this.playerTeam[1], 1.0, 3.0); // Back (y=3.0)
         }
         
-        // Reset AI team
+        // Reset AI team - ensure clearly different positions
         if (this.aiTeam && this.aiTeam.length >= 2) {
-            this.resetCharacter(this.aiTeam[0], 7.0, 1.5); // Front
-            this.resetCharacter(this.aiTeam[1], 7.0, 2.5); // Back
+            this.resetCharacter(this.aiTeam[0], 7.0, 1.0); // Front (y=1.0)
+            this.resetCharacter(this.aiTeam[1], 7.0, 3.0); // Back (y=3.0)
         }
         
         // Set controlled character to first player

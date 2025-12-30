@@ -1138,7 +1138,8 @@ const Physics = {
                 targetX = Math.max(this.NET_X + 0.4, Math.min(this.COURT_WIDTH - 0.4, targetX));
                 // Allow aiming with buffered W/S input (doesn't require perfect simultaneous press)
                 const aimDir = Input.getAimDepthDirection?.() ?? 0;
-                const aimOffset = this.COURT_LENGTH * 0.22; // lane offset (~top/bottom)
+                // Make W/S spike direction harsher so it deviates wider (more extreme lanes).
+                const aimOffset = this.COURT_LENGTH * 0.30; // lane offset (~top/bottom)
                 targetY = this.COURT_LENGTH * 0.5 + aimDir * aimOffset;
                 targetY = Math.max(0.3, Math.min(this.COURT_LENGTH - 0.3, targetY));
             } else {

@@ -52,27 +52,24 @@ function gameLoop(currentTime) {
         }
         // Keyup is handled in Input.init() keyup event listener
     } else if (Input.shouldAttemptHit()) {
-        // Normal gameplay: spike/receive (controlled character only)
-        const controlledChar = Physics.controlledCharacter;
-        if (controlledChar) {
-            if (!controlledChar.onGround) {
-                // Mid-air: check which zone the ball is in
-                // Try spike first (if ball in spike zone), then receive (if ball in receiving zone)
-                const spikeAttempted = Physics.attemptSpike(controlledChar);
-                if (!spikeAttempted) {
-                    // If spike didn't work (ball not in spike zone), try receive
-                    Physics.attemptReceive(controlledChar);
-                }
-            } else {
-                // On ground: attempt receive
-                Physics.attemptReceive(controlledChar);
+        // Normal gameplay: spike/receive
+        if (!Physics.player.onGround) {
+            // Mid-air: check which zone the ball is in
+            // Try spike first (if ball in spike zone), then receive (if ball in receiving zone)
+            const spikeAttempted = Physics.attemptSpike(Physics.player);
+            if (!spikeAttempted) {
+                // If spike didn't work (ball not in spike zone), try receive
+                Physics.attemptReceive(Physics.player);
             }
+        } else {
+            // On ground: attempt receive
+            Physics.attemptReceive(Physics.player);
+        }
 
-            // If an actual action happened (spike/receive/toss), consume the hold so we don't fire again
-            // until the player releases I.
-            if (controlledChar.justAttemptedAction) {
-                Input.consumeHit();
-            }
+        // If an actual action happened (spike/receive/toss), consume the hold so we don't fire again
+        // until the player releases I.
+        if (Physics.player.justAttemptedAction) {
+            Input.consumeHit();
         }
     }
     
@@ -84,16 +81,12 @@ function gameLoop(currentTime) {
             Game.serveBall();
         }
     } else {
-        // Normal gameplay: spike/receive for AI team
-        if (Physics.aiTeam) {
-            for (const ai of Physics.aiTeam) {
-                if (aiInput.spike) {
-                    Physics.attemptSpike(ai);
-                }
-                if (aiInput.receive) {
-                    Physics.attemptReceive(ai);
-                }
-            }
+        // Normal gameplay: spike/receive
+        if (aiInput.spike) {
+            Physics.attemptSpike(Physics.ai);
+        }
+        if (aiInput.receive) {
+            Physics.attemptReceive(Physics.ai);
         }
     }
     

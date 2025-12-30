@@ -126,7 +126,9 @@ const Physics = {
         // Touch counter (per-side). Resets only when ball crosses the net.
         touchesRemaining: 5,
         touchCooldown: 0, // small cooldown to avoid repeated decrements while overlapping net/body
-        prevX: 2.0
+        prevX: 2.0,
+        // Visual rotation (sprite animation only, doesn't affect physics)
+        rotationAngle: 0 // Rotation angle in radians for visual effect
     },
     
     init() {
@@ -152,6 +154,7 @@ const Physics = {
         this.ball.touchesRemaining = Game?.state?.touchesPerSide ?? 5;
         this.ball.touchCooldown = 0;
         this.ball.prevX = this.ball.x;
+        this.ball.rotationAngle = 0; // Reset visual rotation
     },
 
     // Apply touch limit logic.
@@ -1697,6 +1700,16 @@ const Physics = {
         b.x += b.vx * frameScale;
         b.y += b.vy * frameScale;
         b.z += b.vz * frameScale;
+        
+        // Update visual rotation based on horizontal velocity (visual effect only)
+        // Rotation speed is proportional to horizontal movement speed
+        const horizontalSpeed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+        const rotationSpeed = horizontalSpeed * 0.8; // Rotation multiplier (tuned for visual feel)
+        b.rotationAngle = (b.rotationAngle ?? 0) + rotationSpeed * frameScale;
+        // Keep angle in reasonable range to avoid precision issues
+        if (b.rotationAngle > Math.PI * 2) {
+            b.rotationAngle -= Math.PI * 2;
+        }
 
         // If the ball crossed the net plane this frame, reset the per-side touch counter.
         // Use a small height gate so we only reset when it plausibly went over the net.

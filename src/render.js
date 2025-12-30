@@ -471,7 +471,7 @@ const Render = {
 
     // Draw an ellipsoid HP bar on the ground at the character position (matches receive zone shape).
     // Uses Game.state.playerHp/aiHp and max HP; purely visual.
-    drawHpArcGround(character, color, hp, maxHp, drainFromRight = false, opacity = 1.0) {
+    drawHpArcGround(character, color, hp, maxHp, drainFromRight = false) {
         const ctx = this.ctx;
         if (hp == null || maxHp == null || maxHp <= 0) return;
         if (character.z < 0) return; // don't draw while falling under floor
@@ -497,7 +497,6 @@ const Render = {
         const lineWidth = receiveZoneLineWidth * 2.0; // 2.0x thicker
 
         ctx.save();
-        ctx.globalAlpha = opacity;
         ctx.lineWidth = lineWidth;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
@@ -558,31 +557,38 @@ const Render = {
         let shadowY = shadowProj.y;
         const alignmentThreshold = 0.3; // Distance threshold for "directly above"
         
-        // Check all characters for ball alignment
-        const allChars = Physics.getAllCharacters ? Physics.getAllCharacters() : [];
-        let closestChar = null;
-        let minDist = Infinity;
-        
-        for (const char of allChars) {
-            const dist = Math.sqrt(
-                Math.pow(ball.x - char.x, 2) + Math.pow(ball.y - char.y, 2)
-            );
-            if (dist < alignmentThreshold && dist < minDist) {
-                minDist = dist;
-                closestChar = char;
-            }
-        }
-        
-        if (closestChar) {
-            // Ball is above a character, use that character's shadow Y position
-            const charProj = this.project(closestChar.x, closestChar.y, closestChar.z);
-            const charShadowProj = this.project(closestChar.x, closestChar.y, 0);
-            const charSize = closestChar.radius * this.courtTileSize * charProj.scale;
+        // Check player character
+        const player = Physics.player;
+        const distToPlayer = Math.sqrt(
+            Math.pow(ball.x - player.x, 2) + Math.pow(ball.y - player.y, 2)
+        );
+        if (distToPlayer < alignmentThreshold) {
+            // Ball is above player, use player's shadow Y position
+            const playerProj = this.project(player.x, player.y, player.z);
+            const playerShadowProj = this.project(player.x, player.y, 0);
+            const charSize = player.radius * this.courtTileSize * playerProj.scale;
             const minSize = 8;
             const finalSize = Math.max(charSize, minSize);
             const rectHeight = finalSize * 1.5;
-            const scaleRatio = charShadowProj.scale / charProj.scale;
-            shadowY = charShadowProj.y + (rectHeight / 2) * scaleRatio;
+            const scaleRatio = playerShadowProj.scale / playerProj.scale;
+            shadowY = playerShadowProj.y + (rectHeight / 2) * scaleRatio;
+        } else {
+            // Check AI character
+            const ai = Physics.ai;
+            const distToAI = Math.sqrt(
+                Math.pow(ball.x - ai.x, 2) + Math.pow(ball.y - ai.y, 2)
+            );
+            if (distToAI < alignmentThreshold) {
+                // Ball is above AI, use AI's shadow Y position
+                const aiProj = this.project(ai.x, ai.y, ai.z);
+                const aiShadowProj = this.project(ai.x, ai.y, 0);
+                const charSize = ai.radius * this.courtTileSize * aiProj.scale;
+                const minSize = 8;
+                const finalSize = Math.max(charSize, minSize);
+                const rectHeight = finalSize * 1.5;
+                const scaleRatio = aiShadowProj.scale / aiProj.scale;
+                shadowY = aiShadowProj.y + (rectHeight / 2) * scaleRatio;
+            }
         }
         
         ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
@@ -628,9 +634,16 @@ const Render = {
         const maxTouches = Game?.state?.touchesPerSide ?? 3;
         const tr = (typeof ball.touchesRemaining === 'number') ? ball.touchesRemaining : maxTouches;
         const isDark = tr <= 0;
+        
+        // Apply rotation transform for visual effect
+        ctx.save();
+        ctx.translate(proj.x, proj.y);
+        ctx.rotate(ball.rotationAngle ?? 0);
+        
+        // Draw main ball body
         ctx.fillStyle = isDark ? '#b00000' : '#ff0000';
         ctx.beginPath();
-        ctx.arc(proj.x, proj.y, finalBallSize, 0, Math.PI * 2);
+        ctx.arc(0, 0, finalBallSize, 0, Math.PI * 2);
         ctx.fill();
         
         // Draw ball border
@@ -638,12 +651,14 @@ const Render = {
         ctx.lineWidth = 3;
         ctx.stroke();
         
-        // Draw ball highlight
+        // Draw ball highlight (rotated with the ball)
         // Highlight also darkens slightly when exhausted.
         ctx.fillStyle = isDark ? '#d45555' : '#ff6666';
         ctx.beginPath();
-        ctx.arc(proj.x - finalBallSize * 0.3, proj.y - finalBallSize * 0.3, finalBallSize * 0.4, 0, Math.PI * 2);
+        ctx.arc(-finalBallSize * 0.3, -finalBallSize * 0.3, finalBallSize * 0.4, 0, Math.PI * 2);
         ctx.fill();
+        
+        ctx.restore();
     },
     
     // Main render function
@@ -655,15 +670,14 @@ const Render = {
         this.aiSpikeHighlight = false;
         this.aiReceivingHighlight = false;
         
-        // Player highlights (for controlled character only)
-        const controlledChar = Physics.controlledCharacter;
-        if (input.isHitPressed() && controlledChar) {
-            if (!controlledChar.onGround) {
+        // Player highlights
+        if (input.isHitPressed()) {
+            if (!Physics.player.onGround) {
                 // Mid-air: check which zone ball is in
                 const ball = Physics.ball;
-                const spikeZoneX = controlledChar.x + Physics.SPIKE_ZONE_FORWARD_OFFSET;
-                const spikeZoneY = controlledChar.y;
-                const spikeZoneZ = controlledChar.z + Physics.SPIKE_ZONE_UPWARD_OFFSET; // Slightly above center mass
+                const spikeZoneX = Physics.player.x + Physics.SPIKE_ZONE_FORWARD_OFFSET;
+                const spikeZoneY = Physics.player.y;
+                const spikeZoneZ = Physics.player.z + Physics.SPIKE_ZONE_UPWARD_OFFSET; // Slightly above center mass
                 const dxSpike = ball.x - spikeZoneX;
                 const dySpike = ball.y - spikeZoneY;
                 const dzSpike = ball.z - spikeZoneZ;
@@ -679,9 +693,9 @@ const Render = {
                     this.playerReceivingHighlight = false;
                 } else {
                     // Check receiving zone (using ellipsoid + core logic to match physics)
-                    const receiveZoneZ = controlledChar.z;
-                    const dxReceive = ball.x - controlledChar.x;
-                    const dyReceive = ball.y - controlledChar.y;
+                    const receiveZoneZ = Physics.player.z;
+                    const dxReceive = ball.x - Physics.player.x;
+                    const dyReceive = ball.y - Physics.player.y;
                     const dzReceive = ball.z - receiveZoneZ;
                     
                     // Two-part receive zone (matches physics):
@@ -761,39 +775,11 @@ const Render = {
         };
 
         // Separate entities into those behind the court (off EDGE A or EDGE B) and those on/in front of the court
-        // Build entities array from all characters (playerTeam + aiTeam)
-        const entities = [];
-        const controlledChar = Physics.controlledCharacter; // Declare once at top of render()
-        
-        // Add player team characters
-        if (Physics.playerTeam) {
-            for (const char of Physics.playerTeam) {
-                const isControlled = char === controlledChar;
-                entities.push({ 
-                    type: 'character', 
-                    data: char, 
-                    color: '#4a9eff', 
-                    y: char.y,
-                    isControlled: isControlled
-                });
-            }
-        }
-        
-        // Add AI team characters
-        if (Physics.aiTeam) {
-            for (const char of Physics.aiTeam) {
-                entities.push({ 
-                    type: 'character', 
-                    data: char, 
-                    color: '#ff4a4a', 
-                    y: char.y,
-                    isControlled: false // AI characters are never controlled
-                });
-            }
-        }
-        
-        // Add ball
-        entities.push({ type: 'ball', y: Physics.ball.y, x: Physics.ball.x });
+        const entities = [
+            { type: 'character', data: Physics.player, color: '#4a9eff', y: Physics.player.y },
+            { type: 'character', data: Physics.ai, color: '#ff4a4a', y: Physics.ai.y },
+            { type: 'ball', y: Physics.ball.y, x: Physics.ball.x }
+        ];
         
         // Split entities: behind court (off EDGE A or EDGE B, or falling from EDGE A/B) vs on/in front of court.
         // NOTE: We do NOT push "falling into hole" behind the whole court anymore. Instead, we render a targeted
@@ -876,16 +862,13 @@ const Render = {
         // If so, we'll render a targeted "mask" of tiles (same row and closer-to-camera rows on that half-court)
         // above the falling entity, without clipping the opponent or the whole scene.
         const fallingIntoHole = [];
-        // Check all characters for falling into holes
-        const allChars = Physics.getAllCharacters ? Physics.getAllCharacters() : [];
-        for (const char of allChars) {
-            if (char.z < 0) {
-                const ht = getCharacterHoleTile(char);
-                if (ht) {
-                    const color = char.isPlayerTeam ? '#4a9eff' : '#ff4a4a';
-                    fallingIntoHole.push({ type: 'character', data: char, color: color, holeTx: ht.tx, holeTy: ht.ty });
-                }
-            }
+        if (Physics.player.z < 0) {
+            const ht = getCharacterHoleTile(Physics.player);
+            if (ht) fallingIntoHole.push({ type: 'character', data: Physics.player, color: '#4a9eff', holeTx: ht.tx, holeTy: ht.ty });
+        }
+        if (Physics.ai.z < 0) {
+            const ht = getCharacterHoleTile(Physics.ai);
+            if (ht) fallingIntoHole.push({ type: 'character', data: Physics.ai, color: '#ff4a4a', holeTx: ht.tx, holeTy: ht.ty });
         }
         if (Physics.ball.z < 0 && isOverHole(Physics.ball.x, Physics.ball.y)) {
             fallingIntoHole.push({ type: 'ball', holeTx: Math.floor(Physics.ball.x), holeTy: Math.floor(Physics.ball.y) });
@@ -936,8 +919,7 @@ const Render = {
             if (this.showReceiveZone) {
                 entitiesOnCourt.forEach(entity => {
                     if (entity.type === 'character' && entity.data.z >= 0) {
-                        const opacity = entity.isControlled ? 1.0 : 0.5;
-                        this.drawReceivingZoneGroundRing(entity.data, entity.color, opacity);
+                        this.drawReceivingZoneGroundRing(entity.data, entity.color);
                     }
                 });
             }
@@ -963,21 +945,8 @@ const Render = {
         // Always show (independent of showReceiveZone/showHitboxes).
         const pMaxHp = Game?.state?.maxPlayerHp ?? 10;
         const aMaxHp = Game?.state?.maxAiHp ?? 10;
-        // controlledChar already declared at top of render()
-        
-        // Draw HP for all characters with opacity for non-controlled
-        if (Physics.playerTeam) {
-            for (const char of Physics.playerTeam) {
-                const isControlled = char === controlledChar;
-                const opacity = isControlled ? 1.0 : 0.5;
-                this.drawHpArcGround(char, '#4a9eff', Game?.state?.playerHp ?? pMaxHp, pMaxHp, true, opacity);
-            }
-        }
-        if (Physics.aiTeam) {
-            for (const char of Physics.aiTeam) {
-                this.drawHpArcGround(char, '#ff4a4a', Game?.state?.aiHp ?? aMaxHp, aMaxHp, false, 1.0);
-            }
-        }
+        this.drawHpArcGround(Physics.player, '#4a9eff', Game?.state?.playerHp ?? pMaxHp, pMaxHp, true);
+        this.drawHpArcGround(Physics.ai, '#ff4a4a', Game?.state?.aiHp ?? aMaxHp, aMaxHp, false);
 
         // Draw falling-into-hole entities first (so we can draw mask tiles above them).
         // Non-falling entities are drawn after the mask so they don't get clipped.
@@ -1228,35 +1197,24 @@ const Render = {
     drawHitboxes() {
         if (!this.showHitboxes) return;
 
-        // Character hitboxes (3D spheres) - all characters
-        const allChars = Physics.getAllCharacters ? Physics.getAllCharacters() : [];
-        for (const char of allChars) {
-            const color = char.isPlayerTeam ? '#4a9eff' : '#ff4a4a';
-            this.drawCharacterHitbox(char, color);
-            this.drawCharacterFootprint(char, '#00ff00');
-        }
+        // Character hitboxes (3D spheres)
+        this.drawCharacterHitbox(Physics.player, '#4a9eff');
+        this.drawCharacterHitbox(Physics.ai, '#ff4a4a');
+
+        // Footprints (edge vs hole footprint sizes are drawn distinctly)
+        this.drawCharacterFootprint(Physics.player, '#00ff00');
+        this.drawCharacterFootprint(Physics.ai, '#00ff00');
 
         // Ball + net hitboxes
         this.drawBallHitbox();
         this.drawNetHitbox();
 
         // Zone spheres (use effective radius = zone + ball radius)
-        const controlledChar = Physics.controlledCharacter;
-        if (controlledChar) {
-            this.drawSpikeZone(controlledChar, '#4a9eff', this.playerSpikeHighlight);
-            if (this.showReceiveZone) {
-                this.drawReceivingZone(controlledChar, '#4a9eff', this.playerReceivingHighlight);
-            }
-        }
-        
-        // AI team zones
-        if (Physics.aiTeam) {
-            for (const ai of Physics.aiTeam) {
-                this.drawSpikeZone(ai, '#ff4a4a', this.aiSpikeHighlight);
-                if (this.showReceiveZone) {
-                    this.drawReceivingZone(ai, '#ff4a4a', this.aiReceivingHighlight);
-                }
-            }
+        this.drawSpikeZone(Physics.player, '#4a9eff', this.playerSpikeHighlight);
+        this.drawSpikeZone(Physics.ai, '#ff4a4a', this.aiSpikeHighlight);
+        if (this.showReceiveZone) {
+            this.drawReceivingZone(Physics.player, '#4a9eff', this.playerReceivingHighlight);
+            this.drawReceivingZone(Physics.ai, '#ff4a4a', this.aiReceivingHighlight);
         }
     },
     
@@ -1609,7 +1567,7 @@ const Render = {
     },
     
     // Draw receiving zone ground ring (always visible, shows area on court ground)
-    drawReceivingZoneGroundRing(character, color, opacity = 1.0) {
+    drawReceivingZoneGroundRing(character, color) {
         const ctx = this.ctx;
         ctx.save();
         ctx.setLineDash([]); // solid (distinct from debug overlays)
@@ -1626,8 +1584,6 @@ const Render = {
         const ry = Math.max(r * squash, minSize);
         
         // Draw ring on ground (visual cue, keep subtle + distinct from debug)
-        ctx.save();
-        ctx.globalAlpha = opacity;
         ctx.strokeStyle = this.colorWithAlpha(color, 0.55);
         ctx.lineWidth = 1;
         ctx.beginPath();

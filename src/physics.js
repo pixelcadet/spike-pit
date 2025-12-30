@@ -37,6 +37,15 @@ const Physics = {
 
     // Debug
     DEBUG_LOGS: true, // set true to emit collision/dt logs to console
+    DEBUG_MAX_LOGS_PER_FRAME: 10,
+    _debugLogCount: 0,
+    
+    debugLog(tag, payload) {
+        if (!this.DEBUG_LOGS) return;
+        if (this._debugLogCount >= this.DEBUG_MAX_LOGS_PER_FRAME) return;
+        this._debugLogCount += 1;
+        console.log(tag, payload);
+    },
     
     // Player character
     player: {
@@ -1003,13 +1012,21 @@ const Physics = {
             const pushDirX = dx / dist;
             const pushDirY = dy / dist;
             const pushDirZ = dz / dist;
-            if (this.DEBUG_LOGS) {
-                console.log('[Ball-Char Collision]', {
+            const nearRatio = dist / collisionDist;
+            if (nearRatio > 0.9) {
+                this.debugLog('[Ball-Char Collision]', {
                     who: character === this.player ? 'player' : 'ai',
-                    ball: { x: b.x.toFixed(3), y: b.y.toFixed(3), z: b.z.toFixed(3) },
-                    char: { x: character.x.toFixed(3), y: character.y.toFixed(3), z: character.z.toFixed(3) },
+                    ball: {
+                        x: b.x.toFixed(3), y: b.y.toFixed(3), z: b.z.toFixed(3),
+                        vx: b.vx.toFixed(3), vy: b.vy.toFixed(3), vz: b.vz.toFixed(3)
+                    },
+                    char: {
+                        x: character.x.toFixed(3), y: character.y.toFixed(3), z: character.z.toFixed(3),
+                        vx: character.vx.toFixed(3), vy: character.vy.toFixed(3), vz: character.vz.toFixed(3)
+                    },
                     dist: dist.toFixed(4),
-                    collisionDist: collisionDist.toFixed(4)
+                    collisionDist: collisionDist.toFixed(4),
+                    ratio: nearRatio.toFixed(3)
                 });
             }
             
@@ -1503,11 +1520,16 @@ const Physics = {
                 // Main net collision - ball hits the net below the top
                 const ballOnLeftSide = b.x < netX;
                 const side = ballOnLeftSide ? 'player' : 'ai';
-                if (this.DEBUG_LOGS) {
-                    console.log('[Net Collision]', {
+                // Only log if ball is moving toward the net (avoid spam when rebounding)
+                const movingTowardNet = (ballOnLeftSide && b.vx > 0) || (!ballOnLeftSide && b.vx < 0);
+                if (movingTowardNet) {
+                    this.debugLog('[Net Collision]', {
                         zone: 'below',
                         side,
-                        ball: { x: b.x.toFixed(3), y: b.y.toFixed(3), z: b.z.toFixed(3) },
+                        ball: {
+                            x: b.x.toFixed(3), y: b.y.toFixed(3), z: b.z.toFixed(3),
+                            vx: b.vx.toFixed(3), vy: b.vy.toFixed(3), vz: b.vz.toFixed(3)
+                        },
                         distToNet: distToNet.toFixed(4)
                     });
                 }
@@ -1541,11 +1563,15 @@ const Physics = {
                 // Top edge collision - ball hits the tape/rope at top of net
                 const ballOnLeftSide = b.x < netX;
                 const side = ballOnLeftSide ? 'player' : 'ai';
-                if (this.DEBUG_LOGS) {
-                    console.log('[Net Collision]', {
+                const movingTowardNet = (ballOnLeftSide && b.vx > 0) || (!ballOnLeftSide && b.vx < 0);
+                if (movingTowardNet) {
+                    this.debugLog('[Net Collision]', {
                         zone: 'topEdge',
                         side,
-                        ball: { x: b.x.toFixed(3), y: b.y.toFixed(3), z: b.z.toFixed(3) },
+                        ball: {
+                            x: b.x.toFixed(3), y: b.y.toFixed(3), z: b.z.toFixed(3),
+                            vx: b.vx.toFixed(3), vy: b.vy.toFixed(3), vz: b.vz.toFixed(3)
+                        },
                         distToNet: distToNet.toFixed(4)
                     });
                 }
@@ -1824,6 +1850,8 @@ const Physics = {
     },
     
     update(input, aiInput, deltaTime = 1/60) {
+        // Reset per-frame debug log budget
+        this._debugLogCount = 0;
         // Update fall timers with actual deltaTime
         if (this.player.isFalling) {
             this.player.fallTimer += deltaTime;

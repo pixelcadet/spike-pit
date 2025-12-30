@@ -494,7 +494,7 @@ const Render = {
         
         // Make HP bar slightly thicker than receive zone
         const receiveZoneLineWidth = 1;
-        const lineWidth = receiveZoneLineWidth * 2.5; // 2.5x thicker
+        const lineWidth = receiveZoneLineWidth * 2.0; // 2.0x thicker
 
         ctx.save();
         ctx.lineWidth = lineWidth;
@@ -509,9 +509,9 @@ const Render = {
 
         // Filled portion (partial ellipse arc based on HP)
         if (ratio > 0) {
-            // Draw arc from 0° to (360° * ratio), starting from the right side
-            // For player (drainFromRight=true): fill drains from right, so start from left and fill clockwise
-            // For AI (drainFromRight=false): fill drains from left, so start from right and fill counter-clockwise
+            // Draw arc based on HP ratio
+            // For player (drainFromRight=true): left side stays filled, drain from right (clockwise from left)
+            // For AI (drainFromRight=false): right side stays filled, drain from left (counter-clockwise from right)
             const totalAngle = Math.PI * 2;
             let startAngle, endAngle;
             
@@ -522,9 +522,15 @@ const Render = {
                 endAngle = Math.PI + (totalAngle * ratio);
             } else {
                 // AI: right side stays filled, drain from left
-                // Start from right (0°) and fill counter-clockwise
+                // Start from right (0°) and fill counter-clockwise (use positive angles, but draw in reverse)
+                // To draw counter-clockwise, we go from a larger angle to a smaller angle
                 startAngle = 0; // 0° (right)
-                endAngle = -(totalAngle * ratio); // negative for counter-clockwise
+                endAngle = totalAngle * (1 - ratio); // As HP decreases, this increases, revealing empty space
+                // Actually, we want to draw from 0° going counter-clockwise (negative direction)
+                // But canvas ellipse() doesn't support negative angles well, so we'll use a different approach
+                // Draw from (2π - filled) to 2π, which is the same as drawing from 0° counter-clockwise
+                startAngle = totalAngle * (1 - ratio); // Start where fill should begin (counter-clockwise from right)
+                endAngle = totalAngle; // End at right (0° = 2π)
             }
             
             ctx.strokeStyle = this.colorWithAlpha(color, 0.9);

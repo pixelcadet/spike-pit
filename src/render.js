@@ -1515,6 +1515,7 @@ const Render = {
 
         // Pseudo-perspective ellipse: keep X radius, squash Y radius.
         const centerProj = this.project(character.x, character.y, receiveZoneZ);
+        const yOffsetPx = 16; // push the ring slightly down so it reads as projected onto the floor
         const r = Math.max(receiveZoneRadius * this.courtTileSize * centerProj.scale, minSize);
         const squash = 0.55;
         const rx = r;
@@ -1524,7 +1525,7 @@ const Render = {
         if (highlight) {
             ctx.fillStyle = this.colorWithAlpha(color, 0.3);
             ctx.beginPath();
-            ctx.ellipse(centerProj.x, centerProj.y, rx, ry, 0, 0, Math.PI * 2);
+            ctx.ellipse(centerProj.x, centerProj.y + yOffsetPx, rx, ry, 0, 0, Math.PI * 2);
             ctx.fill();
         }
         
@@ -1532,7 +1533,7 @@ const Render = {
         ctx.lineWidth = 2;
         ctx.setLineDash([4, 4]); // Different dash pattern for receiving zone
         ctx.beginPath();
-        ctx.ellipse(centerProj.x, centerProj.y, rx, ry, 0, 0, Math.PI * 2);
+        ctx.ellipse(centerProj.x, centerProj.y + yOffsetPx, rx, ry, 0, 0, Math.PI * 2);
         ctx.stroke();
         ctx.setLineDash([]); // Reset to solid
     },
@@ -1548,6 +1549,7 @@ const Render = {
         // Pseudo-perspective ellipse: keep X radius, squash Y radius.
         const minSize = 6;
         const groundProj = this.project(character.x, character.y, 0);
+        const yOffsetPx = 16; // push the ring slightly down so it reads as projected onto the floor
         const r = Math.max(receiveZoneRadius * this.courtTileSize * groundProj.scale, minSize);
         const squash = 0.55;
         const rx = r;
@@ -1557,7 +1559,7 @@ const Render = {
         ctx.strokeStyle = this.colorWithAlpha(color, 0.55);
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.ellipse(groundProj.x, groundProj.y, rx, ry, 0, 0, Math.PI * 2);
+        ctx.ellipse(groundProj.x, groundProj.y + yOffsetPx, rx, ry, 0, 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
     },

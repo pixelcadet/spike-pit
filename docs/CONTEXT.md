@@ -315,7 +315,20 @@ The MVP must remain minimal and shippable.
 
 **Why:** Some physics integration is effectively **per-frame** (e.g., position updates like `x += vx`, `z += vz`), so a higher refresh rate runs more updates per second.
 
-**Future fix:** Convert physics to be **time-based** using `deltaTime` for integration (e.g., `x += vx * dt`, `vz -= g * dt`, etc.). This will require re-tuning `ballMovementSpeed` so it remains a *time-scale* control rather than a frame-rate proxy.
+**Current status (implemented):** We switched to a **hybrid time-based approach** in `src/physics.js`:
+- **Time-scaled integration:** Core motion and gravity scale by `frameScale = deltaTime * 60` (60fps baseline), so gameplay feels consistent across refresh rates.
+- **Sub-stepping:** Large `deltaTime` is clamped and split into smaller steps (`FIXED_STEP = 1/60`) to reduce missed collisions / tunneling during hitches.
+- **Collisions remain discrete:** Ball↔character and ball↔net collisions are still checked discretely per sub-step (typical hybrid approach for simple arcade physics).
+
+**Why this was chosen:** It fixes the 60Hz↔120Hz speed discrepancy with lower risk than a full “units-per-second” rewrite, and keeps collisions stable via substeps.
+
+**Remaining work (if revisiting later):**
+- Convert all physics constants/velocities to true **units-per-second** (instead of “per-60fps-frame units” scaled by `frameScale`).
+- Rework any trajectory math that assumes “frames” (e.g., airtime estimates for spikes/serves/receives) into true time-based calculations.
+- If targeting online multiplayer determinism: move toward a fully fixed-step simulation and deterministic RNG (see multiplayer note below).
+
+**Debug tooling (temporary):**
+- `Physics.DEBUG_LOGS` can print collision / dt diagnostics to the browser console for tuning and validation. Keep it off for shipping.
 
 ### Canvas artifacts across monitors / DPI scaling
 **Observed behavior:** “Ghost” dashed lines / ring artifacts can appear on one monitor but disappear when moving the tab to another.

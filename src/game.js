@@ -606,14 +606,13 @@ const Game = {
             if (this.state.servingPlayer === 'player') {
                 // Spike-serve lane selection (player only):
                 // - A+I: target the first destructible lane after the indestructible net-adjacent column on opponent side (tx=5, center x=5.5)
-                // - I alone: middle lane (tx=6, center x=6.5)
-                // NOTE: "Bad zone" refers to the late-release overcharge window (handled below), not D+I.
+                // - I only (and D+I): target the deepest lane on opponent side (tx=7, center x=7.5)
                 const aimX = Input.getAimXDirection?.() ?? 0; // -1 (A), 0, +1 (D)
 
                 // Determine target based on whether it's overcharged or normal spike serve
                 if (isOverchargedSpikeServe) {
-                    // Overcharged spike serve (late-release "bad zone"): lands BEFORE the net (fault)
-                    targetX = Physics.NET_X - 0.35; // player side, just before net
+                    // Overcharged spike serve (>85%): overshoots out of court (as before)
+                    targetX = Physics.COURT_WIDTH * 1.05; // Beyond court edge (8 * 1.05 = 8.4, out of bounds)
                 } else {
                     // Normal spike serve (75-85%): lands inside court
                     // Choose lane on opponent side. Indestructible net-adjacent tiles are tx=4 (AI side).
@@ -621,11 +620,8 @@ const Game = {
                     if (aimX < -0.01) {
                         // A+I: first destructible lane after indestructible
                         targetX = 5.5; // tx=5 center
-                    } else if (aimX > 0.01) {
-                        // D+I: middle lane (optional)
-                        targetX = 6.5; // tx=6 center
                     } else {
-                        // I alone: deepest lane (furthest from opponent net)
+                        // I only (and D+I): deepest lane (furthest from opponent net)
                         targetX = 7.5; // tx=7 center
                     }
                 }

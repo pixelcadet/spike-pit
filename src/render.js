@@ -510,26 +510,22 @@ const Render = {
         // Filled portion (partial ellipse arc based on HP)
         if (ratio > 0) {
             // Draw arc based on HP ratio
-            // For player (drainFromRight=true): left side stays filled, drain from right (clockwise from left)
-            // For AI (drainFromRight=false): right side stays filled, drain from left (counter-clockwise from right)
+            // Canvas ellipse() always draws clockwise, so we need to adjust angles accordingly
             const totalAngle = Math.PI * 2;
             let startAngle, endAngle;
             
             if (drainFromRight) {
                 // Player: left side stays filled, drain from right
-                // Start from left (180°) and fill clockwise
+                // Start from left (180°) and fill clockwise to show filled portion
                 startAngle = Math.PI; // 180° (left)
                 endAngle = Math.PI + (totalAngle * ratio);
             } else {
                 // AI: right side stays filled, drain from left
-                // Start from right (0°) and fill counter-clockwise (use positive angles, but draw in reverse)
-                // To draw counter-clockwise, we go from a larger angle to a smaller angle
-                startAngle = 0; // 0° (right)
-                endAngle = totalAngle * (1 - ratio); // As HP decreases, this increases, revealing empty space
-                // Actually, we want to draw from 0° going counter-clockwise (negative direction)
-                // But canvas ellipse() doesn't support negative angles well, so we'll use a different approach
-                // Draw from (2π - filled) to 2π, which is the same as drawing from 0° counter-clockwise
-                startAngle = totalAngle * (1 - ratio); // Start where fill should begin (counter-clockwise from right)
+                // To draw counter-clockwise from right (0°), we need to go from 0° backwards
+                // Since canvas draws clockwise, we draw from (2π - filled) to 2π
+                // This gives us the right side filled, with empty space growing from the left
+                const filledAngle = totalAngle * ratio;
+                startAngle = totalAngle - filledAngle; // Start where fill begins (going counter-clockwise from right)
                 endAngle = totalAngle; // End at right (0° = 2π)
             }
             

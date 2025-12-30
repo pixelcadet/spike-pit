@@ -36,7 +36,7 @@ const Physics = {
     RECEIVE_ARCH_HEIGHT: 0.4,    // Upward component for arching trajectory (higher arc)
 
     // Debug
-    DEBUG_LOGS: false,
+    DEBUG_LOGS: true, // set true to emit collision/dt logs to console
     
     // Player character
     player: {

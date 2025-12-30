@@ -500,10 +500,13 @@ const Render = {
         
         // Draw only a ~100° arc on the FRONT/BOTTOM side of the ring (vertical flip vs the back/top arc).
         // 90° is "down" in canvas-angle space (with y-down coords), so center the arc there.
-        const halfSpan = (Math.PI / 180) * 50; // 50° each side => 100° total
+        // Reduce arc length from the RIGHT side only (keep left side the same).
+        // Left span: 50°, right span: 35° => ~85° total.
         const arcCenter = Math.PI * 0.5; // 90°
-        const startAngle = arcCenter - halfSpan;
-        const endAngle = arcCenter + halfSpan;
+        const leftSpan = (Math.PI / 180) * 50;
+        const rightSpan = (Math.PI / 180) * 35;
+        const startAngle = arcCenter - leftSpan;
+        const endAngle = arcCenter + rightSpan;
 
         ctx.save();
         ctx.lineWidth = lineWidth;

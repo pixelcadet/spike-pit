@@ -1535,6 +1535,19 @@ const Render = {
         ctx.beginPath();
         ctx.ellipse(centerProj.x, centerProj.y + yOffsetPx, rx, ry, 0, 0, Math.PI * 2);
         ctx.stroke();
+
+        // Debug-only: show the inner core "normal circle" so players can verify the core slider is working.
+        // Keep the default visualization clean (ellipsoid only).
+        if (this.showHitboxes) {
+            const coreMult = Physics.RECEIVE_ZONE_CORE_MULT ?? 0.55;
+            const rCore = Math.max(r * coreMult, minSize);
+            ctx.setLineDash([2, 3]);
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            // Core is a true sphere/circle centered on the character (no squash, no y-offset).
+            ctx.arc(centerProj.x, centerProj.y, rCore, 0, Math.PI * 2);
+            ctx.stroke();
+        }
         ctx.setLineDash([]); // Reset to solid
     },
     

@@ -54,6 +54,8 @@
             text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.5);
             letter-spacing: 4px;
             color: #fff;
+            -webkit-text-stroke: 3px #000;
+            paint-order: stroke fill;
         }
         
         .button-container {
@@ -276,8 +278,8 @@
                         <input type="range" id="receive-zone-core" min="1" max="10" value="8" step="1">
                     </div>
                     <div class="control-group">
-                        <label for="spike-zone">Spike Zone Size: <span id="spike-zone-value">2</span></label>
-                        <input type="range" id="spike-zone" min="1" max="10" value="2" step="1">
+                        <label for="spike-zone">Spike Zone Size: <span id="spike-zone-value">3</span></label>
+                        <input type="range" id="spike-zone" min="1" max="10" value="3" step="1">
                     </div>
                 </div>
                 <div class="controls-column">
@@ -363,15 +365,16 @@
         <div class="modal-content">
             <button class="modal-close" onclick="hideHowToPlay()">×</button>
             <h2>How to Play</h2>
-            <p><strong>Objective:</strong> Win by reaching 11 points, destroying all opponent's tiles, or reducing their HP to zero.</p>
+            <p><strong>Objective:</strong> Win by being the first to reach 11 points OR by reducing your opponent's HP to zero. Score points by making the ball fall through holes on your opponent's side.</p>
             
             <h3>Controls:</h3>
             <ul>
                 <li><strong>W/A/S/D</strong> - Move character</li>
+                <li><strong>J</strong> - Jump</li>
                 <li><strong>I</strong> - Serve/Spike/Receive (hold to charge serve)</li>
-                <li><strong>I + W/S</strong> - Aim serve/spike direction</li>
-                <li><strong>A + I</strong> - Spike serve (targets first lane)</li>
+                <li><strong>O</strong> - Forward toss (works from spike zone, both ground and mid-air)</li>
             </ul>
+            <p style="margin-top: 10px; font-size: 13px; color: rgba(255, 255, 255, 0.8);">Most actions can be combined with directional keys (W/A/S/D) for aiming.</p>
             
             <h3>Gameplay:</h3>
             <ul>
@@ -384,7 +387,10 @@
             
             <h3>Tips:</h3>
             <ul>
-                <li>Use spike serves (A+I) to target specific lanes</li>
+                <li>Hold <strong>I</strong> to charge your serve - release to serve</li>
+                <li>Press <strong>A + I</strong> while serving for a spike serve that targets specific lanes</li>
+                <li>Press <strong>O</strong> when the ball is in the spike zone to do a forward toss (slow, arcing trajectory)</li>
+                <li>The spike zone appears when you jump or when you're on the ground and the ball enters the zone</li>
                 <li>Watch your touch count - exceeding it costs HP</li>
                 <li>Destroy tiles strategically to create scoring opportunities</li>
                 <li>Use the receive zone to automatically position for returns</li>

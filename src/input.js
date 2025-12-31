@@ -148,6 +148,11 @@ const Input = {
         if (Game.state.blockHitUntilIRelease) return false;
         return this.isPressed('i');
     },
+    
+    isTossPressed() {
+        if (Physics.player.isFalling) return false;
+        return this.isPressed('o');
+    },
 
     // For rally actions: "I is held and not yet used this hold".
     // This still allows holding I to time the hit, but prevents repeated actions while held.

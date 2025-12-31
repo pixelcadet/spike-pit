@@ -924,12 +924,19 @@ const Render = {
                 });
             }
             
-            // Draw spike zone rings (only visible when character is jumping and above ground and on court)
-            entitiesOnCourt.forEach(entity => {
-                if (entity.type === 'character' && !entity.data.onGround && entity.data.z >= 0) {
-                    this.drawSpikeZoneGroundRing(entity.data, entity.color);
-                }
-            });
+            // Draw spike zone rings (visible when character is jumping OR when on ground and ball is in spike zone)
+            // Don't show during serve
+            if (!Game.state.isServing) {
+                entitiesOnCourt.forEach(entity => {
+                    if (entity.type === 'character' && entity.data.z >= 0) {
+                        const character = entity.data;
+                        const shouldShow = !character.onGround || this.isBallInSpikeZone(character);
+                        if (shouldShow) {
+                            this.drawSpikeZoneGroundRing(character, entity.color);
+                        }
+                    }
+                });
+            }
         }
         
         // Draw shadows for entities on/in front of court (so they appear behind entities, only when above ground)
@@ -1041,6 +1048,11 @@ const Render = {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.font = 'bold 72px "Metal Vengeance", sans-serif';
+        // Draw black outline first
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 4;
+        ctx.strokeText('SCORED!', this.width / 2, this.height / 2);
+        // Then draw fill
         ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
         ctx.fillText('SCORED!', this.width / 2, this.height / 2);
         
@@ -1070,6 +1082,9 @@ const Render = {
                 : Game.state.matchEndReason === 'hp'
                     ? 'HP DEPLETED'
                     : 'POINTS';
+        
+        // Check if player died (HP reached zero)
+        const playerDied = Game.state.matchEndReason === 'hp' && Game.state.matchWinner === 'ai';
 
         ctx.save();
         ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
@@ -1079,8 +1094,14 @@ const Render = {
         ctx.textBaseline = 'middle';
 
         ctx.font = 'bold 64px "Metal Vengeance", sans-serif';
+        const mainText = playerDied ? 'YOU DIED!' : 'MATCH OVER';
+        // Draw black outline first
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 4;
+        ctx.strokeText(mainText, this.width / 2, this.height / 2 - 30);
+        // Then draw fill
         ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-        ctx.fillText('MATCH OVER', this.width / 2, this.height / 2 - 30);
+        ctx.fillText(mainText, this.width / 2, this.height / 2 - 30);
 
         ctx.font = 'normal 22px sans-serif';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
@@ -1479,7 +1500,33 @@ const Render = {
         ctx.setLineDash([]);
     },
     
-    // Draw spike zone (3D sphere above character's head)
+    // Helper function to check if ball is in spike zone
+    isBallInSpikeZone(character) {
+        const ball = Physics.ball;
+        const spikeZoneRadius = Physics.SPIKE_ZONE_RADIUS + ball.radius;
+        
+        // Calculate spike zone position (offset forward and upward)
+        let forwardOffset = Physics.SPIKE_ZONE_FORWARD_OFFSET;
+        if (character === Physics.ai) {
+            // AI is on right side, forward is toward left (decreasing x)
+            forwardOffset = -forwardOffset;
+        }
+        const spikeZoneX = character.x + forwardOffset;
+        const spikeZoneY = character.y;
+        const spikeZoneZ = character.z + Physics.SPIKE_ZONE_UPWARD_OFFSET; // Slightly above center mass
+        
+        // Check if ball is overlapping with spike zone
+        const dx = ball.x - spikeZoneX;
+        const dy = ball.y - spikeZoneY;
+        const dz = ball.z - spikeZoneZ;
+        const distToSpikeZone = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const effectiveRadius = Physics.SPIKE_ZONE_RADIUS + ball.radius;
+        
+        return distToSpikeZone <= effectiveRadius;
+    },
+    
+    // Draw spike zone (3D sphere above character's head) - only for debug hitboxes
+    // This is separate from the spike zone ground ring that appears when jumping
     drawSpikeZone(character, color, highlight = false) {
         const ctx = this.ctx;
         // Match physics: effective zone radius includes the ball radius

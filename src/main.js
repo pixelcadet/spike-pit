@@ -51,6 +51,9 @@ function gameLoop(currentTime) {
             }
         }
         // Keyup is handled in Input.init() keyup event listener
+    } else if (Input.isTossPressed()) {
+        // O key: Attempt toss (works from spike zone, both ground and mid-air)
+        Physics.attemptToss(Physics.player);
     } else if (Input.shouldAttemptHit()) {
         // Normal gameplay: spike/receive
         if (!Physics.player.onGround) {
@@ -81,7 +84,10 @@ function gameLoop(currentTime) {
             Game.serveBall();
         }
     } else {
-        // Normal gameplay: spike/receive
+        // Normal gameplay: spike/receive/toss
+        if (aiInput.toss) {
+            Physics.attemptToss(Physics.ai);
+        }
         if (aiInput.spike) {
             Physics.attemptSpike(Physics.ai);
         }

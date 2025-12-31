@@ -1223,7 +1223,11 @@ const Physics = {
             // at (targetX,targetY) — it can overshoot and go out of bounds. Instead, estimate airtime and
             // set vx/vy so the ball lands near the chosen target.
             const verticalPower = 0.12; // base downward speed scale (same family as spike serve)
-            const downwardMultiplier = 3.2 - 1.2 * spikeDistanceRatio; // near net=steeper (3.2), far=less steep (2.0)
+            let downwardMultiplier = 3.2 - 1.2 * spikeDistanceRatio; // near net=steeper (3.2), far=less steep (2.0)
+            // Slightly reduce AI spike power to balance gameplay (AI often spikes from better positions)
+            if (character === this.ai) {
+                downwardMultiplier *= 0.92; // 8% reduction for AI spikes
+            }
             const vz0 = -verticalPower * this.ballMovementSpeed * downwardMultiplier;
             
             // Estimate flight time (in frames) until ground contact using a simple ballistic model.
@@ -1256,6 +1260,98 @@ const Physics = {
 
         // Touch counter decrement (action touch). Also prevents immediate body-collision decrement this frame.
         this.applyBallTouch('spike', b.lastTouchedBy, true);
+        
+        return true;
+    },
+    
+    // Attempt to toss the ball (O key) - works from spike zone, both ground and mid-air
+    // Tosses ball in slow, arcing trajectory over the net
+    attemptToss(character) {
+        // Can't toss if already spiked or received this jump (prevent spamming)
+        if (character.hasSpiked || character.hasReceived) {
+            return false;
+        }
+        
+        const b = this.ball;
+        
+        // Can't toss ball that is on the ground (only mid-air balls)
+        if (b.z <= b.groundLevel) {
+            return false;
+        }
+        
+        // Calculate spike zone center (at character's center mass, offset forward and upward)
+        // Offset forward so character can't toss balls behind them
+        let forwardOffset = this.SPIKE_ZONE_FORWARD_OFFSET;
+        if (character === this.ai) {
+            // AI is on right side, forward is toward left (decreasing x)
+            forwardOffset = -forwardOffset;
+        }
+        const spikeZoneX = character.x + forwardOffset;
+        const spikeZoneY = character.y;
+        const spikeZoneZ = character.z + this.SPIKE_ZONE_UPWARD_OFFSET; // Slightly above center mass
+        
+        // Check if ball is within spike zone (3D distance)
+        // Account for ball's radius - if any part of ball overlaps zone, it's in
+        const dx = b.x - spikeZoneX;
+        const dy = b.y - spikeZoneY;
+        const dz = b.z - spikeZoneZ;
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const effectiveRadius = this.SPIKE_ZONE_RADIUS + b.radius;
+        
+        if (dist > effectiveRadius) {
+            return false; // Ball not in spike zone
+        }
+        
+        // TOSS: Slow, arcing trajectory over the net (similar to lob)
+        // Determine target (opponent's side)
+        let targetX, targetY;
+        if (character === this.player) {
+            // Player tosses toward AI side (right side, x > NET_X)
+            targetX = this.COURT_WIDTH * 0.75; // 75% across court (AI side)
+            // Allow aiming with buffered W/S input
+            const aimDir = Input.getAimDepthDirection?.() ?? 0;
+            const aimOffset = this.COURT_LENGTH * 0.22; // lane offset (~top/bottom)
+            targetY = this.COURT_LENGTH * 0.5 + aimDir * aimOffset;
+            targetY = Math.max(0.3, Math.min(this.COURT_LENGTH - 0.3, targetY));
+        } else {
+            // AI tosses toward player side (left side, x < NET_X)
+            targetX = this.COURT_WIDTH * 0.25; // 25% across court (player side)
+            targetY = this.COURT_LENGTH * 0.5;  // Middle depth
+        }
+        
+        const dirX = targetX - b.x;
+        const dirY = targetY - b.y;
+        const horizontalDist = Math.sqrt(dirX * dirX + dirY * dirY);
+        
+        // Normalize horizontal direction
+        // Use lob power for slow, arcing trajectory
+        const horizontalPower = this.SPIKE_LOB_POWER * 0.8; // Slightly weaker horizontal for slower arc
+        b.vx = (dirX / horizontalDist) * horizontalPower * this.ballMovementSpeed;
+        b.vy = (dirY / horizontalDist) * horizontalPower * this.ballMovementSpeed;
+        b.vz = this.SPIKE_LOB_ARCH_HEIGHT * this.ballMovementSpeed; // Upward for arch
+        
+        // Add character's velocity influence (slight)
+        b.vx += character.vx * 0.1;
+        b.vy += character.vy * 0.1;
+        
+        b.lastHitType = 'toss';
+        b.tileDamageBounces = 0;
+        b.fallingThroughHole = false;
+        
+        // Mark that character has used an action (prevents spamming)
+        // For mid-air: use hasReceived flag to prevent multiple tosses
+        // For ground: just mark action (ground tosses can be done multiple times if needed)
+        if (!character.onGround) {
+            character.hasReceived = true; // Prevent multiple tosses mid-air
+        }
+        character.justAttemptedAction = true;
+        
+        // Track who last touched the ball
+        b.lastTouchedBy = (character === this.player) ? 'player' : 'ai';
+        b.hasScored = false; // Reset score flag on new touch
+        
+        // Touch counter decrement (action touch)
+        this.applyBallTouch('toss', b.lastTouchedBy, true);
         
         return true;
     },
@@ -1308,11 +1404,28 @@ const Physics = {
         
         // Calculate distance from ball to center of receiving zone (horizontal)
         const horizontalDist = Math.sqrt(dx * dx + dy * dy);
+        const verticalDist = Math.abs(dz);
+        
+        // Detect if ball is moving backward (away from net) - for AI this means positive vx
+        const isAi = character === this.ai;
+        const ballMovingBackward = isAi ? (b.vx > 0.3) : (b.vx < -0.3); // Ball moving away from net
+        const ballMovingBackwardFast = isAi ? (b.vx > 0.6) : (b.vx < -0.6); // Ball moving backward quickly
+        
+        // If ball is in core, always hit it (even if horizontal distance is small - prevents endless positioning)
+        // If ball is in outer zone but close horizontally and vertically, also hit it
+        // BUT: if ball is moving backward fast, be more lenient - hit it even if not perfectly centered
+        const ballCloseEnough = inCore || 
+            (horizontalDist <= this.RECEIVE_MOVE_MIN_DIST * 1.5 && verticalDist < 0.6) ||
+            (ballMovingBackwardFast && horizontalDist <= this.RECEIVE_MOVE_MIN_DIST * 2.0 && verticalDist < 0.8);
         
         // If ball is not close enough to center, move character toward ball first
         // BUT only if character is on the ground (no automatic chasing mid-air)
         // Also require minimum horizontal distance to prevent jitter when ball is directly overhead
-        if (!inCore && character.onGround && horizontalDist > this.RECEIVE_MOVE_MIN_DIST) {
+        // BUT: if ball is in core or very close, skip movement and hit immediately
+        // SPECIAL: If ball is moving backward, require MORE distance before attempting to position
+        // This prevents AI from getting stuck trying to reposition when ball is bouncing backward
+        const minDistForPositioning = ballMovingBackward ? (this.RECEIVE_MOVE_MIN_DIST * 1.8) : this.RECEIVE_MOVE_MIN_DIST;
+        if (!ballCloseEnough && !inCore && character.onGround && horizontalDist > minDistForPositioning) {
             // Move character toward ball to get it closer to center
             const invH = 1 / Math.max(1e-6, horizontalDist);
             const moveDirX = dx * invH;
@@ -1338,17 +1451,21 @@ const Physics = {
             return false; // Can't receive if ball not centered and mid-air
         }
         
-        // Ball is close enough to center, now hit it
+        // Ball is close enough to center (or in core), now hit it
         // If on ground, just bounce ball upward (for testing spikes)
         // If mid-air, lob to opponent's side
         if (character.onGround) {
             // AI touch-count awareness (imperfect on purpose):
             // If touches are low on the current side, avoid doing a straight-up ground toss (which can stall and
             // burn touches). Instead, sometimes "clear" it over the net like a normal receive.
+            // SPECIAL: If ball is moving backward, always clear it over the net (don't do straight-up toss)
+            // This prevents AI from getting stuck juggling backward-moving balls
             const touches = b.touchesRemaining ?? 0;
             const isAi = character === this.ai;
             const isAiSide = b.x >= this.NET_X;
-            if (isAi && isAiSide && touches <= 1 && Math.random() < 0.5) {
+            const shouldClearOverNet = (isAi && isAiSide && touches <= 1 && Math.random() < 0.85) || 
+                                      (isAi && isAiSide && ballMovingBackward);
+            if (shouldClearOverNet) {
                 // Clear to opponent side (player side)
                 const targetX = this.COURT_WIDTH * 0.25;
                 const targetY = this.COURT_LENGTH * 0.5;
@@ -1373,108 +1490,57 @@ const Physics = {
                 b.fallingThroughHole = false;
                 character.justAttemptedAction = true;
             } else {
-            // Ground receive = "toss" (for future teammates/sets).
-            // Keep it short (clamped distance) but allow aiming with buffered WASD (supports diagonals).
+            // Ground receive = "toss" (always vertical, no directional aiming).
+            // Exception: if character is near court edge, auto-toss toward center of their own side.
             const vz0 = this.RECEIVE_ARCH_HEIGHT * 0.7 * this.ballMovementSpeed; // Reduced upward toss (70% of normal)
-            b.vz = vz0;
-            b.lastHitType = 'toss';
-            b.tileDamageBounces = 0;
-            b.fallingThroughHole = false;
             
-            // Only the player can aim tosses. AI toss aiming should not be affected by player key state.
-            const aim = (character === this.player) ? (Input.getAim2D?.() ?? { x: 0, y: 0 }) : { x: 0, y: 0 };
-            // Disallow "back toss" (away from the net) so ground receives stay simple and forward-oriented.
-            // If a back component is present, cancel ALL aiming (including diagonal back aims) → straight up.
-            // Player (left side): back = negative x (A). AI (right side): back = positive x.
-            const rawAx = aim.x ?? 0;
-            const rawAy = aim.y ?? 0;
-            const hasBackComponent = (character === this.player) ? (rawAx < -0.01) : (rawAx > 0.01);
+            // Check if character is near court edge - if so, auto-toss toward center of their own side
+            const pct = this.getFootprintOutsidePercentages(character);
+            const edgeLean = Math.max(pct.edgeA, pct.edgeB, pct.edgeC);
             
-            let ax = rawAx;
-            let ay = rawAy;
-            if (hasBackComponent) {
-                ax = 0;
-                ay = 0;
-            } else {
-                // Still prevent tiny numerical back drift; allow only forward-or-neutral x.
-                if (character === this.player) {
-                    ax = Math.max(0, ax);
-                } else {
-                    ax = Math.min(0, ax);
-                }
-            }
-            const aimLen = Math.sqrt(ax * ax + ay * ay);
+            // Also treat "near edge but still inside" as an edge situation.
+            // Compute distance from the footprint box to each court boundary (in world units).
+            const footprintWidth = character.radius * 1.2;
+            const footprintDepth = character.radius * 0.5;
+            const footprintLeft = character.x - footprintWidth * 0.5;
+            const footprintRight = character.x + footprintWidth * 0.5;
+            const footprintFront = character.y - footprintDepth * 0.5;
+            const footprintBack = character.y + footprintDepth * 0.5;
             
-            if (aimLen < 0.01) {
-                // No aim input:
-                // - If character is leaning over any court edge (A/B/C), auto-toss toward the center of their OWN side.
-                //   This prevents "straight up" tosses that can feel bad near edges.
-                // - Otherwise, keep straight-up toss.
-                const pct = this.getFootprintOutsidePercentages(character);
-                const edgeLean = Math.max(pct.edgeA, pct.edgeB, pct.edgeC);
+            const distToEdgeC = footprintFront; // y=0
+            const distToEdgeA = this.COURT_LENGTH - footprintBack; // y=COURT_LENGTH
+            const distToEdgeB = (character === this.player)
+                ? footprintLeft // x=0 (player side outer edge)
+                : (this.COURT_WIDTH - footprintRight); // x=COURT_WIDTH (ai side outer edge)
+            
+            // "Slightly inside" margin (in world units). Tuned to feel like you're at the ledge without being out.
+            const nearEdgeMargin = 0.22;
+            const nearEdge = Math.min(distToEdgeA, distToEdgeB, distToEdgeC) <= nearEdgeMargin;
+            
+            if (edgeLean > 0.001 || nearEdge) {
+                // Near edge: auto-toss toward the center of their OWN side
+                const isPlayer = character === this.player;
+                const targetX = isPlayer ? (this.NET_X * 0.5) : (this.NET_X + (this.COURT_WIDTH - this.NET_X) * 0.5);
+                const targetY = this.COURT_LENGTH * 0.5;
                 
-                // Also treat "near edge but still inside" as an edge situation.
-                // Compute distance from the footprint box to each court boundary (in world units).
-                const footprintWidth = character.radius * 1.2;
-                const footprintDepth = character.radius * 0.5;
-                const footprintLeft = character.x - footprintWidth * 0.5;
-                const footprintRight = character.x + footprintWidth * 0.5;
-                const footprintFront = character.y - footprintDepth * 0.5;
-                const footprintBack = character.y + footprintDepth * 0.5;
-                
-                const distToEdgeC = footprintFront; // y=0
-                const distToEdgeA = this.COURT_LENGTH - footprintBack; // y=COURT_LENGTH
-                const distToEdgeB = (character === this.player)
-                    ? footprintLeft // x=0 (player side outer edge)
-                    : (this.COURT_WIDTH - footprintRight); // x=COURT_WIDTH (ai side outer edge)
-                
-                // "Slightly inside" margin (in world units). Tuned to feel like you're at the ledge without being out.
-                const nearEdgeMargin = 0.22;
-                const nearEdge = Math.min(distToEdgeA, distToEdgeB, distToEdgeC) <= nearEdgeMargin;
-                
-                if (edgeLean > 0.001 || nearEdge) {
-                    const isPlayer = character === this.player;
-                    const targetX = isPlayer ? (this.NET_X * 0.5) : (this.NET_X + (this.COURT_WIDTH - this.NET_X) * 0.5);
-                    const targetY = this.COURT_LENGTH * 0.5;
-                    
-                    const gEff = this.GRAVITY * this.ballMovementSpeed;
-                    const z0 = Math.max(0.001, b.z - b.groundLevel);
-                    const disc = vz0 * vz0 + 2 * gEff * z0;
-                    const flightFrames = disc > 0 ? (vz0 + Math.sqrt(disc)) / gEff : 18;
-                    const tFrames = Math.max(8, flightFrames);
-                    
-                    b.vx = (targetX - b.x) / tFrames;
-                    b.vy = (targetY - b.y) / tFrames;
-                } else {
-                    // Straight up
-                    b.vx = 0;
-                    b.vy = 0;
-                }
-            } else {
-                // Normalize aim so diagonals aren't stronger
-                const nx = ax / aimLen;
-                const ny = ay / aimLen;
-                
-                // Estimate flight time (in frames) until ground contact, then choose vx/vy so horizontal
-                // displacement is limited to a small max distance (prevents "toss" becoming an attack).
                 const gEff = this.GRAVITY * this.ballMovementSpeed;
                 const z0 = Math.max(0.001, b.z - b.groundLevel);
                 const disc = vz0 * vz0 + 2 * gEff * z0;
                 const flightFrames = disc > 0 ? (vz0 + Math.sqrt(disc)) / gEff : 18;
                 const tFrames = Math.max(8, flightFrames);
                 
-                // Toss distance caps:
-                // - Forward/diagonal tosses: slightly longer (helps setting forward)
-                // - Pure side tosses (I+W or I+S): shorter for control (can’t drift too far laterally)
-                const isPureSideToss = Math.abs(ax) < 0.01 && Math.abs(ay) >= 0.01;
-                const maxTossDistance = isPureSideToss ? 1.4 : 1.8; // court units
-                b.vx = (nx * maxTossDistance) / tFrames;
-                b.vy = (ny * maxTossDistance) / tFrames;
-                
-                // Tiny influence from character movement (kept very small for control)
-                b.vx += character.vx * 0.02;
-                b.vy += character.vy * 0.02;
+                b.vx = (targetX - b.x) / tFrames;
+                b.vy = (targetY - b.y) / tFrames;
+            } else {
+                // Not near edge: always toss straight up (no directional aiming)
+                b.vx = 0;
+                b.vy = 0;
             }
+            
+            b.vz = vz0;
+            b.lastHitType = 'toss';
+            b.tileDamageBounces = 0;
+            b.fallingThroughHole = false;
             character.justAttemptedAction = true; // Flag to prevent collision bounce this frame
             }
         } else {

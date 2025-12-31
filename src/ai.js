@@ -8,6 +8,7 @@ const AI = {
         shouldJump: false,
         shouldSpike: false,
         shouldReceive: false,
+        shouldToss: false, // Forward toss from spike zone (O key)
         lastBallX: 0,
         lastBallY: 0,
         // Imperfection: AI won't spike every time it can.
@@ -87,6 +88,7 @@ const AI = {
             this.state.shouldJump = false;
             this.state.shouldSpike = false;
             this.state.shouldReceive = false;
+            this.state.shouldToss = false;
             return;
         }
         
@@ -151,6 +153,7 @@ const AI = {
             this.state.shouldJump = false;
             this.state.shouldSpike = false;
             this.state.shouldReceive = false;
+            this.state.shouldToss = false;
             return;
         }
         
@@ -175,6 +178,7 @@ const AI = {
             this.state.shouldJump = false;
             this.state.shouldSpike = false;
             this.state.shouldReceive = false;
+            this.state.shouldToss = false;
             return; // Exit early, don't process ball tracking
         }
         
@@ -206,54 +210,147 @@ const AI = {
             const dist = Math.sqrt(dx * dx + dy * dy);
             const dist3D = Math.sqrt(dx * dx + dy * dy + dz * dz);
             
-            // Move toward predicted ball position
-            if (dist > 0.1) {
-                this.state.targetX = dx / dist;
-                this.state.targetY = dy / dist;
-            } else {
-                this.state.targetX = 0;
-                this.state.targetY = 0;
-            }
+            // Check if ball is in spike zone (needed for movement strategy)
+            const ballRadius = Physics.ball.radius;
+            const effectiveSpikeRadius = Physics.SPIKE_ZONE_RADIUS + ballRadius;
+            const spikeZoneX = ai.x - Physics.SPIKE_ZONE_FORWARD_OFFSET;
+            const spikeZoneY = ai.y;
+            const spikeZoneZ = ai.z + Physics.SPIKE_ZONE_UPWARD_OFFSET;
+            const dxSpike = ball.x - spikeZoneX;
+            const dySpike = ball.y - spikeZoneY;
+            const dzSpike = ball.z - spikeZoneZ;
+            const distToSpikeZone = Math.sqrt(dxSpike * dxSpike + dySpike * dySpike + dzSpike * dzSpike);
+            const ballInSpikeZone = distToSpikeZone < effectiveSpikeRadius;
             
-            // Jump if ball is close enough and above ground
-            // Also jump if ball is coming down and we're close horizontally
-            const ballCloseHorizontally = dist < this.jumpDistance;
-            const ballAboveGround = predictedZ > 0.3;
-            const ballComingDown = ball.vz < 0;
-            
-            // Jump to hit the ball when it's close and in a hittable position
-            if (ballCloseHorizontally && (ballAboveGround || ballComingDown) && ai.onGround) {
-                this.state.shouldJump = true;
+            // NEW STRATEGY: Prioritize positioning for spike zone tosses (85% reliable)
+            // If ball is not in spike zone, move to position ball in spike zone
+            // Otherwise, move toward predicted ball position to maintain spike zone alignment
+            if (ballInSpikeZone) {
+                // Ball is in spike zone - make small adjustments to maintain position
+                if (dist > 0.3) {
+                    this.state.targetX = dx / dist;
+                    this.state.targetY = dy / dist;
+                } else {
+                    this.state.targetX = 0;
+                    this.state.targetY = 0;
+                }
             } else {
-                this.state.shouldJump = false;
+                // Ball not in spike zone - move to position ball into spike zone
+                // Calculate where we need to be so ball is in spike zone (forward offset)
+                let forwardOffset = Physics.SPIKE_ZONE_FORWARD_OFFSET;
+                // For AI, forward is left (decreasing x), so we want ball at ai.x - forwardOffset
+                // So we need to move to: ball.x + forwardOffset
+                const desiredX = predictedX + forwardOffset;
+                const desiredY = predictedY;
+                
+                const dxToDesired = desiredX - ai.x;
+                const dyToDesired = desiredY - ai.y;
+                const distToDesired = Math.sqrt(dxToDesired * dxToDesired + dyToDesired * dyToDesired);
+                
+                // Clamp desired position to court bounds
+                const clampedDesiredX = Math.max(netX + 0.2, Math.min(Physics.COURT_WIDTH - 0.2, desiredX));
+                const clampedDesiredY = Math.max(0.2, Math.min(Physics.COURT_LENGTH - 0.2, desiredY));
+                const safeDesired = this.snapIfOnHoleAISide(clampedDesiredX, clampedDesiredY);
+                
+                const dxSafe = safeDesired.x - ai.x;
+                const dySafe = safeDesired.y - ai.y;
+                const distSafe = Math.sqrt(dxSafe * dxSafe + dySafe * dySafe);
+                
+                if (distSafe > 0.1) {
+                    this.state.targetX = dxSafe / distSafe;
+                    this.state.targetY = dySafe / distSafe;
+                } else {
+                    this.state.targetX = 0;
+                    this.state.targetY = 0;
+                }
             }
             
             // Check if AI should spike or receive (mid-air or on ground)
             // Account for ball's radius in zone checks
-            const ballRadius = Physics.ball.radius;
-            const effectiveSpikeRadius = Physics.SPIKE_ZONE_RADIUS + ballRadius;
+            // ballRadius and effectiveSpikeRadius already calculated above
             const effectiveReceiveRadius = Physics.RECEIVING_ZONE_RADIUS + ballRadius;
             const touches = Physics.ball.touchesRemaining ?? 0;
             const isAiSide = ball.x >= Physics.NET_X;
             // Touch-count awareness (imperfect on purpose):
             // When touches are low and the ball is on AI side, prefer sending it over the net instead of stalling.
-            // Keep it only ~50% reliable so AI isn't always "optimal".
-            const touchAware = isAiSide && touches <= 1 && Math.random() < 0.5;
+            // Keep it 85% reliable so AI is mostly aware but still beatable.
+            const touchAware = isAiSide && touches <= 1 && Math.random() < 0.85;
             
-            if (!ai.onGround && !ai.hasSpiked && !ai.hasReceived) {
+            // Check if ball is in receive zone (for ground receive decision)
+            const receiveZoneX = ai.x;
+            const receiveZoneY = ai.y;
+            const receiveZoneZ = ai.z;
+            const dxReceive = ball.x - receiveZoneX;
+            const dyReceive = ball.y - receiveZoneY;
+            const dzReceive = ball.z - receiveZoneZ;
+            const distSphere = Math.sqrt(dxReceive * dxReceive + dyReceive * dyReceive + dzReceive * dzReceive);
+            const invSquash = 1 / (Physics.RECEIVE_ZONE_Y_SQUASH || 1);
+            const dyE = dyReceive * invSquash;
+            const distEllipsoid = Math.sqrt(dxReceive * dxReceive + dyE * dyE + dzReceive * dzReceive);
+            const coreRadius = effectiveReceiveRadius * (Physics.RECEIVE_ZONE_CORE_MULT ?? 0.55);
+            const coreRadiusWithBuffer = coreRadius * 1.1;
+            const inCore = distSphere <= coreRadiusWithBuffer;
+            const inOuter = distEllipsoid <= effectiveReceiveRadius;
+            const ballInReceiveZone = inOuter || inCore;
+            
+            // NEW STRATEGY: Prioritize forward tosses from spike zone (85% reliable)
+            // ballInSpikeZone already calculated above for movement strategy
+            // Only jump/receive for hard balls to catch (55% reliable) or to spike
+            
+            // Check if ball is in spike zone - if so, prefer forward toss (85% reliable)
+            // ballInSpikeZone already calculated above for movement strategy
+            const tossReliability = 0.85;
+            const hardBallCatchReliability = 0.55; // For jump/receive when ball is hard to catch
+            
+            // Determine if ball is "hard to catch" (fast, high, or moving away quickly)
+            const ballSpeed = Math.sqrt(ball.vx * ball.vx + ball.vy * ball.vy);
+            const ballVeryHigh = predictedZ > 1.5;
+            const ballMovingAwayFast = ballSpeed > 1.0;
+            const isHardBall = ballVeryHigh || ballMovingAwayFast;
+            
+            // Decide whether to jump or stay on ground
+            const ballCloseHorizontally = dist < this.jumpDistance;
+            const ballAboveGround = predictedZ > 0.3;
+            const ballComingDown = ball.vz < 0;
+            const ballLow = predictedZ < 1.0;
+            
+            // Primary strategy: If ball is in spike zone, try to do forward toss (85% reliable)
+            let shouldToss = false;
+            if (ballInSpikeZone && (ai.onGround || !ai.onGround)) {
+                // Can toss from spike zone both on ground and mid-air
+                shouldToss = Math.random() < tossReliability;
+            }
+            
+            // Secondary strategy: Jump/receive only for hard balls (55% reliable) or to spike
+            let shouldJump = false;
+            if (ai.onGround && ballCloseHorizontally) {
+                if (ballInSpikeZone && ballAboveGround && !ballLow && !shouldToss) {
+                    // Ball is in spike zone and medium-high - sometimes jump to spike (if not tossing)
+                    const spikeChance = touchAware ? 0.3 : 0.15;
+                    shouldJump = Math.random() < spikeChance;
+                } else if (isHardBall && ballComingDown) {
+                    // Hard ball to catch - jump/receive with 55% reliability
+                    shouldJump = Math.random() < hardBallCatchReliability;
+                } else if (ballVeryHigh && ballComingDown) {
+                    // Ball is very high - must jump to reach it
+                    shouldJump = true;
+                }
+                // Otherwise: don't jump (prefer positioning for spike zone toss)
+            }
+            this.state.shouldJump = shouldJump;
+            this.state.shouldToss = shouldToss;
+            
+            // Update spike/receive actions based on new strategy
+            // If we're doing a toss, don't do spike/receive
+            if (this.state.shouldToss) {
+                this.state.shouldSpike = false;
+                this.state.shouldReceive = false;
+            } else if (!ai.onGround && !ai.hasSpiked && !ai.hasReceived) {
                 // Mid-air: check both zones, prioritize spike zone
-                const spikeZoneX = ai.x - Physics.SPIKE_ZONE_FORWARD_OFFSET; // AI forward is left (decreasing x)
-                const spikeZoneY = ai.y;
-                const spikeZoneZ = ai.z + Physics.SPIKE_ZONE_UPWARD_OFFSET; // Slightly above center mass
-                const dxSpike = ball.x - spikeZoneX;
-                const dySpike = ball.y - spikeZoneY;
-                const dzSpike = ball.z - spikeZoneZ;
-                const distToSpikeZone = Math.sqrt(dxSpike * dxSpike + dySpike * dySpike + dzSpike * dzSpike);
-                
-                if (distToSpikeZone < effectiveSpikeRadius) {
+                if (ballInSpikeZone) {
                     // AI can spike, but not always (keeps it beatable)
                     const canSpikeNow = this.state.spikeCooldown <= 0;
-                    const baseSpikeChance = 0.35;
+                    const baseSpikeChance = 0.50;
                     const willSpike = canSpikeNow && (touchAware || Math.random() < baseSpikeChance);
                     this.state.shouldSpike = willSpike;
                     this.state.shouldReceive = false;
@@ -261,65 +358,30 @@ const AI = {
                         this.state.spikeCooldown = 0.6; // small cooldown between spikes
                     }
                 } else {
-                    // Check receiving zone if not in spike zone (using ellipsoid + core logic)
-                    const receiveZoneZ = ai.z;
-                    const dxReceive = ball.x - ai.x;
-                    const dyReceive = ball.y - ai.y;
-                    const dzReceive = ball.z - receiveZoneZ;
-                    
-                    // Two-part receive zone (matches physics):
-                    // - Outer ellipsoid: x radius = R, y radius = R*squash, z radius = R
-                    // - Inner core sphere: smaller "normal circle" centered on character
-                    const distSphere = Math.sqrt(dxReceive * dxReceive + dyReceive * dyReceive + dzReceive * dzReceive);
-                    const invSquash = 1 / (Physics.RECEIVE_ZONE_Y_SQUASH || 1);
-                    const dyE = dyReceive * invSquash;
-                    const distEllipsoid = Math.sqrt(dxReceive * dxReceive + dyE * dyE + dzReceive * dzReceive);
-                    const coreRadius = effectiveReceiveRadius * (Physics.RECEIVE_ZONE_CORE_MULT ?? 0.55);
-                    // Add small hysteresis buffer to prevent flickering at core boundary (matches player logic)
-                    const coreRadiusWithBuffer = coreRadius * 1.1; // 10% buffer
-                    const inCore = distSphere <= coreRadiusWithBuffer;
-                    const inOuter = distEllipsoid <= effectiveReceiveRadius;
-                    
-                    // Calculate horizontal distance to check if we should activate receive
+                    // Check receiving zone if not in spike zone - only for hard balls (55% reliable)
                     const horizontalDist = Math.sqrt(dxReceive * dxReceive + dyReceive * dyReceive);
                     const minDist = Physics.RECEIVE_MOVE_MIN_DIST ?? 0.15;
                     
-                    if ((inOuter || inCore) && horizontalDist > minDist) {
+                    if (ballInReceiveZone && horizontalDist > minDist && isHardBall) {
+                        // Only receive if it's a hard ball to catch (55% reliable)
                         this.state.shouldSpike = false;
-                        this.state.shouldReceive = true;
+                        this.state.shouldReceive = Math.random() < hardBallCatchReliability;
                     } else {
                         this.state.shouldSpike = false;
                         this.state.shouldReceive = false;
                     }
                 }
             } else if (ai.onGround && !ai.hasReceived) {
-                // On ground: check receiving zone (using ellipsoid + core logic)
-                const receiveZoneX = ai.x;
-                const receiveZoneY = ai.y;
-                const receiveZoneZ = ai.z;
-                const dx = ball.x - receiveZoneX;
-                const dy = ball.y - receiveZoneY;
-                const dz = ball.z - receiveZoneZ;
-                
-                // Two-part receive zone (matches physics):
-                // - Outer ellipsoid: x radius = R, y radius = R*squash, z radius = R
-                // - Inner core sphere: smaller "normal circle" centered on character
-                const distSphere = Math.sqrt(dx * dx + dy * dy + dz * dz);
-                const invSquash = 1 / (Physics.RECEIVE_ZONE_Y_SQUASH || 1);
-                const dyE = dy * invSquash;
-                const distEllipsoid = Math.sqrt(dx * dx + dyE * dyE + dz * dz);
-                const coreRadius = effectiveReceiveRadius * (Physics.RECEIVE_ZONE_CORE_MULT ?? 0.55);
-                // Add small hysteresis buffer to prevent flickering at core boundary (matches player logic)
-                const coreRadiusWithBuffer = coreRadius * 1.1; // 10% buffer
-                const inCore = distSphere <= coreRadiusWithBuffer;
-                const inOuter = distEllipsoid <= effectiveReceiveRadius;
-                
-                // Calculate horizontal distance to check if we should activate receive
-                const horizontalDist = Math.sqrt(dx * dx + dy * dy);
+                // On ground: only receive for hard balls (55% reliable)
+                const horizontalDist = Math.sqrt(dxReceive * dxReceive + dyReceive * dyReceive);
+                const verticalDist = Math.abs(dzReceive);
                 const minDist = Physics.RECEIVE_MOVE_MIN_DIST ?? 0.15;
+                const ballCloseVertically = verticalDist < 0.5;
+                const shouldHit = ballInReceiveZone && (horizontalDist > minDist || (inCore && ballCloseVertically));
                 
-                if ((inOuter || inCore) && horizontalDist > minDist) {
-                    this.state.shouldReceive = true;
+                if (shouldHit && isHardBall) {
+                    // Only receive if it's a hard ball to catch (55% reliable)
+                    this.state.shouldReceive = Math.random() < hardBallCatchReliability;
                 } else {
                     this.state.shouldReceive = false;
                 }
@@ -361,7 +423,8 @@ const AI = {
             vy: this.state.targetY * this.reactionSpeed,
             jump: this.state.shouldJump,
             spike: this.state.shouldSpike,
-            receive: this.state.shouldReceive
+            receive: this.state.shouldReceive,
+            toss: this.state.shouldToss
         };
     }
 };

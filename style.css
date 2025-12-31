@@ -53,6 +53,8 @@ body {
     font-family: 'Metal Vengeance', sans-serif;
     font-size: 64px;
     text-align: center;
+    -webkit-text-stroke: 3px #000;
+    paint-order: stroke fill;
 }
 
 #game-status {

@@ -14,9 +14,9 @@ const Render = {
     showReceiveZone: true, // receive zone ellipsoid ring
     showHitboxes: false,   // heavy debug overlays (hitboxes/footprints/zone spheres)
     
-    // Canvas dimensions
-    width: 800,
-    height: 600,
+    // Canvas dimensions (16:9 aspect ratio)
+    width: 1280,
+    height: 720,
     
     // Perspective projection parameters (side camera view)
     horizonY: 100,           // Y position of horizon on screen (top)
@@ -25,7 +25,7 @@ const Render = {
     depthRange: 4,           // World depth range (0 to COURT_LENGTH = 4)
     
     // Court rendering
-    courtTileSize: 88,      // Base tile size in pixels (reduced slightly for narrower court width)
+    courtTileSize: 101.2,   // Base tile size in pixels (15% larger: 88 * 1.15 = 101.2)
 
     // Camera shake (screen-space, applied to world rendering only)
     shakeTimeLeft: 0,

@@ -1048,11 +1048,6 @@ const Render = {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.font = 'bold 72px "Metal Vengeance", sans-serif';
-        // Draw black outline first
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 4;
-        ctx.strokeText('SCORED!', this.width / 2, this.height / 2);
-        // Then draw fill
         ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
         ctx.fillText('SCORED!', this.width / 2, this.height / 2);
         
@@ -1094,13 +1089,8 @@ const Render = {
         ctx.textBaseline = 'middle';
 
         ctx.font = 'bold 64px "Metal Vengeance", sans-serif';
-        const mainText = playerDied ? 'YOU DIED!' : 'MATCH OVER';
-        // Draw black outline first
-        ctx.strokeStyle = '#000';
-        ctx.lineWidth = 4;
-        ctx.strokeText(mainText, this.width / 2, this.height / 2 - 30);
-        // Then draw fill
         ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+        const mainText = playerDied ? 'YOU DIED!' : 'MATCH OVER';
         ctx.fillText(mainText, this.width / 2, this.height / 2 - 30);
 
         ctx.font = 'normal 22px sans-serif';

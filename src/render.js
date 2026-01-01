@@ -930,7 +930,8 @@ const Render = {
                 entitiesOnCourt.forEach(entity => {
                     if (entity.type === 'character' && entity.data.z >= 0) {
                         const character = entity.data;
-                        const shouldShow = !character.onGround || this.isBallInSpikeZone(character);
+                        const ballInZone = this.isBallInSpikeZone(character);
+                        const shouldShow = !character.onGround || ballInZone;
                         if (shouldShow) {
                             this.drawSpikeZoneGroundRing(character, entity.color);
                         }
@@ -1509,10 +1510,33 @@ const Render = {
         const dx = ball.x - spikeZoneX;
         const dy = ball.y - spikeZoneY;
         const dz = ball.z - spikeZoneZ;
-        const distToSpikeZone = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        
+        // Calculate effective radius (spike zone + ball radius)
         const effectiveRadius = Physics.SPIKE_ZONE_RADIUS + ball.radius;
         
-        return distToSpikeZone <= effectiveRadius;
+        // When character is on ground, be more lenient:
+        // Check if ball is horizontally within spike zone, and allow ball at ground level or above
+        // (The visual should show when ball enters spike zone horizontally, even if ball is on ground)
+        // This is more lenient than attemptToss which requires ball to be mid-air
+        if (character.onGround) {
+            // Check horizontal distance (x, y) - this is the main check
+            const horizontalDist = Math.sqrt(dx * dx + dy * dy);
+            
+            // For vertical: allow ball from ground level (dz can be negative) up to spike zone + tolerance
+            // Spike zone center is at character.z + UPWARD_OFFSET (0.2 above character)
+            // When character is on ground (z ≈ 0), spike zone is at z = 0.2
+            // Ball at ground (z = 0) gives dz = -0.2, which is fine
+            // Ball above spike zone should also be allowed (dz positive)
+            // Use a generous vertical tolerance: spike zone height + ball radius + extra
+            const verticalTolerance = Physics.SPIKE_ZONE_UPWARD_OFFSET + ball.radius + 0.2;
+            const isVerticallyInRange = dz >= -verticalTolerance && dz <= verticalTolerance;
+            
+            return horizontalDist <= effectiveRadius && isVerticallyInRange;
+        } else {
+            // Mid-air: use full 3D distance check (same as physics)
+            const distToSpikeZone = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            return distToSpikeZone <= effectiveRadius;
+        }
     },
     
     // Draw spike zone (3D sphere above character's head) - only for debug hitboxes

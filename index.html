@@ -268,12 +268,12 @@
                 <div class="controls-column">
                     <h4>Zones</h4>
                     <div class="control-group">
-                        <label for="receive-zone">Receive Zone Size: <span id="receive-zone-value">3</span></label>
-                        <input type="range" id="receive-zone" min="1" max="10" value="3" step="1">
+                        <label for="receive-zone">Receive Zone Size: <span id="receive-zone-value">4</span></label>
+                        <input type="range" id="receive-zone" min="1" max="10" value="4" step="1">
                     </div>
                     <div class="control-group">
-                        <label for="receive-zone-core">Receive Core Size: <span id="receive-zone-core-value">8</span></label>
-                        <input type="range" id="receive-zone-core" min="1" max="10" value="8" step="1">
+                        <label for="receive-zone-core">Receive Core Size: <span id="receive-zone-core-value">7</span></label>
+                        <input type="range" id="receive-zone-core" min="1" max="10" value="7" step="1">
                     </div>
                     <div class="control-group">
                         <label for="spike-zone">Spike Zone Size: <span id="spike-zone-value">3</span></label>
@@ -369,8 +369,7 @@
             <ul>
                 <li><strong>W/A/S/D</strong> - Move character</li>
                 <li><strong>J</strong> - Jump</li>
-                <li><strong>I</strong> - Serve/Spike/Receive (hold to charge serve)</li>
-                <li><strong>O</strong> - Forward toss (works from spike zone, both ground and mid-air)</li>
+                <li><strong>I</strong> - Serve/Toss (ground) and Spike (mid-air)</li>
             </ul>
             <p style="margin-top: 10px; font-size: 13px; color: rgba(255, 255, 255, 0.8);">Most actions can be combined with directional keys (W/A/S/D) for aiming.</p>
             
@@ -387,8 +386,10 @@
             <ul>
                 <li>Hold <strong>I</strong> to charge your serve - release to serve</li>
                 <li>Press <strong>A + I</strong> while serving for a spike serve that targets specific lanes</li>
-                <li>Press <strong>O</strong> when the ball is in the spike zone to do a forward toss (slow, arcing trajectory)</li>
+                <li>On ground: <strong>I</strong> does forward toss if ball is in spike zone, or vertical receive if not</li>
+                <li>Press <strong>A + I</strong> on ground to force vertical toss even when ball is in spike zone</li>
                 <li>The spike zone appears when you jump or when you're on the ground and the ball enters the zone</li>
+                <li>Mid-air spikes and receives can be aimed with <strong>W/S</strong> for direction</li>
                 <li>Watch your touch count - exceeding it costs HP</li>
                 <li>Destroy tiles strategically to create scoring opportunities</li>
                 <li>Use the receive zone to automatically position for returns</li>

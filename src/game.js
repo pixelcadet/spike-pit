@@ -1038,7 +1038,7 @@ const Game = {
                 return 'AI is serving...';
             }
         }
-        return 'WASD: Move | J: Jump | I: Spike/Receive | O: Forward Toss';
+        return 'WASD: Move | J: Jump | I: Spike/Receive/Toss';
     }
 };
 

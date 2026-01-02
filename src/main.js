@@ -51,11 +51,8 @@ function gameLoop(currentTime) {
             }
         }
         // Keyup is handled in Input.init() keyup event listener
-    } else if (Input.isTossPressed()) {
-        // O key: Attempt toss (works from spike zone, both ground and mid-air)
-        Physics.attemptToss(Physics.player);
     } else if (Input.shouldAttemptHit()) {
-        // Normal gameplay: spike/receive
+        // Normal gameplay: spike/receive/toss (merged I and O buttons with smart context)
         if (!Physics.player.onGround) {
             // Mid-air: check which zone the ball is in
             // Try spike first (if ball in spike zone), then receive (if ball in receiving zone)
@@ -65,8 +62,40 @@ function gameLoop(currentTime) {
                 Physics.attemptReceive(Physics.player);
             }
         } else {
-            // On ground: attempt receive
-            Physics.attemptReceive(Physics.player);
+            // On ground: smart context - check if ball is in spike zone
+            // Helper function to check if ball is in spike zone
+            const isBallInSpikeZone = () => {
+                const ball = Physics.ball;
+                const player = Physics.player;
+                const spikeZoneRadius = Physics.SPIKE_ZONE_RADIUS + ball.radius;
+                
+                let forwardOffset = Physics.SPIKE_ZONE_FORWARD_OFFSET;
+                const spikeZoneX = player.x + forwardOffset;
+                const spikeZoneY = player.y;
+                const spikeZoneZ = player.z + Physics.SPIKE_ZONE_UPWARD_OFFSET;
+                
+                const dx = ball.x - spikeZoneX;
+                const dy = ball.y - spikeZoneY;
+                const dz = ball.z - spikeZoneZ;
+                const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                const effectiveRadius = Physics.SPIKE_ZONE_RADIUS + ball.radius;
+                
+                return dist <= effectiveRadius;
+            };
+            
+            const ballInSpikeZone = isBallInSpikeZone();
+            const isAPressed = Input.isPressed('a');
+            
+            if (ballInSpikeZone && !isAPressed) {
+                // Ball is in spike zone and A is NOT pressed: forward toss
+                Physics.attemptToss(Physics.player);
+            } else if (ballInSpikeZone && isAPressed) {
+                // Ball is in spike zone and A IS pressed: vertical toss (receive)
+                Physics.attemptReceive(Physics.player);
+            } else {
+                // Ball is NOT in spike zone: vertical receive (normal behavior)
+                Physics.attemptReceive(Physics.player);
+            }
         }
 
         // If an actual action happened (spike/receive/toss), consume the hold so we don't fire again

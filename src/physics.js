@@ -1266,6 +1266,7 @@ const Physics = {
     
     // Attempt to toss the ball (O key) - works from spike zone, both ground and mid-air
     // Tosses ball in slow, arcing trajectory over the net
+    // Now also called from I button when on ground and ball is in spike zone (smart context merge)
     attemptToss(character) {
         // Can't toss if already spiked or received this jump (prevent spamming)
         if (character.hasSpiked || character.hasReceived) {
@@ -1274,8 +1275,9 @@ const Physics = {
         
         const b = this.ball;
         
-        // Can't toss ball that is on the ground (only mid-air balls)
-        if (b.z <= b.groundLevel) {
+        // Allow ground tosses when character is on ground (for smart context merge)
+        // Otherwise, only allow mid-air balls
+        if (!character.onGround && b.z <= b.groundLevel) {
             return false;
         }
         

@@ -38,7 +38,7 @@ const AI = {
     },
     
     // If a desired position is on a destroyed tile, snap to nearest intact tile (prevents walking into holes).
-    // Otherwise, keep the original desired position for smoother tracking.
+    // Also checks nearby tiles to avoid moving through holes.
     snapIfOnHoleAISide(desiredX, desiredY) {
         if (!Game?.findNearestIntactTileCenter) {
             return { x: desiredX, y: desiredY };
@@ -49,11 +49,37 @@ const AI = {
         if (tx < Physics.NET_X || tx >= Physics.COURT_WIDTH || ty < 0 || ty >= Physics.COURT_LENGTH) {
             return { x: desiredX, y: desiredY };
         }
+        
+        // Check if target tile is a hole
         const tile = Game.getTileState?.(tx, ty);
         if (tile && !tile.indestructible && tile.destroyed) {
             const safe = Game.findNearestIntactTileCenter(tx, ty, 'ai');
             return { x: safe.x, y: safe.y };
         }
+        
+        // Also check nearby tiles (within 0.5 units) to avoid moving through holes
+        // This prevents AI from moving toward a position that's just outside a hole but would cause it to fall in
+        const checkRadius = 0.5;
+        for (let checkTy = Math.floor(desiredY - checkRadius); checkTy <= Math.floor(desiredY + checkRadius); checkTy++) {
+            for (let checkTx = Math.floor(desiredX - checkRadius); checkTx <= Math.floor(desiredX + checkRadius); checkTx++) {
+                if (checkTx < Physics.NET_X || checkTx >= Physics.COURT_WIDTH || checkTy < 0 || checkTy >= Physics.COURT_LENGTH) {
+                    continue;
+                }
+                const checkTile = Game.getTileState?.(checkTx, checkTy);
+                if (checkTile && !checkTile.indestructible && checkTile.destroyed) {
+                    // Check distance from desired position to this hole
+                    const holeCenterX = checkTx + 0.5;
+                    const holeCenterY = checkTy + 0.5;
+                    const distToHole = Math.sqrt((desiredX - holeCenterX) ** 2 + (desiredY - holeCenterY) ** 2);
+                    // If desired position is too close to a hole (within 0.4 units), avoid it
+                    if (distToHole < 0.4) {
+                        const safe = Game.findNearestIntactTileCenter(checkTx, checkTy, 'ai');
+                        return { x: safe.x, y: safe.y };
+                    }
+                }
+            }
+        }
+        
         return { x: desiredX, y: desiredY };
     },
     
@@ -197,6 +223,64 @@ const AI = {
             const predictedX = ball.x + ball.vx * this.predictionTime;
             const predictedY = ball.y + ball.vy * this.predictionTime;
             const predictedZ = ball.z + ball.vz * this.predictionTime;
+            
+            // Check if predicted ball position is over/near a hole
+            // If so, and AI is also near that hole (especially after respawning), avoid moving toward it
+            const ballTileX = Math.floor(predictedX);
+            const ballTileY = Math.floor(predictedY);
+            let ballOverHole = false;
+            if (ballTileX >= Physics.NET_X && ballTileX < Physics.COURT_WIDTH && 
+                ballTileY >= 0 && ballTileY < Physics.COURT_LENGTH) {
+                const ballTile = Game.getTileState?.(ballTileX, ballTileY);
+                if (ballTile && !ballTile.indestructible && ballTile.destroyed) {
+                    ballOverHole = true;
+                }
+            }
+            
+            // Check if AI is currently near a hole (especially after respawning)
+            const aiTileX = Math.floor(ai.x);
+            const aiTileY = Math.floor(ai.y);
+            let aiNearHole = false;
+            if (aiTileX >= Physics.NET_X && aiTileX < Physics.COURT_WIDTH && 
+                aiTileY >= 0 && aiTileY < Physics.COURT_LENGTH) {
+                // Check current tile and nearby tiles
+                for (let checkTy = aiTileY - 1; checkTy <= aiTileY + 1; checkTy++) {
+                    for (let checkTx = aiTileX - 1; checkTx <= aiTileX + 1; checkTx++) {
+                        if (checkTx >= Physics.NET_X && checkTx < Physics.COURT_WIDTH && 
+                            checkTy >= 0 && checkTy < Physics.COURT_LENGTH) {
+                            const checkTile = Game.getTileState?.(checkTx, checkTy);
+                            if (checkTile && !checkTile.indestructible && checkTile.destroyed) {
+                                aiNearHole = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (aiNearHole) break;
+                }
+            }
+            
+            // If ball is over a hole and AI is near that same hole (or just respawned), avoid moving directly toward it
+            // Instead, move to a safe position nearby
+            if (ballOverHole && aiNearHole && ai.isBlinking) {
+                // AI just respawned and ball is over a hole - stay put or move to safe center
+                const safeCenter = this.snapIfOnHoleAISide(6.0, Physics.COURT_LENGTH / 2);
+                const dxSafe = safeCenter.x - ai.x;
+                const dySafe = safeCenter.y - ai.y;
+                const distSafe = Math.sqrt(dxSafe * dxSafe + dySafe * dySafe);
+                if (distSafe > 0.1) {
+                    this.state.targetX = dxSafe / distSafe;
+                    this.state.targetY = dySafe / distSafe;
+                } else {
+                    this.state.targetX = 0;
+                    this.state.targetY = 0;
+                }
+                // Skip the rest of the ball tracking logic for this frame
+                this.state.shouldJump = false;
+                this.state.shouldSpike = false;
+                this.state.shouldReceive = false;
+                this.state.shouldToss = false;
+                return;
+            }
             
             // Clamp predicted position to court bounds (AI shouldn't run off court chasing a wild ball)
             const clampedX = Math.max(netX + 0.2, Math.min(Physics.COURT_WIDTH - 0.2, predictedX));

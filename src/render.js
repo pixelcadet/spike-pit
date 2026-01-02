@@ -870,8 +870,14 @@ const Render = {
             const ht = getCharacterHoleTile(Physics.ai);
             if (ht) fallingIntoHole.push({ type: 'character', data: Physics.ai, color: '#ff4a4a', holeTx: ht.tx, holeTy: ht.ty });
         }
-        if (Physics.ball.z < 0 && isOverHole(Physics.ball.x, Physics.ball.y)) {
-            fallingIntoHole.push({ type: 'ball', holeTx: Math.floor(Physics.ball.x), holeTy: Math.floor(Physics.ball.y) });
+        // Check if ball is falling into a hole, even if ball is out of bounds
+        // Clamp ball position to valid tile coordinates to check for nearby holes
+        if (Physics.ball.z < 0) {
+            const clampedX = Math.max(0, Math.min(Physics.COURT_WIDTH - 0.001, Physics.ball.x));
+            const clampedY = Math.max(0, Math.min(Physics.COURT_LENGTH - 0.001, Physics.ball.y));
+            if (isOverHole(clampedX, clampedY)) {
+                fallingIntoHole.push({ type: 'ball', holeTx: Math.floor(clampedX), holeTy: Math.floor(clampedY) });
+            }
         }
 
         // Build per-side mask rows: for each side that has a falling entity, we draw all intact tiles
@@ -949,18 +955,20 @@ const Render = {
             }
         });
 
-        // Draw HP arcs on the ground above shadows but below bodies.
-        // Always show (independent of showReceiveZone/showHitboxes).
-        const pMaxHp = Game?.state?.maxPlayerHp ?? 10;
-        const aMaxHp = Game?.state?.maxAiHp ?? 10;
-        this.drawHpArcGround(Physics.player, '#4a9eff', Game?.state?.playerHp ?? pMaxHp, pMaxHp, true);
-        this.drawHpArcGround(Physics.ai, '#ff4a4a', Game?.state?.aiHp ?? aMaxHp, aMaxHp, false);
-
         // Draw falling-into-hole entities first (so we can draw mask tiles above them).
         // Non-falling entities are drawn after the mask so they don't get clipped.
         const isFallingEntity = (entity) => {
             if (entity.type === 'character') return entity.data.z < 0 && !!getCharacterHoleTile(entity.data);
-            if (entity.type === 'ball') return Physics.ball.z < 0 && isOverHole(Physics.ball.x, Physics.ball.y);
+            if (entity.type === 'ball') {
+                // Check if ball is falling into a hole, even if ball is out of bounds
+                // Clamp ball position to valid tile coordinates to check for nearby holes
+                if (Physics.ball.z < 0) {
+                    const clampedX = Math.max(0, Math.min(Physics.COURT_WIDTH - 0.001, Physics.ball.x));
+                    const clampedY = Math.max(0, Math.min(Physics.COURT_LENGTH - 0.001, Physics.ball.y));
+                    return isOverHole(clampedX, clampedY);
+                }
+                return false;
+            }
             return false;
         };
         const fallingEntitiesOnCourt = entitiesOnCourt.filter(isFallingEntity);
@@ -981,6 +989,14 @@ const Render = {
             // Do this BEFORE drawing normal entities so behavior remains the same (entities can still appear above the net).
             this.drawNet();
         }
+
+        // Draw HP arcs on the ground above shadows and mask tiles but below bodies.
+        // Always show (independent of showReceiveZone/showHitboxes).
+        // Moved here so HP arcs are always on top of the ground (including mask tiles).
+        const pMaxHp = Game?.state?.maxPlayerHp ?? 10;
+        const aMaxHp = Game?.state?.maxAiHp ?? 10;
+        this.drawHpArcGround(Physics.player, '#4a9eff', Game?.state?.playerHp ?? pMaxHp, pMaxHp, true);
+        this.drawHpArcGround(Physics.ai, '#ff4a4a', Game?.state?.aiHp ?? aMaxHp, aMaxHp, false);
 
         // Draw normal entities on/in front of the court (on top of court layer)
         normalEntitiesOnCourt.forEach(entity => {

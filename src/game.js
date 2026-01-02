@@ -272,8 +272,18 @@ const Game = {
 
         if (side === 'player') {
             this.state.playerHp = Math.max(0, (this.state.playerHp ?? this.state.maxPlayerHp ?? 10) - amount);
+            // Stop falling immediately if HP reaches 0 (prevents double falling)
+            if (this.state.playerHp <= 0 && Physics.player.isFalling) {
+                Physics.player.isFalling = false;
+                Physics.player.fallTimer = 0;
+            }
         } else if (side === 'ai') {
             this.state.aiHp = Math.max(0, (this.state.aiHp ?? this.state.maxAiHp ?? 10) - amount);
+            // Stop falling immediately if HP reaches 0 (prevents double falling)
+            if (this.state.aiHp <= 0 && Physics.ai.isFalling) {
+                Physics.ai.isFalling = false;
+                Physics.ai.fallTimer = 0;
+            }
         } else {
             return;
         }

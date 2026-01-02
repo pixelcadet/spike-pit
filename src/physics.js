@@ -131,19 +131,23 @@ const Physics = {
         rotationAngle: 0 // Rotation angle in radians for visual effect
     },
     
-    // Energy ball (projectile shot by player when power meter is full)
+    // Energy ball (kamehameha beam shot by player when power mode is active)
     energyBall: {
         active: false,
+        charging: false, // True when charging (0.2s charge time)
+        chargeTime: 0, // Time spent charging
+        chargeDuration: 0.2, // Charge time before firing (0.2s)
+        powerConsumed: false, // Flag to track if power has been consumed
         x: 0,
         y: 0,
         z: 0,
         vx: 0,
         vy: 0,
         vz: 0,
-        radius: 0.15, // Smaller than regular ball
-        speed: 0.32, // Forward movement (airplane shooter style) - 80% of 0.4
+        radius: 0.4, // Larger beam (kamehameha style)
+        speed: 0.32, // Forward movement speed
         lifetime: 0,
-        maxLifetime: 10.0 // Safety timeout (shouldn't be needed, but prevents infinite loops)
+        maxLifetime: 10.0 // Safety timeout
     },
     
     init() {
@@ -154,6 +158,9 @@ const Physics = {
     
     resetEnergyBall() {
         this.energyBall.active = false;
+        this.energyBall.charging = false;
+        this.energyBall.chargeTime = 0;
+        this.energyBall.powerConsumed = false;
         this.energyBall.x = 0;
         this.energyBall.y = 0;
         this.energyBall.z = 0;
@@ -163,23 +170,45 @@ const Physics = {
         this.energyBall.lifetime = 0;
     },
     
-    // Shoot energy ball (only callable when power meter > 0)
-    shootEnergyBall() {
-        if (this.energyBall.active) return; // Don't shoot if one is already active
+    // Start charging energy ball (kamehameha)
+    startChargingEnergyBall() {
+        if (this.energyBall.active || this.energyBall.charging) return; // Don't start if already active or charging
         
-        // Start from player position, slightly forward (to avoid immediate collision with player) and at character center height
-        // Use player's current z position (follows character when jumping)
-        this.energyBall.x = this.player.x + this.player.radius * 0.5; // Slightly forward to avoid collision
+        // Start charging
+        this.energyBall.charging = true;
+        this.energyBall.chargeTime = 0;
+        this.energyBall.active = true; // Set active so we can track it
+        
+        // Position at player (will be set when firing)
+        this.energyBall.x = this.player.x;
         this.energyBall.y = this.player.y;
-        this.energyBall.z = this.player.z + this.player.radius * 0.6; // Character center height (follows player's z position, including when jumping)
+        this.energyBall.z = this.player.z + this.player.radius * 0.6;
+    },
+    
+    // Fire energy ball after charge completes
+    fireEnergyBall() {
+        // Push player back when firing (recoil) - increased power
+        const recoilForce = 0.5; // Increased from 0.3
+        this.player.vx -= recoilForce; // Push back (negative x, away from opponent)
         
-        // Shoot forward (toward opponent side) - airplane shooter style
-        // Player is on left side, opponent is on right side
+        // Consume all power when firing
+        if (Game?.state && !this.energyBall.powerConsumed) {
+            Game.state.playerPower = 0;
+            Game.state.powerModeActive = false;
+            this.energyBall.powerConsumed = true;
+        }
+        
+        // Start from player position, slightly forward and at character center height
+        this.energyBall.x = this.player.x + this.player.radius * 0.5;
+        this.energyBall.y = this.player.y;
+        this.energyBall.z = this.player.z + this.player.radius * 0.6;
+        
+        // Shoot forward (toward opponent side) - kamehameha beam
         this.energyBall.vx = this.energyBall.speed; // Forward (positive x)
         this.energyBall.vy = 0; // No depth movement
         this.energyBall.vz = 0; // No vertical movement (straight horizontal)
         
-        this.energyBall.active = true;
+        this.energyBall.charging = false;
         this.energyBall.lifetime = 0;
     },
     
@@ -187,7 +216,24 @@ const Physics = {
     updateEnergyBall(dt) {
         if (!this.energyBall.active) return;
         
-        // Update position
+        // Handle charging phase
+        if (this.energyBall.charging) {
+            // Update charge time
+            this.energyBall.chargeTime += dt;
+            
+            // Update position to follow player during charge
+            this.energyBall.x = this.player.x;
+            this.energyBall.y = this.player.y;
+            this.energyBall.z = this.player.z + this.player.radius * 0.6;
+            
+            // Fire when charge completes
+            if (this.energyBall.chargeTime >= this.energyBall.chargeDuration) {
+                this.fireEnergyBall();
+            }
+            return; // Don't move or check collisions while charging
+        }
+        
+        // Update position (only after firing)
         const frameScale = dt * 60; // Scale to 60fps reference
         this.energyBall.x += this.energyBall.vx * frameScale;
         this.energyBall.y += this.energyBall.vy * frameScale;
@@ -233,42 +279,51 @@ const Physics = {
         }
         
         if (dist3D < collisionDist) {
-            // Hit! Deal damage and push back
+            // Hit! Deal damage and push back (kamehameha does 3 HP damage)
             if (this.DEBUG_LOGS) {
-                this.debugLog('[Energy Ball HIT AI!]', {
+                this.debugLog('[Kamehameha HIT AI!]', {
                     aiBefore: { x: this.ai.x.toFixed(3), vx: this.ai.vx.toFixed(3) },
                     aiHpBefore: Game?.state?.aiHp ?? 'unknown'
                 });
             }
             
-            if (Game && Game.damageCharacterHp) {
-                Game.damageCharacterHp('ai', 1);
+            // Check if match is already over (prevent double falling)
+            const matchOver = Game?.state?.matchOver ?? false;
+            
+            if (Game && Game.damageCharacterHp && !matchOver) {
+                Game.damageCharacterHp('ai', 3); // 3 HP damage instead of 1
             }
             
-            // Stun AI for 0.4s (can't receive, jump, or toss)
-            this.ai.energyBallStunTimeLeft = this.ai.energyBallStunDuration;
-            // Make AI blink during stun
-            this.ai.isBlinking = true;
-            this.ai.blinkTimer = 0; // Reset blink timer
+            // Push back force (defined outside if block for debug log)
+            const pushBackForce = 0.8; // Increased push back for kamehameha (was 0.5)
             
-            // Push AI back significantly (away from player) - horizontal only
-            // Use a flag to persist the push back across frames (since AI movement might overwrite vx)
-            const pushBackForce = 0.5; // Significant horizontal push back
-            this.ai.vx += pushBackForce; // Push to the right (away from player)
-            // Also set a push back flag that persists
-            if (!this.ai.energyBallPushBack) {
-                this.ai.energyBallPushBack = { vx: pushBackForce, framesLeft: 3 }; // Apply push for 3 frames
-            } else {
-                // Accumulate if already being pushed
-                this.ai.energyBallPushBack.vx += pushBackForce;
-                this.ai.energyBallPushBack.framesLeft = 3; // Reset timer
+            // Only apply push back and stun if match is not over
+            if (!matchOver) {
+                // Stun AI for 0.4s (can't receive, jump, or toss)
+                this.ai.energyBallStunTimeLeft = this.ai.energyBallStunDuration;
+                // Make AI blink during stun
+                this.ai.isBlinking = true;
+                this.ai.blinkTimer = 0; // Reset blink timer
+                
+                // Push AI back significantly (away from player) - horizontal only
+                // Use a flag to persist the push back across frames (since AI movement might overwrite vx)
+                this.ai.vx += pushBackForce; // Push to the right (away from player)
+                // Also set a push back flag that persists
+                if (!this.ai.energyBallPushBack) {
+                    this.ai.energyBallPushBack = { vx: pushBackForce, framesLeft: 3 }; // Apply push for 3 frames
+                } else {
+                    // Accumulate if already being pushed
+                    this.ai.energyBallPushBack.vx += pushBackForce;
+                    this.ai.energyBallPushBack.framesLeft = 3; // Reset timer
+                }
+                // No vertical push - only horizontal movement
             }
-            // No vertical push - only horizontal movement
             
             if (this.DEBUG_LOGS) {
                 this.debugLog('[Energy Ball AI Push Applied]', {
                     aiAfter: { x: this.ai.x.toFixed(3), vx: this.ai.vx.toFixed(3) },
-                    pushBackForce: pushBackForce
+                    pushBackForce: pushBackForce,
+                    matchOver: matchOver
                 });
             }
             
@@ -725,7 +780,8 @@ const Physics = {
         
         // Only start falling if: (at/below ground and off court) OR (fallen too far below)
         // This allows jumping over edges without triggering falling state
-        if ((isAtOrBelowGroundAndOffCourt || hasFallenTooFar) && !p.isFalling) {
+        // Don't start falling if match is over (prevents double falling after match ends)
+        if ((isAtOrBelowGroundAndOffCourt || hasFallenTooFar) && !p.isFalling && !(Game?.state?.matchOver ?? false)) {
             p.isFalling = true;
             p.fallTimer = 0;
             // Falling costs HP (once per fall).
@@ -754,7 +810,10 @@ const Physics = {
         }
         
         // Handle falling state - MUST be first, before any movement processing
-        if (p.isFalling) {
+        // Don't process falling if match is over or player HP is 0 (prevents double falling)
+        const playerMatchOver = Game?.state?.matchOver ?? false;
+        const playerHpZero = (Game?.state?.playerHp ?? 10) <= 0;
+        if (p.isFalling && !playerMatchOver && !playerHpZero) {
             // After 1 second, respawn
             if (p.fallTimer >= 1.0) {
                 this.respawnCharacter(p);
@@ -976,7 +1035,8 @@ const Physics = {
         
         // Only start falling if: (at/below ground and off court) OR (fallen too far below)
         // This allows jumping over edges without triggering falling state
-        if ((isAtOrBelowGroundAndOffCourt || hasFallenTooFar) && !ai.isFalling) {
+        // Don't start falling if match is over (prevents double falling after match ends)
+        if ((isAtOrBelowGroundAndOffCourt || hasFallenTooFar) && !ai.isFalling && !(Game?.state?.matchOver ?? false)) {
             ai.isFalling = true;
             ai.fallTimer = 0;
             // Falling costs HP (once per fall).
@@ -1002,7 +1062,10 @@ const Physics = {
         }
         
         // Handle falling state - MUST be first, before any movement processing
-        if (ai.isFalling) {
+        // Don't process falling if match is over or AI HP is 0 (prevents double falling)
+        const aiMatchOver = Game?.state?.matchOver ?? false;
+        const aiHpZero = (Game?.state?.aiHp ?? 10) <= 0;
+        if (ai.isFalling && !aiMatchOver && !aiHpZero) {
             // After 1 second, respawn
             if (ai.fallTimer >= 1.0) {
                 this.respawnCharacter(ai);
@@ -2136,8 +2199,24 @@ const Physics = {
             ? Game.findNearestIntactTileCenter(preferredTx, preferredTy, side)
             : { x: side === 'player' ? this.NET_X * 0.5 : this.NET_X + (this.COURT_WIDTH - this.NET_X) * 0.5, y: this.COURT_LENGTH * 0.5 };
         
-        character.x = spawn.x;
-        character.y = spawn.y;
+        // Verify the spawn position is on an intact tile
+        const spawnTx = Math.floor(spawn.x);
+        const spawnTy = Math.floor(spawn.y);
+        if (Game?.getTileState && Game?.isTileIntactForStanding) {
+            // Double-check that the tile is actually intact
+            if (!Game.isTileIntactForStanding(spawnTx, spawnTy)) {
+                // If spawn tile is destroyed, find another intact tile
+                const safeSpawn = Game.findNearestIntactTileCenter(spawnTx, spawnTy, side);
+                character.x = safeSpawn.x;
+                character.y = safeSpawn.y;
+            } else {
+                character.x = spawn.x;
+                character.y = spawn.y;
+            }
+        } else {
+            character.x = spawn.x;
+            character.y = spawn.y;
+        }
         
         // Reset position and velocity
         character.z = 0;
@@ -2154,6 +2233,47 @@ const Physics = {
         // Start blinking state (1 second) - applies to both falling out of court and falling into holes
         character.isBlinking = true;
         character.blinkTimer = 0;
+        
+        // Final safety check: verify character is not over a hole after respawn
+        // Also check nearby tiles to ensure we're not on the edge of a hole
+        if (Game?.getTileState && Game?.isTileIntactForStanding) {
+            const finalTx = Math.floor(character.x);
+            const finalTy = Math.floor(character.y);
+            
+            // Check the tile the character is on
+            if (!Game.isTileIntactForStanding(finalTx, finalTy)) {
+                // Emergency fallback: find any intact tile on this side
+                const emergencySpawn = Game.findNearestIntactTileCenter(
+                    side === 'player' ? 1 : 6,
+                    Math.floor(this.COURT_LENGTH * 0.5),
+                    side
+                );
+                character.x = emergencySpawn.x;
+                character.y = emergencySpawn.y;
+            } else {
+                // Also check adjacent tiles to make sure we're not too close to a hole
+                const checkRadius = 1;
+                let foundHoleNearby = false;
+                for (let dy = -checkRadius; dy <= checkRadius; dy++) {
+                    for (let dx = -checkRadius; dx <= checkRadius; dx++) {
+                        const checkTx = finalTx + dx;
+                        const checkTy = finalTy + dy;
+                        if (checkTx >= 0 && checkTx < this.COURT_WIDTH && 
+                            checkTy >= 0 && checkTy < this.COURT_LENGTH) {
+                            if (!Game.isTileIntactForStanding(checkTx, checkTy)) {
+                                // Found a hole nearby - move to a safer position
+                                const safeSpawn = Game.findNearestIntactTileCenter(finalTx, finalTy, side);
+                                character.x = safeSpawn.x;
+                                character.y = safeSpawn.y;
+                                foundHoleNearby = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (foundHoleNearby) break;
+                }
+            }
+        }
     },
     
     update(input, aiInput, deltaTime = 1/60) {

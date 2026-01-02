@@ -523,7 +523,7 @@ const Render = {
         
         // Make HP bar slightly thicker than receive zone
         const receiveZoneLineWidth = 1;
-        const lineWidth = receiveZoneLineWidth * 2.0; // 2.0x thicker
+        const lineWidth = receiveZoneLineWidth * 2.1; // 2.0x thicker + 5% = 2.1x
 
         ctx.save();
         ctx.lineWidth = lineWidth;
@@ -578,13 +578,13 @@ const Render = {
         const groundProj = this.project(character.x, character.y, 0);
         const ratio = Math.max(0, Math.min(1, power / maxPower));
         
-        // Use 98% of HP bar size (match receive zone ellipse shape)
+        // Use 97% of HP bar size (match receive zone ellipse shape)
         const receiveZoneRadius = Physics.RECEIVING_ZONE_RADIUS + Physics.ball.radius;
         const minSize = 6;
         const r = Math.max(receiveZoneRadius * this.courtTileSize * groundProj.scale, minSize);
         const squash = Physics.RECEIVE_ZONE_Y_SQUASH ?? 0.55;
-        const rx = r * 0.98; // 98% of HP bar size
-        const ry = Math.max(r * squash * 0.98, minSize * 0.98);
+        const rx = r * 0.98; // 98% of HP bar size (horizontal width increased by 1%)
+        const ry = Math.max(r * squash * 0.97, minSize * 0.97); // Keep vertical at 97%
         
         // Position: same as HP bar (exact same position)
         const yOffsetPx = 24;
@@ -602,12 +602,7 @@ const Render = {
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
 
-        // Background track (full ellipse outline)
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-        ctx.beginPath();
-        ctx.ellipse(centerX, centerY, rx, ry, 0, 0, Math.PI * 2);
-        ctx.stroke();
-
+        // No background track - only show the filled portion
         // Filled portion (partial ellipse arc based on power)
         if (ratio > 0) {
             // Player: left side stays filled, fill from left clockwise
@@ -748,7 +743,7 @@ const Render = {
         ctx.restore();
     },
     
-    // Draw energy ball (projectile)
+    // Draw energy ball (kamehameha beam)
     drawEnergyBall() {
         if (!Physics.energyBall || !Physics.energyBall.active) return;
         
@@ -756,37 +751,56 @@ const Render = {
         const eb = Physics.energyBall;
         const proj = this.project(eb.x, eb.y, eb.z);
         
-        const energyBallSize = eb.radius * this.courtTileSize * proj.scale;
-        const minSize = 4;
-        const finalSize = Math.max(energyBallSize, minSize);
-        
-        ctx.save();
-        ctx.translate(proj.x, proj.y);
-        
-        // Draw energy ball as a glowing gold/yellow circle
-        // Outer glow
-        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, finalSize);
-        gradient.addColorStop(0, 'rgba(255, 215, 0, 0.9)'); // Gold center
-        gradient.addColorStop(0.5, 'rgba(255, 200, 0, 0.6)'); // Orange-gold
-        gradient.addColorStop(1, 'rgba(255, 150, 0, 0.2)'); // Orange glow
-        
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(0, 0, finalSize, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Inner bright core
-        ctx.fillStyle = '#FFD700';
-        ctx.beginPath();
-        ctx.arc(0, 0, finalSize * 0.6, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Border
-        ctx.strokeStyle = '#FFA500';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        
-        ctx.restore();
+        // Draw charging effect or beam
+        if (eb.charging) {
+            // Draw charging effect at player position
+            const chargeProgress = eb.chargeTime / eb.chargeDuration;
+            const chargeSize = 20 + (chargeProgress * 30); // Grows from 20 to 50 pixels
+            const chargeAlpha = 0.3 + (chargeProgress * 0.7); // Fades in
+            
+            ctx.save();
+            ctx.translate(proj.x, proj.y);
+            ctx.globalAlpha = chargeAlpha;
+            
+            // Pulsing charge circle
+            const chargeGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, chargeSize);
+            chargeGradient.addColorStop(0, 'rgba(255, 255, 255, 0.9)'); // White center
+            chargeGradient.addColorStop(0.5, 'rgba(255, 215, 0, 0.6)'); // Gold
+            chargeGradient.addColorStop(1, 'rgba(255, 150, 0, 0.2)'); // Orange glow
+            
+            ctx.fillStyle = chargeGradient;
+            ctx.beginPath();
+            ctx.arc(0, 0, chargeSize, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.restore();
+        } else {
+            // Draw kamehameha beam (large and elongated)
+            const beamLength = 200; // Length of beam in pixels
+            const beamWidth = eb.radius * this.courtTileSize * proj.scale;
+            const minBeamWidth = 15;
+            const finalBeamWidth = Math.max(beamWidth, minBeamWidth);
+            
+            ctx.save();
+            ctx.translate(proj.x, proj.y);
+            
+            // Draw beam as an elongated rectangle with gradient
+            const beamGradient = ctx.createLinearGradient(0, 0, beamLength, 0);
+            beamGradient.addColorStop(0, 'rgba(255, 255, 255, 0.95)'); // Bright white at start
+            beamGradient.addColorStop(0.2, 'rgba(255, 255, 200, 0.9)'); // Light yellow
+            beamGradient.addColorStop(0.5, 'rgba(255, 215, 0, 0.8)'); // Gold
+            beamGradient.addColorStop(0.8, 'rgba(255, 150, 0, 0.6)'); // Orange
+            beamGradient.addColorStop(1, 'rgba(255, 100, 0, 0.3)'); // Dark orange at end
+            
+            ctx.fillStyle = beamGradient;
+            ctx.fillRect(0, -finalBeamWidth / 2, beamLength, finalBeamWidth);
+            
+            // Add bright core
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.fillRect(0, -finalBeamWidth * 0.3, beamLength * 0.8, finalBeamWidth * 0.6);
+            
+            ctx.restore();
+        }
     },
     
     // Update render-side animations (pulsing, etc.)

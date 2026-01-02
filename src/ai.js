@@ -37,6 +37,98 @@ const AI = {
         this.isActive = true; // Default: AI is active
     },
     
+    // Check if there's a hole in the path between current position and target position
+    // Returns true if there's a hole blocking the path
+    checkPathForHoles(fromX, fromY, toX, toY) {
+        if (!Game?.getTileState) return false;
+        
+        // Sample points along the path to check for holes
+        const pathLength = Math.sqrt((toX - fromX) ** 2 + (toY - fromY) ** 2);
+        if (pathLength < 0.3) return false; // Too short to matter
+        
+        // Sample every 0.3 units along the path
+        const numSamples = Math.ceil(pathLength / 0.3);
+        for (let i = 1; i <= numSamples; i++) {
+            const t = i / numSamples;
+            const checkX = fromX + (toX - fromX) * t;
+            const checkY = fromY + (toY - fromY) * t;
+            
+            const tx = Math.floor(checkX);
+            const ty = Math.floor(checkY);
+            
+            if (tx < Physics.NET_X || tx >= Physics.COURT_WIDTH || ty < 0 || ty >= Physics.COURT_LENGTH) {
+                continue; // Out of bounds, skip
+            }
+            
+            const tile = Game.getTileState?.(tx, ty);
+            if (tile && !tile.indestructible && tile.destroyed) {
+                return true; // Found a hole in the path
+            }
+        }
+        
+        return false; // No holes in path
+    },
+    
+    // Find an alternative path around holes
+    // Returns a safe position to move toward that avoids holes
+    findPathAroundHoles(fromX, fromY, toX, toY) {
+        if (!this.checkPathForHoles(fromX, fromY, toX, toY)) {
+            // No holes in path, can go directly
+            return { x: toX, y: toY, shouldJump: false };
+        }
+        
+        // Try going around: first try going more in X direction, then Y
+        const dx = toX - fromX;
+        const dy = toY - fromY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        
+        if (dist < 0.1) {
+            // Already very close, just snap to safe position
+            return this.snapIfOnHoleAISide(toX, toY);
+        }
+        
+        // Try alternative paths: go more horizontally first, then vertically
+        const alternatives = [
+            { x: toX, y: fromY }, // Go horizontally first
+            { x: fromX, y: toY }, // Go vertically first
+            { x: fromX + dx * 0.5, y: fromY + dy * 0.5 }, // Halfway point
+        ];
+        
+        for (const alt of alternatives) {
+            const clampedX = Math.max(Physics.NET_X + 0.2, Math.min(Physics.COURT_WIDTH - 0.2, alt.x));
+            const clampedY = Math.max(0.2, Math.min(Physics.COURT_LENGTH - 0.2, alt.y));
+            const safe = this.snapIfOnHoleAISide(clampedX, clampedY);
+            
+            // Check if this alternative path is clear
+            if (!this.checkPathForHoles(fromX, fromY, safe.x, safe.y)) {
+                return { x: safe.x, y: safe.y, shouldJump: false };
+            }
+        }
+        
+        // If all alternatives have holes, check if we can jump over
+        // Only jump if on ground and the hole is small (single tile)
+        const ai = Physics.ai;
+        if (ai.onGround) {
+            const midX = (fromX + toX) * 0.5;
+            const midY = (fromY + toY) * 0.5;
+            const midTx = Math.floor(midX);
+            const midTy = Math.floor(midY);
+            
+            if (midTx >= Physics.NET_X && midTx < Physics.COURT_WIDTH && 
+                midTy >= 0 && midTy < Physics.COURT_LENGTH) {
+                const midTile = Game.getTileState?.(midTx, midTy);
+                if (midTile && !midTile.indestructible && midTile.destroyed) {
+                    // Single hole in the middle - can jump over it
+                    return { x: toX, y: toY, shouldJump: true };
+                }
+            }
+        }
+        
+        // Last resort: just snap to safe position
+        const safe = this.snapIfOnHoleAISide(toX, toY);
+        return { x: safe.x, y: safe.y, shouldJump: false };
+    },
+    
     // If a desired position is on a destroyed tile, snap to nearest intact tile (prevents walking into holes).
     // Also checks nearby tiles to avoid moving through holes.
     snapIfOnHoleAISide(desiredX, desiredY) {
@@ -287,9 +379,15 @@ const AI = {
             const clampedY = Math.max(0.2, Math.min(Physics.COURT_LENGTH - 0.2, predictedY));
             const safe = this.snapIfOnHoleAISide(clampedX, clampedY);
             
+            // Check if there's a hole in the path and find alternative route or jump over
+            const pathInfo = this.findPathAroundHoles(ai.x, ai.y, safe.x, safe.y);
+            const targetX = pathInfo.x;
+            const targetY = pathInfo.y;
+            const shouldJumpOverHole = pathInfo.shouldJump && ai.onGround;
+            
             // Calculate distance to predicted ball position
-            const dx = safe.x - ai.x;
-            const dy = safe.y - ai.y;
+            const dx = targetX - ai.x;
+            const dy = targetY - ai.y;
             const dz = predictedZ - ai.z;
             const dist = Math.sqrt(dx * dx + dy * dy);
             const dist3D = Math.sqrt(dx * dx + dy * dy + dz * dz);
@@ -311,9 +409,23 @@ const AI = {
             // Otherwise, move toward predicted ball position to maintain spike zone alignment
             if (ballInSpikeZone) {
                 // Ball is in spike zone - make small adjustments to maintain position
-                if (dist > 0.3) {
-                    this.state.targetX = dx / dist;
-                    this.state.targetY = dy / dist;
+                // Check path for holes even for small adjustments
+                const pathInfoSpike = this.findPathAroundHoles(ai.x, ai.y, safe.x, safe.y);
+                const targetXSpike = pathInfoSpike.x;
+                const targetYSpike = pathInfoSpike.y;
+                const shouldJumpOverHoleSpike = pathInfoSpike.shouldJump && ai.onGround;
+                
+                const dxSpike = targetXSpike - ai.x;
+                const dySpike = targetYSpike - ai.y;
+                const distSpike = Math.sqrt(dxSpike * dxSpike + dySpike * dySpike);
+                
+                if (distSpike > 0.3) {
+                    this.state.targetX = dxSpike / distSpike;
+                    this.state.targetY = dySpike / distSpike;
+                    // Set jump if needed to jump over hole
+                    if (shouldJumpOverHoleSpike && !this.state.shouldJump) {
+                        this.state.shouldJump = true;
+                    }
                 } else {
                     this.state.targetX = 0;
                     this.state.targetY = 0;
@@ -336,13 +448,23 @@ const AI = {
                 const clampedDesiredY = Math.max(0.2, Math.min(Physics.COURT_LENGTH - 0.2, desiredY));
                 const safeDesired = this.snapIfOnHoleAISide(clampedDesiredX, clampedDesiredY);
                 
-                const dxSafe = safeDesired.x - ai.x;
-                const dySafe = safeDesired.y - ai.y;
+                // Check path for holes and find alternative route
+                const pathInfoDesired = this.findPathAroundHoles(ai.x, ai.y, safeDesired.x, safeDesired.y);
+                const targetXDesired = pathInfoDesired.x;
+                const targetYDesired = pathInfoDesired.y;
+                const shouldJumpOverHoleDesired = pathInfoDesired.shouldJump && ai.onGround;
+                
+                const dxSafe = targetXDesired - ai.x;
+                const dySafe = targetYDesired - ai.y;
                 const distSafe = Math.sqrt(dxSafe * dxSafe + dySafe * dySafe);
                 
                 if (distSafe > 0.1) {
                     this.state.targetX = dxSafe / distSafe;
                     this.state.targetY = dySafe / distSafe;
+                    // Also set jump if needed to jump over hole
+                    if (shouldJumpOverHoleDesired && !this.state.shouldJump) {
+                        this.state.shouldJump = true;
+                    }
                 } else {
                     this.state.targetX = 0;
                     this.state.targetY = 0;
@@ -406,9 +528,13 @@ const AI = {
             }
             
             // Secondary strategy: Jump/receive only for hard balls (55% reliable) or to spike
+            // OR jump to avoid holes in path
             let shouldJump = false;
             if (ai.onGround && ballCloseHorizontally) {
-                if (ballInSpikeZone && ballAboveGround && !ballLow && !shouldToss) {
+                if (shouldJumpOverHole) {
+                    // Jump over hole in path (priority)
+                    shouldJump = true;
+                } else if (ballInSpikeZone && ballAboveGround && !ballLow && !shouldToss) {
                     // Ball is in spike zone and medium-high - sometimes jump to spike (if not tossing)
                     const spikeChance = touchAware ? 0.3 : 0.15;
                     shouldJump = Math.random() < spikeChance;
@@ -420,6 +546,9 @@ const AI = {
                     shouldJump = true;
                 }
                 // Otherwise: don't jump (prefer positioning for spike zone toss)
+            } else if (shouldJumpOverHole && ai.onGround) {
+                // Jump over hole even if ball is not close (to avoid falling)
+                shouldJump = true;
             }
             this.state.shouldJump = shouldJump;
             this.state.shouldToss = shouldToss;

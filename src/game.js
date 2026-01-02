@@ -305,7 +305,29 @@ const Game = {
     },
     
     // Find nearest intact tile center on a side, starting from a preferred tile coord.
-    findNearestIntactTileCenter(preferredTx, preferredTy, side) {
+    findNearestIntactTileCenter(preferredTx, preferredTy, side, preferBackRow = false) {
+        // If preferBackRow is true, first try to find intact tiles in the back area (ty=2 or ty=3)
+        // This is used when respawning from Edge A (back row) to keep character in back area
+        if (preferBackRow) {
+            const backRows = [Physics.COURT_LENGTH - 1, Physics.COURT_LENGTH - 2]; // ty=3, then ty=2
+            for (const ty of backRows) {
+                if (ty < 0 || ty >= Physics.COURT_LENGTH) continue;
+                // Search horizontally across the back row
+                const maxR = Physics.COURT_WIDTH;
+                for (let r = 0; r <= maxR; r++) {
+                    for (let dx = -r; dx <= r; dx++) {
+                        const tx = preferredTx + dx;
+                        if (tx < 0 || tx >= Physics.COURT_WIDTH) continue;
+                        if (!this.isTileOnSide(tx, side)) continue;
+                        if (!this.isTileIntactForStanding(tx, ty)) continue;
+                        return { x: tx + 0.5, y: ty + 0.5, tx, ty };
+                    }
+                }
+            }
+            // If no back row tiles found, fall through to general search
+        }
+        
+        // General search: expanding circles from preferred position
         const maxR = Physics.COURT_WIDTH + Physics.COURT_LENGTH;
         for (let r = 0; r <= maxR; r++) {
             for (let dy = -r; dy <= r; dy++) {

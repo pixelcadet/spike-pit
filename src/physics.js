@@ -1039,6 +1039,8 @@ const Physics = {
         if ((isAtOrBelowGroundAndOffCourt || hasFallenTooFar) && !ai.isFalling && !(Game?.state?.matchOver ?? false)) {
             ai.isFalling = true;
             ai.fallTimer = 0;
+            // Clear any active push-back when falling starts (prevents continued push during fall)
+            ai.energyBallPushBack = null;
             // Falling costs HP (once per fall).
             if (Game?.damageCharacterHp && !Game?.state?.matchOver) {
                 Game.damageCharacterHp('ai', Game?.state?.fallDamage ?? 3, 'fall');
@@ -1120,7 +1122,8 @@ const Physics = {
             ai.vy = (aiInput.vy || 0) * speedMultiplier;
             
             // Apply energy ball push back if active (after setting base velocity)
-            if (ai.energyBallPushBack && ai.energyBallPushBack.framesLeft > 0) {
+            // Don't apply push-back during falling state (prevents double falling)
+            if (!ai.isFalling && ai.energyBallPushBack && ai.energyBallPushBack.framesLeft > 0) {
                 ai.vx += ai.energyBallPushBack.vx;
                 ai.energyBallPushBack.framesLeft--;
                 if (ai.energyBallPushBack.framesLeft <= 0) {
@@ -2177,10 +2180,12 @@ const Physics = {
         const side = (character === this.player) ? 'player' : 'ai';
         
         let preferredTx, preferredTy;
+        let preferBackRow = false;
         if (character.fallEdge === 'A') {
-            // Back row
+            // Back row - prioritize staying in back area even if back row is destroyed
             preferredTy = this.COURT_LENGTH - 1;
             preferredTx = side === 'player' ? 1 : 6;
+            preferBackRow = true; // Try to find intact tiles in back area first
         } else if (character.fallEdge === 'B') {
             // Side edge
             preferredTy = Math.floor(this.COURT_LENGTH * 0.5);
@@ -2196,7 +2201,7 @@ const Physics = {
         }
         
         const spawn = Game?.findNearestIntactTileCenter
-            ? Game.findNearestIntactTileCenter(preferredTx, preferredTy, side)
+            ? Game.findNearestIntactTileCenter(preferredTx, preferredTy, side, preferBackRow)
             : { x: side === 'player' ? this.NET_X * 0.5 : this.NET_X + (this.COURT_WIDTH - this.NET_X) * 0.5, y: this.COURT_LENGTH * 0.5 };
         
         // Verify the spawn position is on an intact tile
@@ -2229,6 +2234,8 @@ const Physics = {
         character.fellFromHole = false;
         character.damageBlinkTimeLeft = 0;
         character.damageBlinkDuration = 0;
+        // Clear any active push-back on respawn (prevents continued push after respawn)
+        character.energyBallPushBack = null;
         
         // Start blinking state (1 second) - applies to both falling out of court and falling into holes
         character.isBlinking = true;

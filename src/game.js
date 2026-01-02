@@ -62,7 +62,12 @@ const Game = {
         holeScoreFxTimeLeft: 0,
         holeScoreFxDuration: 0,
         holeScoreFxTx: -1,
-        holeScoreFxTy: -1
+        holeScoreFxTy: -1,
+        
+        // Power meter: fills up when player successfully spikes (max 5)
+        playerPower: 0,
+        maxPower: 5,
+        powerModeActive: false // True when power reached max, stays true until power goes to 0
     },
     
     // Serve multipliers (set by sliders)
@@ -95,6 +100,9 @@ const Game = {
         this.state.holeScoreFxDuration = 0;
         this.state.holeScoreFxTx = -1;
         this.state.holeScoreFxTy = -1;
+        this.state.playerPower = 0;
+        this.state.maxPower = 5;
+        this.state.powerModeActive = false;
         this.state.aiServeDelay = 1.0;
         this.state.aiServeTimer = 0;
         this.state.isServing = true;
@@ -495,6 +503,8 @@ const Game = {
         this.state.spikeServeTarget = null;
         this.state.isOverchargedSpikeServe = false;
         this.state.blockHitUntilIRelease = false;
+        
+        // Power meter does NOT reset after score - it persists
         
         // Set up serve for the winner
         // Alternate serve based on total points

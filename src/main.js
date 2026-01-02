@@ -105,6 +105,19 @@ function gameLoop(currentTime) {
         }
     }
     
+    // Check for energy ball shooting (O key, when power meter > 0)
+    // Allow shooting multiple times - only prevent if energy ball is already active
+    if (Input.shouldShootEnergyBall() && !Physics.energyBall.active) {
+        Physics.shootEnergyBall();
+        // Decrease power meter by 1
+        const newPower = Math.max(0, Game.state.playerPower - 1);
+        Game.state.playerPower = newPower;
+        // Deactivate power mode when power reaches 0
+        if (newPower === 0) {
+            Game.state.powerModeActive = false;
+        }
+    }
+    
     // Check for AI actions
     // If AI is serving, handle serve
     if (Game.state.isServing && Game.state.servingPlayer === 'ai') {

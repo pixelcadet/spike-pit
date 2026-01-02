@@ -502,13 +502,16 @@ const AI = {
     },
     
     getInput() {
+        // Check if AI is stunned by energy ball (can't receive, jump, or toss)
+        const isStunned = Physics.ai.energyBallStunTimeLeft > 0;
+        
         return {
             vx: this.state.targetX * this.reactionSpeed,
             vy: this.state.targetY * this.reactionSpeed,
-            jump: this.state.shouldJump,
-            spike: this.state.shouldSpike,
-            receive: this.state.shouldReceive,
-            toss: this.state.shouldToss
+            jump: this.state.shouldJump && !isStunned, // Block jump when stunned
+            spike: this.state.shouldSpike, // Spike still allowed
+            receive: this.state.shouldReceive && !isStunned, // Block receive when stunned
+            toss: this.state.shouldToss && !isStunned // Block toss when stunned
         };
     }
 };

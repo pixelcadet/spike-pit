@@ -153,6 +153,16 @@ const Input = {
         if (Physics.player.isFalling) return false;
         return this.isPressed('o');
     },
+    
+    // Check if energy ball should be shot (O key pressed, power meter > 0)
+    shouldShootEnergyBall() {
+        if (Physics.player.isFalling) return false;
+        if (Game.state.isServing) return false; // Can't shoot during serve
+        if (Game.state.isResetting) return false; // Can't shoot during reset after scoring
+        if (!this.isPressed('o')) return false;
+        // Can shoot if power meter has any power (not just when full)
+        return Game.state.playerPower > 0;
+    },
 
     // For rally actions: "I is held and not yet used this hold".
     // This still allows holding I to time the hit, but prevents repeated actions while held.

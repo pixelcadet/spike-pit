@@ -4,6 +4,7 @@
 const Render = {
     canvas: null,
     ctx: null,
+    pulseTime: 0, // Time accumulator for pulsing effects
     // Highlight states for visual feedback
     playerSpikeHighlight: false,
     playerReceivingHighlight: false,
@@ -75,6 +76,13 @@ const Render = {
     },
 
     update(deltaTime = 1 / 60) {
+        // Update pulse time for pulsing effects
+        this.pulseTime = (this.pulseTime || 0) + deltaTime;
+        // Keep pulse time reasonable (prevent overflow)
+        if (this.pulseTime > 1000) {
+            this.pulseTime = this.pulseTime % 1000;
+        }
+        
         if (this.shakeTimeLeft > 0) {
             this.shakeTimeLeft -= deltaTime;
             if (this.shakeTimeLeft < 0) this.shakeTimeLeft = 0;
@@ -451,15 +459,36 @@ const Render = {
             alpha *= dmgAlpha;
         }
         
+        // Determine outline color based on power meter (only for player)
+        // Yellow only when power reaches max (5), stays yellow while decreasing until 0, then black
+        let outlineColor = '#000'; // Default black
+        let outlineAlpha = 1.0; // Default full opacity
+        if (character === Physics.player) {
+            const playerPower = Game?.state?.playerPower ?? 0;
+            const powerModeActive = Game?.state?.powerModeActive ?? false;
+            // Yellow only when power mode is active (reached max, stays active until power goes to 0)
+            if (powerModeActive && playerPower > 0) {
+                outlineColor = '#FFD700'; // Yellow/gold during power mode
+                // Pulsing effect: alternate transparency (0.5 to 1.0)
+                const pulseSpeed = 3.0; // Speed of pulse (cycles per second)
+                const pulsePhase = (this.pulseTime || 0) * pulseSpeed * Math.PI * 2;
+                outlineAlpha = 0.5 + 0.5 * (0.5 + 0.5 * Math.sin(pulsePhase)); // Oscillates between 0.5 and 1.0
+            } else {
+                outlineColor = '#000'; // Black otherwise
+            }
+        }
+        
         // Draw character rectangle (centered on position)
         ctx.globalAlpha = alpha;
         ctx.fillStyle = color;
         ctx.fillRect(proj.x - rectWidth / 2, proj.y - rectHeight / 2, rectWidth, rectHeight);
         
-        // Draw character border (thicker for visibility)
-        ctx.strokeStyle = '#000';
+        // Draw character border (thicker for visibility) with pulsing effect
+        ctx.globalAlpha = alpha * outlineAlpha; // Apply pulsing to outline
+        ctx.strokeStyle = outlineColor;
         ctx.lineWidth = 4;
         ctx.strokeRect(proj.x - rectWidth / 2, proj.y - rectHeight / 2, rectWidth, rectHeight);
+        ctx.globalAlpha = alpha; // Reset alpha for other drawing
         
         // Draw a small indicator on top (rectangle highlight)
         ctx.fillStyle = '#fff';
@@ -530,6 +559,64 @@ const Render = {
             }
             
             ctx.strokeStyle = this.colorWithAlpha(color, 0.9);
+            ctx.beginPath();
+            ctx.ellipse(centerX, centerY, rx, ry, 0, startAngle, endAngle);
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    },
+    
+    // Draw power meter (98% of HP arc size, same position)
+    drawPowerMeter(character, color, power, maxPower) {
+        const ctx = this.ctx;
+        if (power == null || maxPower == null || maxPower <= 0) return;
+        if (character.z < 0) return; // don't draw while falling under floor
+        if (character !== Physics.player) return; // Only show for player
+        if (power < 1) return; // Don't show when empty (only show when >= 1)
+
+        const groundProj = this.project(character.x, character.y, 0);
+        const ratio = Math.max(0, Math.min(1, power / maxPower));
+        
+        // Use 98% of HP bar size (match receive zone ellipse shape)
+        const receiveZoneRadius = Physics.RECEIVING_ZONE_RADIUS + Physics.ball.radius;
+        const minSize = 6;
+        const r = Math.max(receiveZoneRadius * this.courtTileSize * groundProj.scale, minSize);
+        const squash = Physics.RECEIVE_ZONE_Y_SQUASH ?? 0.55;
+        const rx = r * 0.98; // 98% of HP bar size
+        const ry = Math.max(r * squash * 0.98, minSize * 0.98);
+        
+        // Position: same as HP bar (exact same position)
+        const yOffsetPx = 24;
+        const centerX = groundProj.x;
+        const centerY = groundProj.y + yOffsetPx; // Same position as HP bar
+        
+        // Make power meter thicker when full (visual indicator)
+        const receiveZoneLineWidth = 1;
+        const isFull = power >= maxPower;
+        const baseLineWidth = receiveZoneLineWidth * 2.0; // Same as HP bar (2.0x receive zone line width)
+        const lineWidth = isFull ? baseLineWidth * 1.5 : baseLineWidth; // 50% thicker when full
+
+        ctx.save();
+        ctx.lineWidth = lineWidth;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        // Background track (full ellipse outline)
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.beginPath();
+        ctx.ellipse(centerX, centerY, rx, ry, 0, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Filled portion (partial ellipse arc based on power)
+        if (ratio > 0) {
+            // Player: left side stays filled, fill from left clockwise
+            const totalAngle = Math.PI * 2;
+            const startAngle = Math.PI; // 180° (left)
+            const endAngle = Math.PI + (totalAngle * ratio);
+            
+            // Use a brighter color for power meter (yellow/gold)
+            ctx.strokeStyle = this.colorWithAlpha('#FFD700', 0.9); // Gold color
             ctx.beginPath();
             ctx.ellipse(centerX, centerY, rx, ry, 0, startAngle, endAngle);
             ctx.stroke();
@@ -661,6 +748,57 @@ const Render = {
         ctx.restore();
     },
     
+    // Draw energy ball (projectile)
+    drawEnergyBall() {
+        if (!Physics.energyBall || !Physics.energyBall.active) return;
+        
+        const ctx = this.ctx;
+        const eb = Physics.energyBall;
+        const proj = this.project(eb.x, eb.y, eb.z);
+        
+        const energyBallSize = eb.radius * this.courtTileSize * proj.scale;
+        const minSize = 4;
+        const finalSize = Math.max(energyBallSize, minSize);
+        
+        ctx.save();
+        ctx.translate(proj.x, proj.y);
+        
+        // Draw energy ball as a glowing gold/yellow circle
+        // Outer glow
+        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, finalSize);
+        gradient.addColorStop(0, 'rgba(255, 215, 0, 0.9)'); // Gold center
+        gradient.addColorStop(0.5, 'rgba(255, 200, 0, 0.6)'); // Orange-gold
+        gradient.addColorStop(1, 'rgba(255, 150, 0, 0.2)'); // Orange glow
+        
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(0, 0, finalSize, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Inner bright core
+        ctx.fillStyle = '#FFD700';
+        ctx.beginPath();
+        ctx.arc(0, 0, finalSize * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Border
+        ctx.strokeStyle = '#FFA500';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        ctx.restore();
+    },
+    
+    // Update render-side animations (pulsing, etc.)
+    update(deltaTime) {
+        // Update pulse time for pulsing effects
+        this.pulseTime = (this.pulseTime || 0) + deltaTime;
+        // Keep pulse time reasonable (prevent overflow)
+        if (this.pulseTime > 1000) {
+            this.pulseTime = this.pulseTime % 1000;
+        }
+    },
+    
     // Main render function
     // Update highlight states based on input and character states
     updateHighlights(input, aiInput) {
@@ -781,6 +919,11 @@ const Render = {
             { type: 'ball', y: Physics.ball.y, x: Physics.ball.x }
         ];
         
+        // Add energy ball if active
+        if (Physics.energyBall && Physics.energyBall.active) {
+            entities.push({ type: 'energyBall', y: Physics.energyBall.y, x: Physics.energyBall.x });
+        }
+        
         // Split entities: behind court (off EDGE A or EDGE B, or falling from EDGE A/B) vs on/in front of court.
         // NOTE: We do NOT push "falling into hole" behind the whole court anymore. Instead, we render a targeted
         // tile-mask overlay (same row and closer-to-camera rows on that half-court) above the falling entity.
@@ -799,6 +942,10 @@ const Render = {
                 // This ensures falling from EDGE C doesn't render behind court
                 const isFallingFromEdgeAB = char.z < 0 && (offEdgeA || offEdgeB);
                 return offEdgeA || offEdgeB || isFallingFromEdgeAB;
+            } else if (e.type === 'energyBall') {
+                // Energy ball: always render (even if out of bounds) until it despawns
+                // This allows it to travel off-screen
+                return false; // Don't put it behind court, render it normally
             } else {
                 // Ball: check both edges and falling from EDGE A or B
                 const offEdgeA = e.y > Physics.COURT_LENGTH;
@@ -819,6 +966,10 @@ const Render = {
                 const offEdgeB = pct.edgeB >= 0.5;
                 const isFallingFromEdgeAB = char.z < 0 && (offEdgeA || offEdgeB);
                 return !offEdgeA && !offEdgeB && !isFallingFromEdgeAB;
+            } else if (e.type === 'energyBall') {
+                // Energy ball: always render (even if out of bounds) until it despawns
+                // This allows it to travel off-screen
+                return true;
             } else {
                 // Ball: on court if not off EDGE A, not off EDGE B, and not falling from EDGE A/B
                 const offEdgeA = e.y > Physics.COURT_LENGTH;
@@ -855,6 +1006,8 @@ const Render = {
                 this.drawCharacterBody(entity.data, entity.color);
             } else if (entity.type === 'ball') {
                 this.drawBallBody();
+            } else if (entity.type === 'energyBall') {
+                this.drawEnergyBall();
             }
         });
         
@@ -953,6 +1106,7 @@ const Render = {
             } else if (entity.type === 'ball') {
                 this.drawBallShadow();
             }
+            // Energy ball doesn't cast shadow (it's a glowing projectile)
         });
 
         // Draw falling-into-hole entities first (so we can draw mask tiles above them).
@@ -979,6 +1133,8 @@ const Render = {
                 this.drawCharacterBody(entity.data, entity.color);
             } else if (entity.type === 'ball') {
                 this.drawBallBody();
+            } else if (entity.type === 'energyBall') {
+                this.drawEnergyBall();
             }
         });
 
@@ -997,13 +1153,20 @@ const Render = {
         const aMaxHp = Game?.state?.maxAiHp ?? 10;
         this.drawHpArcGround(Physics.player, '#4a9eff', Game?.state?.playerHp ?? pMaxHp, pMaxHp, true);
         this.drawHpArcGround(Physics.ai, '#ff4a4a', Game?.state?.aiHp ?? aMaxHp, aMaxHp, false);
-
+        
+        // Draw power meter (only for player, above HP arc)
+        const maxPower = Game?.state?.maxPower ?? 5;
+        const playerPower = Game?.state?.playerPower ?? 0;
+        this.drawPowerMeter(Physics.player, '#FFD700', playerPower, maxPower);
+        
         // Draw normal entities on/in front of the court (on top of court layer)
         normalEntitiesOnCourt.forEach(entity => {
             if (entity.type === 'character') {
                 this.drawCharacterBody(entity.data, entity.color);
             } else if (entity.type === 'ball') {
                 this.drawBallBody();
+            } else if (entity.type === 'energyBall') {
+                this.drawEnergyBall();
             }
         });
 

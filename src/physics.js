@@ -131,9 +131,165 @@ const Physics = {
         rotationAngle: 0 // Rotation angle in radians for visual effect
     },
     
+    // Energy ball (projectile shot by player when power meter is full)
+    energyBall: {
+        active: false,
+        x: 0,
+        y: 0,
+        z: 0,
+        vx: 0,
+        vy: 0,
+        vz: 0,
+        radius: 0.15, // Smaller than regular ball
+        speed: 0.32, // Forward movement (airplane shooter style) - 80% of 0.4
+        lifetime: 0,
+        maxLifetime: 10.0 // Safety timeout (shouldn't be needed, but prevents infinite loops)
+    },
+    
     init() {
         // Initialize ball position above player
         this.resetBall();
+        this.resetEnergyBall();
+    },
+    
+    resetEnergyBall() {
+        this.energyBall.active = false;
+        this.energyBall.x = 0;
+        this.energyBall.y = 0;
+        this.energyBall.z = 0;
+        this.energyBall.vx = 0;
+        this.energyBall.vy = 0;
+        this.energyBall.vz = 0;
+        this.energyBall.lifetime = 0;
+    },
+    
+    // Shoot energy ball (only callable when power meter > 0)
+    shootEnergyBall() {
+        if (this.energyBall.active) return; // Don't shoot if one is already active
+        
+        // Start from player position, slightly forward (to avoid immediate collision with player) and at character center height
+        // Use player's current z position (follows character when jumping)
+        this.energyBall.x = this.player.x + this.player.radius * 0.5; // Slightly forward to avoid collision
+        this.energyBall.y = this.player.y;
+        this.energyBall.z = this.player.z + this.player.radius * 0.6; // Character center height (follows player's z position, including when jumping)
+        
+        // Shoot forward (toward opponent side) - airplane shooter style
+        // Player is on left side, opponent is on right side
+        this.energyBall.vx = this.energyBall.speed; // Forward (positive x)
+        this.energyBall.vy = 0; // No depth movement
+        this.energyBall.vz = 0; // No vertical movement (straight horizontal)
+        
+        this.energyBall.active = true;
+        this.energyBall.lifetime = 0;
+    },
+    
+    // Update energy ball physics
+    updateEnergyBall(dt) {
+        if (!this.energyBall.active) return;
+        
+        // Update position
+        const frameScale = dt * 60; // Scale to 60fps reference
+        this.energyBall.x += this.energyBall.vx * frameScale;
+        this.energyBall.y += this.energyBall.vy * frameScale;
+        this.energyBall.z += this.energyBall.vz * frameScale;
+        
+        // Update lifetime
+        this.energyBall.lifetime += dt;
+        
+        // Despawn if way out of bounds (let it travel well beyond the court to go off-screen)
+        // Use a large margin to ensure it's fully off-screen before despawning
+        const margin = 3.0; // Large margin beyond court edges to allow off-screen travel
+        if (this.energyBall.x > this.COURT_WIDTH + margin || 
+            this.energyBall.x < -margin || 
+            this.energyBall.y < -margin || 
+            this.energyBall.y > this.COURT_LENGTH + margin) {
+            this.resetEnergyBall();
+            return;
+        }
+        
+        // Safety timeout: despawn after maxLifetime (shouldn't normally trigger)
+        if (this.energyBall.lifetime >= this.energyBall.maxLifetime) {
+            this.resetEnergyBall();
+            return;
+        }
+        
+        // Check collision with AI opponent FIRST (before player check)
+        // Use full 3D distance for collision (matches character body hitbox)
+        const dx = this.energyBall.x - this.ai.x;
+        const dy = this.energyBall.y - this.ai.y;
+        const dz = this.energyBall.z - this.ai.z;
+        const dist3D = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        const collisionDist = this.energyBall.radius + this.ai.radius;
+        
+        // Debug log collision check (only when close)
+        if (dist3D < collisionDist * 2 && this.DEBUG_LOGS) {
+            this.debugLog('[Energy Ball-AI Collision Check]', {
+                energyBall: { x: this.energyBall.x.toFixed(3), y: this.energyBall.y.toFixed(3), z: this.energyBall.z.toFixed(3) },
+                ai: { x: this.ai.x.toFixed(3), y: this.ai.y.toFixed(3), z: this.ai.z.toFixed(3) },
+                dist3D: dist3D.toFixed(3),
+                collisionDist: collisionDist.toFixed(3),
+                willCollide: dist3D < collisionDist
+            });
+        }
+        
+        if (dist3D < collisionDist) {
+            // Hit! Deal damage and push back
+            if (this.DEBUG_LOGS) {
+                this.debugLog('[Energy Ball HIT AI!]', {
+                    aiBefore: { x: this.ai.x.toFixed(3), vx: this.ai.vx.toFixed(3) },
+                    aiHpBefore: Game?.state?.aiHp ?? 'unknown'
+                });
+            }
+            
+            if (Game && Game.damageCharacterHp) {
+                Game.damageCharacterHp('ai', 1);
+            }
+            
+            // Stun AI for 0.4s (can't receive, jump, or toss)
+            this.ai.energyBallStunTimeLeft = this.ai.energyBallStunDuration;
+            // Make AI blink during stun
+            this.ai.isBlinking = true;
+            this.ai.blinkTimer = 0; // Reset blink timer
+            
+            // Push AI back significantly (away from player) - horizontal only
+            // Use a flag to persist the push back across frames (since AI movement might overwrite vx)
+            const pushBackForce = 0.5; // Significant horizontal push back
+            this.ai.vx += pushBackForce; // Push to the right (away from player)
+            // Also set a push back flag that persists
+            if (!this.ai.energyBallPushBack) {
+                this.ai.energyBallPushBack = { vx: pushBackForce, framesLeft: 3 }; // Apply push for 3 frames
+            } else {
+                // Accumulate if already being pushed
+                this.ai.energyBallPushBack.vx += pushBackForce;
+                this.ai.energyBallPushBack.framesLeft = 3; // Reset timer
+            }
+            // No vertical push - only horizontal movement
+            
+            if (this.DEBUG_LOGS) {
+                this.debugLog('[Energy Ball AI Push Applied]', {
+                    aiAfter: { x: this.ai.x.toFixed(3), vx: this.ai.vx.toFixed(3) },
+                    pushBackForce: pushBackForce
+                });
+            }
+            
+            // Reset energy ball
+            this.resetEnergyBall();
+            return; // Exit early after hit - IMPORTANT: don't check player collision after hitting AI
+        }
+        
+        // Also check collision with player to prevent push back (ignore collision if too close to spawn point)
+        // Only check if we didn't already hit AI (this check happens after AI check)
+        const playerDx = this.energyBall.x - this.player.x;
+        const playerDy = this.energyBall.y - this.player.y;
+        const playerDz = this.energyBall.z - this.player.z;
+        const playerDist = Math.sqrt(playerDx * playerDx + playerDy * playerDy + playerDz * playerDz);
+        const playerCollisionDist = this.energyBall.radius + this.player.radius;
+        
+        // Only check collision if energy ball has moved away from spawn (prevents immediate collision)
+        if (this.energyBall.lifetime > 0.1 && playerDist < playerCollisionDist) {
+            // Energy ball hit player - just reset it (no damage, no push)
+            this.resetEnergyBall();
+        }
     },
     
     resetBall() {
@@ -233,6 +389,9 @@ const Physics = {
         this.ai.blinkTimer = 0;
         this.ai.damageBlinkTimeLeft = 0;
         this.ai.damageBlinkDuration = 0;
+        
+        // Reset energy ball
+        this.resetEnergyBall();
         
         // Reset game state to starting state (scores, serving)
         Game.init();
@@ -897,6 +1056,15 @@ const Physics = {
             ai.vx = (aiInput.vx || 0) * speedMultiplier;
             ai.vy = (aiInput.vy || 0) * speedMultiplier;
             
+            // Apply energy ball push back if active (after setting base velocity)
+            if (ai.energyBallPushBack && ai.energyBallPushBack.framesLeft > 0) {
+                ai.vx += ai.energyBallPushBack.vx;
+                ai.energyBallPushBack.framesLeft--;
+                if (ai.energyBallPushBack.framesLeft <= 0) {
+                    ai.energyBallPushBack = null;
+                }
+            }
+            
             // AI jump
             if (aiInput.jump && ai.onGround) {
                 ai.vz = ai.jumpPower * jumpMultiplier;
@@ -1257,6 +1425,27 @@ const Physics = {
         // Track who last touched the ball
         b.lastTouchedBy = (character === this.player) ? 'player' : 'ai';
         b.hasScored = false; // Reset score flag on new touch
+
+        // Increment power meter when player successfully spikes
+        // Cannot increment if power mode is active (prevents refilling once power mode is activated)
+        // Power mode activates when power reaches max, and stays active until power goes to 0
+        if (character === this.player && Game?.state) {
+            const currentPower = Game.state.playerPower ?? 0;
+            const maxPower = Game.state.maxPower ?? 5;
+            const powerModeActive = Game.state.powerModeActive ?? false;
+            
+            // Only increment if:
+            // 1. Power is not at max, AND
+            // 2. Power mode is NOT active (can't refill once power mode is activated)
+            if (currentPower < maxPower && !powerModeActive) {
+                const newPower = Math.min(maxPower, currentPower + 1);
+                Game.state.playerPower = newPower;
+                // Activate power mode when reaching max
+                if (newPower >= maxPower) {
+                    Game.state.powerModeActive = true;
+                }
+            }
+        }
 
         // Touch counter decrement (action touch). Also prevents immediate body-collision decrement this frame.
         this.applyBallTouch('spike', b.lastTouchedBy, true);
@@ -2034,6 +2223,9 @@ const Physics = {
                 // Only update ball physics if not serving
                 this.updateBall(dt);
             }
+            
+            // Update energy ball
+            this.updateEnergyBall(dt);
         }
         
         if (this.DEBUG_LOGS && deltaTime > 0.04) { // flag large dt spikes (~25fps or lower)
